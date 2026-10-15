@@ -11,25 +11,25 @@ namespace {
 
 constexpr char kManifest[] =
     "[plugin.base-runtime]\n"
-    "path=/data/OnionHEN/sprx/base-runtime.sprx\n"
+    "path=/data/AniketosHEN/sprx/base-runtime.sprx\n"
     "exact_title_ids=CUSA12345\n"
     "priority=10\n"
     "\n"
     "[plugin.overlay]\n"
-    "path=/data/OnionHEN/sprx/overlay.sprx\n"
+    "path=/data/AniketosHEN/sprx/overlay.sprx\n"
     "exact_title_ids=CUSA12345\n"
     "auto_start=true\n"
     "priority=100\n"
     "dependencies=base-runtime\n"
     "\n"
     "[plugin.telemetry]\n"
-    "path=/data/OnionHEN/sprx/telemetry.sprx\n"
+    "path=/data/AniketosHEN/sprx/telemetry.sprx\n"
     "exact_title_ids=CUSA12345\n"
     "auto_start=true\n"
     "priority=200\n"
     "\n"
     "[plugin.native]\n"
-    "path=/data/OnionHEN/sprx/native.prx\n"
+    "path=/data/AniketosHEN/sprx/native.prx\n"
     "title_id_prefixes=PPSA\n"
     "auto_start=true\n";
 
@@ -104,7 +104,7 @@ int test_enabled_persists_and_excludes_startup() {
   char path[256] = {};
   const char manifest[] =
       "[plugin.overlay]\n"
-      "path=/data/OnionHEN/sprx/overlay.sprx\n"
+      "path=/data/AniketosHEN/sprx/overlay.sprx\n"
       "exact_title_ids=CUSA12345\n"
       "auto_start=true\n";
   TEST_ASSERT_EQ_INT(0, onion_test_write_temp_text_file(
@@ -137,7 +137,7 @@ int test_remove_persists_catalog_entry_only() {
   char path[256] = {};
   const char manifest[] =
       "[plugin.overlay]\n"
-      "path=/data/OnionHEN/sprx/overlay.sprx\n"
+      "path=/data/AniketosHEN/sprx/overlay.sprx\n"
       "exact_title_ids=CUSA12345\n";
   TEST_ASSERT_EQ_INT(0, onion_test_write_temp_text_file(
                             ".ini", manifest, path, sizeof(path)));

@@ -345,7 +345,7 @@ static int test_matrix(void) {
 static int test_dynamic_cheat_state(void) {
   ToolboxUiState state;
   const std::string id =
-      "id_cheat_cheat-1-123-1|src|/user/data/OnionHEN/cheats/game.json|0";
+      "id_cheat_cheat-1-123-1|src|/user/data/AniketosHEN/cheats/game.json|0";
   TEST_ASSERT_TRUE(ToolboxUiState::is_cheat_toggle_id(id));
   TEST_ASSERT_TRUE(!ToolboxUiState::is_cheat_toggle_id("id_cheat_title"));
   TEST_ASSERT_TRUE(!ToolboxUiState::is_cheat_toggle_id("id_cheat_view_0"));

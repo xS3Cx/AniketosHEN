@@ -8,9 +8,9 @@
 using namespace toolbox;
 
 static int test_display_strip_user(void) {
-  std::string a = display_path_for_ui("/user/data/OnionHEN/payloads/x.elf");
+  std::string a = display_path_for_ui("/user/data/AniketosHEN/payloads/x.elf");
   std::string b = display_path_for_ui("/user");
-  TEST_ASSERT_STREQ("/data/OnionHEN/payloads/x.elf", a.c_str());
+  TEST_ASSERT_STREQ("/data/AniketosHEN/payloads/x.elf", a.c_str());
   TEST_ASSERT_STREQ("", b.c_str());
   return 0;
 }
@@ -24,11 +24,11 @@ static int test_display_map_usb(void) {
 }
 
 static int test_display_passthrough(void) {
-  std::string a = display_path_for_ui("/data/OnionHEN/x");
+  std::string a = display_path_for_ui("/data/AniketosHEN/x");
   std::string b = display_path_for_ui("relative/path");
   std::string c = display_path_for_ui("");
   std::string d = display_path_for_ui("/userdata/x");
-  TEST_ASSERT_STREQ("/data/OnionHEN/x", a.c_str());
+  TEST_ASSERT_STREQ("/data/AniketosHEN/x", a.c_str());
   TEST_ASSERT_STREQ("relative/path", b.c_str());
   TEST_ASSERT_STREQ("", c.c_str());
   TEST_ASSERT_STREQ("/userdata/x", d.c_str());
@@ -70,7 +70,7 @@ static int test_elf_key_from_name(void) {
   TEST_ASSERT_TRUE(elf_key_from_name("payload.elf", key, sizeof(key)));
   TEST_ASSERT_STREQ("payload", key);
   TEST_ASSERT_TRUE(
-      elf_key_from_name("/user/data/OnionHEN/payloads/x.elf", key, sizeof(key)));
+      elf_key_from_name("/user/data/AniketosHEN/payloads/x.elf", key, sizeof(key)));
   TEST_ASSERT_STREQ("x", key);
   TEST_ASSERT_TRUE(!elf_key_from_name(".elf", key, sizeof(key)));
   return 0;

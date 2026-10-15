@@ -12,7 +12,7 @@
 void notify(const char *text, ...) {
   va_list args{};
   va_start(args, text);
-  // show_watermark ignored by format; still prefixes [OnionHEN] like daemons.
+  // show_watermark ignored by format; still prefixes [AniketosHEN] like daemons.
   // Send goes through onion_notify_set_send trampoline (dlsym pointer safe).
   onion_notify_v(/*show_watermark=*/0, text, args);
   va_end(args);

@@ -107,3 +107,37 @@ int (*sceRemoteplayNotifyPinCodeError)(int) = nullptr;
 
 int (*sceShellUIUtilInitialize)(void) = nullptr;
 int (*sceShellUIUtilLaunchByUri)(const char* uri, SceShellUIUtilLaunchByUriParam* Param) = nullptr;
+
+/* ---- Added for the Shell Menu port (optional unless stated; callers null-check) ---- */
+uint32_t (*mono_gchandle_new_weakref)(MonoObject *obj,
+                                     int track_resurrection) = nullptr;
+MonoObject *(*mono_gchandle_get_target)(uint32_t gchandle) = nullptr;
+MonoMethod* (*mono_class_get_methods)(MonoClass* klass, void** iter) = nullptr;
+const char* (*mono_class_get_name)(MonoClass* klass) = nullptr;
+const char* (*mono_class_get_namespace)(MonoClass* klass) = nullptr;
+const char* (*mono_method_get_name)(MonoMethod* method) = nullptr;
+uint32_t (*mono_method_get_flags)(MonoMethod* method, uint32_t* iflags) = nullptr;
+MonoMethodSignature* (*mono_method_signature)(MonoMethod* method) = nullptr;
+uint32_t (*mono_signature_get_param_count)(MonoMethodSignature* sig) = nullptr;
+MonoType* (*mono_signature_get_params)(MonoMethodSignature* sig, void** iter) = nullptr;
+MonoType* (*mono_signature_get_return_type)(MonoMethodSignature* sig) = nullptr;
+char* (*mono_type_get_name)(MonoType* type) = nullptr;
+MonoClassField* (*mono_class_get_fields)(MonoClass* klass, void** iter) = nullptr;
+const char* (*mono_field_get_name)(MonoClassField* field) = nullptr;
+MonoType* (*mono_field_get_type)(MonoClassField* field) = nullptr;
+int (*mono_field_get_offset)(MonoClassField* field) = nullptr;
+uint32_t (*mono_field_get_flags)(MonoClassField* field) = nullptr;
+void (*mono_field_static_get_value)(MonoVTable* vt, MonoClassField* field,
+                                    void* value) = nullptr;
+MonoObject* (*mono_object_clone)(MonoObject* obj) = nullptr;
+MonoClass* (*mono_class_get_parent)(MonoClass* klass) = nullptr;
+void (*mono_field_set_value)(MonoObject* obj, MonoClassField* field,
+                             void* value) = nullptr;
+int (*sceKernelGetHwModelName)(char *name) = nullptr;
+int (*sceKernelGetHwSerialNumber)(char *serial) = nullptr;
+long (*sceKernelGetCpuFrequency)(void) = nullptr;
+int (*sceLncUtilIsShellUiFgAndGameBgCpuMode)(void) = nullptr;
+int (*sceShellCoreUtilGetFreeSizeOfUserPartition)(uint64_t *free_bytes,
+                                                  uint64_t *total_bytes) = nullptr;
+int (*sceShellCoreUtilGetEffectiveTotalSizeOfUserPartition)(
+    uint64_t *total_bytes) = nullptr;

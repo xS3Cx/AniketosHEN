@@ -27,7 +27,7 @@ enum DaemonCommands : unsigned int {
   BREW_RETURN_VALUE = 0x9000002u,
   BREW_REMOUNT_FOLDER,
   // Original 0x9000004. Keep the slot so released Itemzflow clients retain
-  // the numeric ABI even though OnionHEN does not bundle the legacy dumper.
+  // the numeric ABI even though AniketosHEN does not bundle the legacy dumper.
   BREW_UNUSED_ACTIVATE_DUMPER,
   BREW_STAT_CMD,
   BREW_CALC_DIR_SIZE,
@@ -101,6 +101,8 @@ enum DaemonCommands : unsigned int {
   BREW_KILL_DAEMON = 0xDEAD0001u,
   /** Crit: stop owned util/loader → restart SceShellUI → exit daemon. */
   BREW_SHUTDOWN_STACK = 0xDEAD0002u,
+  /** Crit: restart SceShellUI only; the daemon stays up and re-injects. */
+  BREW_RESTART_SHELLUI = 0xDEAD0003u,
   BREW_FORCE_KILL_PID = 0xDEADCAFEu,
 };
 

@@ -1,6 +1,6 @@
 /* Copyright (C) 2025 OnionHEN / LightningMods
  *
- * sysctl-based process lookup (single implementation for all OnionHEN bins).
+ * sysctl-based process lookup (single implementation for all AniketosHEN bins).
  */
 
 extern "C" {

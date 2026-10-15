@@ -128,6 +128,11 @@ bool IPC_Client::IPCOpenIfNotConnected() {
   return IPCOpenConnection();
 }
 
+bool IPC_Client::IsAvailable() {
+  std::lock_guard<std::mutex> lock(mu_);
+  return IPCOpenIfNotConnected();
+}
+
 int IPC_Client::send_frame_unlocked(const IPCMessage &msg) {
   if (socket_fd_ < 0) {
     return -1;
@@ -328,6 +333,14 @@ void IPC_Client::ShutdownStack() {
   std::string ipc_msg;
   IPCSendCommand(BREW_SHUTDOWN_STACK, ipc_msg);
 }
+
+bool IPC_Client::RestartShellUI() {
+  if (!require_crit("RestartShellUI"))
+    return false;
+  std::string ipc_msg;
+  return IPCSendCommand(BREW_RESTART_SHELLUI, ipc_msg);
+}
+
 
 void IPC_Client::ForceKillPID(int pid) {
   if (!require_crit("ForceKillPID")) {

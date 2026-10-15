@@ -11,15 +11,15 @@ static int test_escape_special_chars(void) {
   const std::string a = escape("a&b");
   const std::string b = escape("<tag>");
   const std::string c = escape("\"q\"");
-  const std::string d = escape("/user/data/OnionHEN");
+  const std::string d = escape("/user/data/AniketosHEN");
   const std::string e = escape("金手指");
   TEST_ASSERT_STREQ("a&amp;b", a.c_str());
   TEST_ASSERT_STREQ("&lt;tag&gt;", b.c_str());
   TEST_ASSERT_STREQ("&quot;q&quot;", c.c_str());
   /* escape() is for icon paths: / → // ; escape_xml keeps single / for display */
-  TEST_ASSERT_STREQ("//user//data//OnionHEN", d.c_str());
-  const std::string d_xml = escape_xml("/user/data/OnionHEN");
-  TEST_ASSERT_STREQ("/user/data/OnionHEN", d_xml.c_str());
+  TEST_ASSERT_STREQ("//user//data//AniketosHEN", d.c_str());
+  const std::string d_xml = escape_xml("/user/data/AniketosHEN");
+  TEST_ASSERT_STREQ("/user/data/AniketosHEN", d_xml.c_str());
   /* CJK unchanged */
   TEST_ASSERT_STREQ("金手指", e.c_str());
   return 0;
@@ -44,14 +44,14 @@ static int test_toggle_button_label_attrs(void) {
   const std::string xml =
       Page("id_page", "Page")
           .label("id_lbl", "Hello", Style::Center,
-                 "/user/data/OnionHEN/assets/qr.png")
+                 "/user/data/AniketosHEN/assets/qr.png")
           .toggle("id_sw", "Switch", true, "second", "desc", "tex_icon")
           .button("id_btn", "Btn", "sec", "d", "icn", Style::Center)
           .build();
 
   TEST_ASSERT_TRUE(
       xml.find("<label id=\"id_lbl\" title=\"Hello\" "
-               "icon=\"//user//data//OnionHEN//assets//qr.png\" "
+               "icon=\"//user//data//AniketosHEN//assets//qr.png\" "
                "style=\"center\"/>") != std::string::npos);
   TEST_ASSERT_TRUE(xml.find("<toggle_switch id=\"id_sw\" title=\"Switch\" "
                             "second_title=\"second\" description=\"desc\" "
@@ -80,7 +80,7 @@ static int test_list_and_items(void) {
                       .item("id_example_list_2", "Option B", "1");
                 },
                 std::nullopt, "1")
-          .button("id_example_btn", "Action", "to /data/OnionHEN/example/")
+          .button("id_example_btn", "Action", "to /data/AniketosHEN/example/")
           .build();
 
   TEST_ASSERT_TRUE(
@@ -96,7 +96,7 @@ static int test_list_and_items(void) {
   TEST_ASSERT_TRUE(xml.find("id=\"id_example_btn\"") != std::string::npos);
   /* path second_title keeps single slashes */
   TEST_ASSERT_TRUE(
-      xml.find("second_title=\"to /data/OnionHEN/example/\"") !=
+      xml.find("second_title=\"to /data/AniketosHEN/example/\"") !=
       std::string::npos);
   return 0;
 }
@@ -235,7 +235,7 @@ static int test_text_field_and_confirm(void) {
 
 static int test_toolbox_like_skeleton(void) {
   const std::string xml =
-      Page("id_debug_settings", "★OnionHEN 工具箱")
+      Page("id_debug_settings", "★AniketosHEN 工具箱")
           .root_focus("id_group_pkg")
           .group(
               "id_group_pkg", "内容安装与管理",
@@ -244,7 +244,7 @@ static int test_toolbox_like_skeleton(void) {
                        "PkgInstaller/data/pkginstaller.xml");
               },
               "安装 PKG 与管理附加内容",
-              "/user/data/OnionHEN/assets/icon_xml_package.png",
+              "/user/data/AniketosHEN/assets/icon_xml_package.png",
               "id_game_package_installer")
           .build();
 
@@ -254,7 +254,7 @@ static int test_toolbox_like_skeleton(void) {
   TEST_ASSERT_TRUE(xml.find("id=\"id_group_pkg\"") != std::string::npos);
   /* icon doubles slashes; file (plugin resource) keeps single / */
   TEST_ASSERT_TRUE(
-      xml.find("icon=\"//user//data//OnionHEN//assets//icon_xml_package.png\"") !=
+      xml.find("icon=\"//user//data//AniketosHEN//assets//icon_xml_package.png\"") !=
       std::string::npos);
   TEST_ASSERT_TRUE(xml.find("file=\"PkgInstaller/data/pkginstaller.xml\"") !=
                    std::string::npos);

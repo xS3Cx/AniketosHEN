@@ -1,6 +1,6 @@
 /* Copyright (C) 2026 OnionHEN / LightningMods
  *
- * OnionHEN private ELF loader service.
+ * AniketosHEN private ELF loader service.
  *
  * This intentionally listens on 127.0.0.1:9020, leaving the historical
  * ps5-payload-dev elfldr port 9021 untouched for user-provided loaders.

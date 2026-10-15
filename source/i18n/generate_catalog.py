@@ -35,8 +35,10 @@ REQUIRED_TOKENS = {
         "notify.kstuff.load_elfldr_failed": ("Kstuff",),
         "notify.kstuff.deleted": ("Kstuff",),
         "notify.crash.main": (
-            "OnionHEN_crash.log",
-            "https://github.com/aydencharles/onionHEN/issues",
+            "AniketosHEN_crash.log",
+            # The tracker address is supplied by the caller
+            # (ONION_DIST_ISSUES_URL), not baked into every locale.
+            "%s",
         ),
     },
 }

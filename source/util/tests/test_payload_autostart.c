@@ -23,8 +23,8 @@ static void local_path(const char *path, char *out, size_t size) {
 }
 
 static DIR *fixture_opendir(const char *path) {
-  if (strcmp(path, "/data/OnionHEN/payloads") == 0 ||
-      strcmp(path, "/user/data/OnionHEN/payloads") == 0)
+  if (strcmp(path, "/data/AniketosHEN/payloads") == 0 ||
+      strcmp(path, "/user/data/AniketosHEN/payloads") == 0)
     return opendir(fixture);
   return NULL;
 }
@@ -45,7 +45,7 @@ static bool fixture_available(void) { return loader_available; }
 
 static bool fixture_running(const char *key) {
   char running[ONION_PAYLOAD_IDENTITY_SIZE];
-  onion_payload_identity_from_path("/data/OnionHEN/payloads/running.elf",
+  onion_payload_identity_from_path("/data/AniketosHEN/payloads/running.elf",
                                    running, sizeof(running));
   return strcmp(key, running) == 0;
 }
@@ -65,7 +65,7 @@ static unsigned int fixture_sleep(unsigned int seconds) {
 
 static bool fixture_launch(const char *path, const char *filename, const char *key) {
   char expected[512], identity[ONION_PAYLOAD_IDENTITY_SIZE];
-  snprintf(expected, sizeof(expected), "/data/OnionHEN/payloads/%s", filename);
+  snprintf(expected, sizeof(expected), "/data/AniketosHEN/payloads/%s", filename);
   onion_payload_identity_from_path(expected, identity, sizeof(identity));
   if (strcmp(expected, path) != 0 || !key || strcmp(identity, key) != 0)
     ++invalid_launches;
@@ -166,6 +166,41 @@ static int test_autostart_schedule(void) {
   return 0;
 }
 
+/* Internal storage is scanned only under this distribution's root (OnionHEN's
+ * payloads are migrated there once; scanning both would start each twice).
+ * Removable drives are not migrated, so OnionHEN's folder names stay valid. */
+static bool scans(const char *directory) {
+  for (size_t i = 0;
+       i < sizeof(kPayloadDirectories) / sizeof(kPayloadDirectories[0]); ++i) {
+    if (strcmp(kPayloadDirectories[i], directory) == 0)
+      return true;
+  }
+  return false;
+}
+
+static int test_autostart_directory_policy(void) {
+  TEST_ASSERT_TRUE(scans("/data/AniketosHEN/payloads"));
+  TEST_ASSERT_TRUE(scans("/user/data/AniketosHEN/payloads"));
+  TEST_ASSERT_TRUE(!scans("/data/OnionHEN/payloads"));
+  TEST_ASSERT_TRUE(!scans("/user/data/OnionHEN/payloads"));
+  TEST_ASSERT_TRUE(!scans("/data/onionhen/payloads"));
+  char path[64];
+  for (int usb = 0; usb < 4; ++usb) {
+    snprintf(path, sizeof(path), "/mnt/usb%d/AniketosHEN/payloads", usb);
+    TEST_ASSERT_TRUE(scans(path));
+    snprintf(path, sizeof(path), "/mnt/usb%d/OnionHEN/payloads", usb);
+    TEST_ASSERT_TRUE(scans(path));
+    snprintf(path, sizeof(path), "/mnt/usb%d/onionhen/payloads", usb);
+    TEST_ASSERT_TRUE(scans(path));
+  }
+  return 0;
+}
+
 int test_payload_autostart_suite(void) {
-  return onion_test_run("payload.autostart_schedule", test_autostart_schedule);
+  int failures = 0;
+  failures +=
+      onion_test_run("payload.autostart_schedule", test_autostart_schedule);
+  failures += onion_test_run("payload.autostart_directory_policy",
+                             test_autostart_directory_policy);
+  return failures;
 }

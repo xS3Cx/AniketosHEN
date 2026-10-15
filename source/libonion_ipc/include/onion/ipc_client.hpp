@@ -82,6 +82,8 @@ public:
   int OpenConnection(const char *path);
   bool IPCOpenConnection();
   bool IPCOpenIfNotConnected();
+  /** Non-destructive reachability probe: true if the daemon socket is (or can be) connected. */
+  bool IsAvailable();
   int IPCReceiveData(IPCMessage &msg, std::string &ipc_msg);
   int IPCSendData(const IPCMessage &msg);
   int IPCCloseConnection();
@@ -96,6 +98,8 @@ public:
   void KillDaemon();
   /** Crit Unix IPC: util → restart ShellUI → daemon exit (BREW_SHUTDOWN_STACK). */
   void ShutdownStack();
+  /** Crit: restart SceShellUI and keep the daemon running. */
+  bool RestartShellUI();
   void ForceKillPID(int pid);
   IPC_Ret CopyFile(std::string src, std::string dest);
   IPC_Ret LaunchPayload(std::string payload_path, std::string tid);

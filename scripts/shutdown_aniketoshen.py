@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Shut down OnionHEN stack on a PS5 from a PC (LAN).
+"""Shut down AniketosHEN stack on a PS5 from a PC (LAN).
 
 Sequence (daemon side):
   1. stop onion_util.elf
@@ -13,7 +13,7 @@ Wire (TCP port 9048, little-endian):
   response: 1 byte 0 = accepted
 
 Usage:
-  python3 scripts/shutdown_onion.py 192.168.x.x
+  python3 scripts/shutdown_aniketoshen.py 192.168.x.x
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ def shutdown(host: str, port: int = ONION_CTRL_TCP_PORT, timeout: float = 5.0) -
     except OSError as e:
         print(f"connect/send failed: {e}", file=sys.stderr)
         print(
-            "Check: PS5 and PC on same LAN; OnionHEN daemon running; port 9048 open.",
+            "Check: PS5 and PC on same LAN; AniketosHEN daemon running; port 9048 open.",
             file=sys.stderr,
         )
         return 2
@@ -54,7 +54,7 @@ def shutdown(host: str, port: int = ONION_CTRL_TCP_PORT, timeout: float = 5.0) -
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Shut down OnionHEN stack on PS5")
+    ap = argparse.ArgumentParser(description="Shut down AniketosHEN stack on PS5")
     ap.add_argument("ps5_ip", help="PS5 LAN IP address")
     ap.add_argument("--port", type=int, default=ONION_CTRL_TCP_PORT)
     args = ap.parse_args()

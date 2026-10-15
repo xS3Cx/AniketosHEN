@@ -44,6 +44,8 @@ bool test_sb_file(const char *filename);
 int get_shellui_pid();
 int get_game_pid();
 void ForceKillProc(int pid);
+/** Kill SceShellUI so the system respawns it; the daemon keeps running. */
+void cmd_restart_shellui(void);
 bool set_fan_threshold(int temp);
 /** Write the stock 77 C threshold used when manual control is turned off. */
 bool restore_automatic_fan();
@@ -57,7 +59,7 @@ void *vsync_fps_sampler_thread(void *args) noexcept;
 void *system_language_poll_thread(void *args) noexcept;
 
 /**
- * Tear down OnionHEN userland (does not return). Caller should reply to IPC first.
+ * Tear down AniketosHEN userland (does not return). Caller should reply to IPC first.
  *
  * Sets g_stack_shutting_down, then: stop util → restart SceShellUI → exit.
  * The private loader is left available as the runtime recovery endpoint.

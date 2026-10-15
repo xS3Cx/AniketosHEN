@@ -11,7 +11,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: OnionHEN version
+      label: AniketosHEN version
       placeholder: "v0.0.9"
     validations:
       required: true
@@ -55,7 +55,7 @@ body:
     id: steps
     attributes:
       label: What happened
-      description: Steps from loading OnionHEN, plus Title ID if a game is involved.
+      description: Steps from loading AniketosHEN, plus Title ID if a game is involved.
     validations:
       required: true
 
@@ -84,7 +84,7 @@ body:
     id: logs
     attributes:
       label: Logs
-      description: Attach `/data/OnionHEN/OnionHEN_crash.log` for a daemon crash, plus relevant lines from `OnionHEN.log` and `OnionHEN_util_daemon.log`.
+      description: Attach `/data/AniketosHEN/AniketosHEN_crash.log` for a daemon crash, plus relevant lines from `AniketosHEN.log` and `AniketosHEN_util_daemon.log`.
       render: text
     validations:
       required: true

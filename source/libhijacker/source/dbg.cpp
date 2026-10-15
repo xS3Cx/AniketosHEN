@@ -27,7 +27,11 @@ static constexpr uintptr_t UCRED_OFFSET = 0x40;
 static uintptr_t getCurrentProc() {
 
 	const pid_t pid = getpid();
-	uintptr_t proc = kread<uintptr_t>(kernel_base + offsets::allproc());
+	const size_t allproc = offsets::allproc();
+	if (allproc == static_cast<size_t>(-1)) {
+		return 0; /* unknown firmware: never read from a made-up address */
+	}
+	uintptr_t proc = kread<uintptr_t>(kernel_base + allproc);
 	while (proc != 0) {
 		int cid = kread<int>(proc + PID_OFFSET);
 		if (cid == pid) {
@@ -144,6 +148,9 @@ bool write(int pid, uintptr_t dst, const void *src, size_t length) {
 uint64_t setAuthId(uint64_t authid) {
 	static constexpr int AUTHID_OFFSET = 0x58;
 	uintptr_t proc = getCurrentProc();
+	if (proc == 0) {
+		return 0;
+	}
 	uintptr_t ucred = kread<uintptr_t>(proc + UCRED_OFFSET);
 	uint64_t id = kread<uint64_t>(ucred + AUTHID_OFFSET);
 	kwrite(ucred + AUTHID_OFFSET, authid);

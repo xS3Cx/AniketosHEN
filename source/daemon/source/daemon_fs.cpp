@@ -292,7 +292,7 @@ static void shutdown_owned_process(const char *label, pid_t pid) {
   usleep(200 * 1000);
 }
 
-static void shutdown_restart_shellui(void) {
+void cmd_restart_shellui(void) {
   int shellui_pid = get_shellui_pid();
   if (shellui_pid <= 0 || shellui_pid == getpid()) {
     LOG_ERROR("shutdown: SceShellUI not found (cannot restart)");
@@ -308,7 +308,7 @@ static void shutdown_restart_shellui(void) {
 }
 
 /**
- * Tear down userland OnionHEN only.
+ * Tear down userland AniketosHEN only.
  *
  * Never SIGKILL kstuff: unloading HV/kernel patches from userland leaves
  * half-torn fd/budget state (fdescfree BUDGET_FD_FILE) and panics. kstuff
@@ -347,7 +347,7 @@ static void shutdown_restart_shellui(void) {
   unlink(ONION_SYSTEM_TMP_ELFLDR_BUSY);
 
   LOG_INFO("shutdown[3/4]: restart SceShellUI");
-  shutdown_restart_shellui();
+  cmd_restart_shellui();
 
   LOG_INFO("shutdown[4/4]: exit daemon (kstuff intentionally left running)");
   onion_notify(true, "notify.stack.shutdown");

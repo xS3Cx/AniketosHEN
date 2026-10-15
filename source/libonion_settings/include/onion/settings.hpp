@@ -20,9 +20,11 @@ along with this program; see the file COPYING. If not, see
 // Single product config schema for daemon / util / shellui.
 //
 // Paths:
-//   primary  /data/OnionHEN/config.ini          (elevated daemons)
-//   shellui  /user/data/OnionHEN/config.ini     (SceShellUI sandbox view)
+//   primary  /data/AniketosHEN/config.ini          (elevated daemons)
+//   shellui  /user/data/AniketosHEN/config.ini     (SceShellUI sandbox view)
 // Load tries both; save writes all writable targets so the files stay twins.
+// If neither exists, load falls back (read-only) to the config.ini OnionHEN
+// left under /data/OnionHEN; see settings_load_from().
 //
 // Process-local store: use SettingsStore for multi-threaded daemons (snapshot
 // under mutex). Multi-process copies of Settings are expected and OK.
@@ -34,6 +36,7 @@ along with this program; see the file COPYING. If not, see
 #ifdef __cplusplus
 extern "C++" {
 
+#include <onion/distribution.h>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -45,8 +48,24 @@ extern "C++" {
 namespace onion {
 
 // Canonical filesystem paths.
-inline constexpr const char *kConfigPathPrimary = "/data/OnionHEN/config.ini";
-inline constexpr const char *kConfigPathShellui = "/user/data/OnionHEN/config.ini";
+inline constexpr const char *kConfigPathPrimary = ONION_DIST_CONFIG_PATH;
+inline constexpr const char *kConfigPathShellui = ONION_DIST_USER_CONFIG_PATH;
+
+// config.ini written by OnionHEN, the distribution this tree derives from.
+// Read-only fallback: consulted by settings_load() only while no
+// AniketosHEN config exists yet (i.e. before or instead of a successful
+// onion_migrate_legacy_data()). Nothing ever writes to these paths.
+inline constexpr const char *kLegacyConfigPathPrimary =
+    ONION_DIST_LEGACY_CONFIG_PATH;
+inline constexpr const char *kLegacyConfigPathShellui =
+    ONION_DIST_LEGACY_USER_CONFIG_PATH;
+
+// [game_menu] key for the game-options toggle, and the name OnionHEN used
+// for it. The loader accepts both (the current key wins); the serializer
+// only ever writes the current one.
+inline constexpr const char *kGameMenuOptionsKey = "show_aniketoshen_options";
+inline constexpr const char *kLegacyGameMenuOptionsKey =
+    "show_onionhen_options";
 
 // Semantic config schema. This schema starts at version 1.
 inline constexpr int kSettingsSchemaVersion = 1;
@@ -225,7 +244,7 @@ struct AppJailbreakAllowlist {
 
 struct Settings {
   // [startup]
-  // Page to open after OnionHEN finishes loading.
+  // Page to open after AniketosHEN finishes loading.
   int startup_open_after_load = kStartupOpenNone;
 
   // [rest_mode]
@@ -273,7 +292,7 @@ struct Settings {
   int toolbox_shortcut_opt = 0;
 
   // [kstuff]
-  // Load the embedded/override kstuff payload when OnionHEN starts.
+  // Load the embedded/override kstuff payload when AniketosHEN starts.
   bool kstuff_autoload = true;
 
   // [toolbox]
@@ -287,6 +306,23 @@ struct Settings {
   // Lets a user raise verbosity for a bug report without a debug payload;
   // levels stripped at compile time cannot be re-enabled this way.
   int log_level = kLogLevelInfo;
+
+  // [reports]
+  // Send error reports (<onion/report.h>) to the maintainers' relay. They are
+  // scrubbed of console and user identifiers and kept locally either way.
+  bool reports_send = true;
+
+  // [shell_menu]
+  // Shell Menu (L1+R3) and the shell appearance features it controls.
+#define ONION_SHELL_SETTING_BOOL(name, def) bool name = def;
+#define ONION_SHELL_SETTING_INT(name, def) int name = def;
+#define ONION_SHELL_SETTING_FLOAT(name, def) float name = def;
+#define ONION_SHELL_SETTING_STRING(name, def) std::string name = def;
+#include <onion/shell_menu_settings.def>
+#undef ONION_SHELL_SETTING_BOOL
+#undef ONION_SHELL_SETTING_INT
+#undef ONION_SHELL_SETTING_FLOAT
+#undef ONION_SHELL_SETTING_STRING
 
   // Meta
   int schema_version = kSettingsSchemaVersion;
@@ -326,6 +362,18 @@ private:
 // Fill `out` with defaults then overlay values from the first readable config path.
 // Returns true if a file was loaded; false means defaults only (file missing).
 bool settings_load(Settings *out);
+
+// The lookup order behind settings_load(), with the paths made explicit so
+// host tests can exercise it. Order: primary, shellui, then - only when
+// neither of those files exists - legacy_primary, legacy_shellui. A null
+// entry is skipped.
+struct SettingsPaths {
+  const char *primary = kConfigPathPrimary;
+  const char *shellui = kConfigPathShellui;
+  const char *legacy_primary = kLegacyConfigPathPrimary;
+  const char *legacy_shellui = kLegacyConfigPathShellui;
+};
+bool settings_load_from(const SettingsPaths &paths, Settings *out);
 
 // Load/save a single explicit path (host tests and tooling).
 bool settings_load_file(const char *path, Settings *out);

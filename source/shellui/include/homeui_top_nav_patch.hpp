@@ -31,6 +31,11 @@ struct MonoImage;
 #define SHELLUI_HOMEUI_TOP_NAV_PATCH 1
 #endif
 
+/* Whether the Home bundle last loaded got the top-bar icon from the byte
+ * patch. When it did not (a firmware without a profile), the script
+ * home_js.cpp puts into Home adds the icon instead. */
+bool homeui_top_nav_patched();
+
 void patch_homeui_top_nav(unsigned char *buffer, int *size_ptr,
                           int buffer_capacity);
 void install_homeui_top_nav_hooks(MonoImage *react_pui);

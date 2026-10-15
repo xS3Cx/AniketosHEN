@@ -1,7 +1,7 @@
 /* Copyright (C) 2026 OnionHEN / LightningMods
  *
  * Strategy table of foreign payload process names. A live match on
- * ki_comm / ki_tdname means that family is already running; OnionHEN must
+ * ki_comm / ki_tdname means that family is already running; AniketosHEN must
  * refuse to continue its own load chain. Matching is case-sensitive. A
  * trailing ".elf" on the table name or the live process name is ignored.
  * Names longer than ki_comm (COMMLEN=19) also match their truncated form,

@@ -26,6 +26,14 @@ bool touch_file(const char *path);
  */
 bool write_file_atomic(const char *path, const void *data, size_t size);
 
+/**
+ * write_file_atomic() unless @path already holds exactly @data. Returns true
+ * when @path ends up with @data. Spares rewriting files that are written on
+ * every start, some of them on system partitions.
+ */
+bool write_file_atomic_if_changed(const char *path, const void *data,
+                                  size_t size);
+
 /** Create path and any missing parents (mode 0777). True if the directory exists. */
 bool mkdir_tree(const char *path);
 

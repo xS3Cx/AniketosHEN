@@ -53,7 +53,7 @@ static int test_null_path_policy(void) {
   auto missing = [](const char *p) -> bool { return !p || !*p; };
   TEST_ASSERT_TRUE(missing(nullptr));
   TEST_ASSERT_TRUE(missing(""));
-  TEST_ASSERT_TRUE(!missing("/data/OnionHEN"));
+  TEST_ASSERT_TRUE(!missing("/data/AniketosHEN"));
   return 0;
 }
 

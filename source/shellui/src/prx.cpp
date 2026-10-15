@@ -14,11 +14,31 @@ You should have received a copy of the GNU General Public License
 along with this program; see the file COPYING. If not, see
 <http://www.gnu.org/licenses/>.  */
 
+#include "controller/controller_manager.hpp"
+#include "aniketos_theme/customization.hpp"
+#include "aniketos_shell/power_indicator.hpp"
+#include "aniketos_shell/shell_buzzer.hpp"
+#include "aniketos_theme/home_tiles.hpp"
+#include "aniketos_theme/shared_ui.hpp"
+#include "aniketos_theme/toggle_styles.hpp"
+#include "shell_clock.hpp"
+#include "aniketos_shell/system_dialogs.hpp"
+#include "aniketos_shell/home_menu.hpp"
+#include "aniketos_shell/home_tabs.hpp"
+#include "aniketos_shell/home_folders.hpp"
+#include "aniketos_shell/screen_rotation.hpp"
+#include "aniketos_shell/home_js.hpp"
+#include <onion/distribution.h>
+#include "aniketos_shell/global_input.hpp"
+#include "aniketos_shell/shell_manager.hpp"
+#include "aniketos_shell/telemetry.hpp"
 #include "detour.h"
 #include "debug_settings_route_runtime.hpp"
 #include "dynamic_ui_runtime.hpp"
 #include "hooked_funcs.hpp"
 #include "defs.h"
+extern int g_libmono_handle;
+extern int (*g_module_handle_fn)(const char *);
 #include "external_symbols.hpp"
 #include "homeui_top_nav_patch.hpp"
 #include "ipc.hpp"
@@ -106,6 +126,24 @@ constexpr uint32_t kFw6xxMin = 0x6000000;
 // Same magnitude as the previous sleep(0x100000) keep-alive.
 constexpr unsigned kKeepAliveSleepSec = 0x100000;
 
+// Console buzzer and power LED, driven from the Shell Menu. Resolved by name
+// from the process' libkernel; every one is optional and null-checked by its
+// user, so a firmware without an export simply loses that menu action.
+using SceKernelIccSetBuzzerFn = int (*)(int mode);
+SceKernelIccSetBuzzerFn sceKernelIccSetBuzzer = nullptr;
+using SceKernelIccSetBuzzerDimSettingFn = int (*)(int level);
+SceKernelIccSetBuzzerDimSettingFn sceKernelIccSetBuzzerDimSetting = nullptr;
+using SceKernelIccIndicatorFn = unsigned long long (*)();
+SceKernelIccIndicatorFn sceKernelIccIndicatorBootDone = nullptr;
+SceKernelIccIndicatorFn sceKernelIccIndicatorShutdown = nullptr;
+SceKernelIccIndicatorFn sceKernelIccIndicatorStandby = nullptr;
+SceKernelIccIndicatorFn sceKernelIccIndicatorStandbyBoot = nullptr;
+SceKernelIccIndicatorFn sceKernelIccIndicatorStandbyShutdown = nullptr;
+using SceKernelIccNotifyBootStatusFn = int (*)(int status);
+SceKernelIccNotifyBootStatusFn sceKernelIccNotifyBootStatus = nullptr;
+using SceKernelIccSetDynamicLedDimSettingFn = int (*)(int level);
+SceKernelIccSetDynamicLedDimSettingFn sceKernelIccSetDynamicLedDimSetting = nullptr;
+
 // XOR key material used for version string + toolbox XML (base64 of "SISTR0_I_SEE_YOU").
 constexpr const char* kXorKeyB64 = "U0lTVFIwX0lfU0VFX1lPVQ==";
 
@@ -192,6 +230,36 @@ MonoImage* require_dll(const char* name) {
 
 bool resolve_native_symbols(pid_t pid) {
   int libkernelsys = get_module_handle(pid, "libkernel_sys.sprx");
+
+  /* The runtime handle is not available in every ShellUI state; 0x2001 is the
+     fixed dynlib handle of libkernel that the rest of this function already
+     relies on. Without the fallback none of these resolved and the buzzer
+     and power-LED pages silently did nothing. */
+  int libkernel_icc = get_module_handle(pid, "libkernel.sprx");
+  if (libkernel_icc <= 0)
+    libkernel_icc = libSceKernelHandle;
+  {
+    KERNEL_DLSYM(libkernel_icc, sceKernelIccSetBuzzer);
+    KERNEL_DLSYM(libkernel_icc, sceKernelIccSetBuzzerDimSetting);
+    KERNEL_DLSYM(libkernel_icc, sceKernelIccIndicatorBootDone);
+    KERNEL_DLSYM(libkernel_icc, sceKernelIccIndicatorShutdown);
+    KERNEL_DLSYM(libkernel_icc, sceKernelIccIndicatorStandby);
+    KERNEL_DLSYM(libkernel_icc, sceKernelIccIndicatorStandbyBoot);
+    KERNEL_DLSYM(libkernel_icc, sceKernelIccIndicatorStandbyShutdown);
+    KERNEL_DLSYM(libkernel_icc, sceKernelIccNotifyBootStatus);
+    KERNEL_DLSYM(libkernel_icc, sceKernelIccSetDynamicLedDimSetting);
+  }
+  AniketosShell::Buzzer::Configure(
+      reinterpret_cast<void *>(sceKernelIccSetBuzzer),
+      reinterpret_cast<void *>(sceKernelIccSetBuzzerDimSetting));
+  AniketosShell::PowerIndicator::Configure(
+      reinterpret_cast<void *>(sceKernelIccIndicatorBootDone),
+      reinterpret_cast<void *>(sceKernelIccIndicatorShutdown),
+      reinterpret_cast<void *>(sceKernelIccIndicatorStandby),
+      reinterpret_cast<void *>(sceKernelIccIndicatorStandbyBoot),
+      reinterpret_cast<void *>(sceKernelIccIndicatorStandbyShutdown),
+      reinterpret_cast<void *>(sceKernelIccSetDynamicLedDimSetting),
+      reinterpret_cast<void *>(sceKernelIccNotifyBootStatus));
   KERNEL_DLSYM(libkernelsys, sceKernelDebugOutText);
   KERNEL_DLSYM(libkernelsys, sceKernelMkdir);
   KERNEL_DLSYM(libkernelsys, scePthreadCreate);
@@ -201,6 +269,9 @@ bool resolve_native_symbols(pid_t pid) {
   KERNEL_DLSYM(libkernelsys, sceKernelGetAppInfo);
   KERNEL_DLSYM(libkernelsys, sceKernelGetProcessName);
   KERNEL_DLSYM(libkernelsys, sceKernelGetCurrentFanDuty);
+  KERNEL_DLSYM(libkernelsys, sceKernelGetHwModelName);
+  KERNEL_DLSYM(libkernelsys, sceKernelGetHwSerialNumber);
+  KERNEL_DLSYM(libkernelsys, sceKernelGetCpuFrequency);
 
   /* libonion_platform must not CALL sceKernelSendNotificationRequest by name —
    * here that symbol is a dlsym'd *function pointer*. Register a trampoline. */
@@ -238,9 +309,16 @@ bool resolve_native_symbols(pid_t pid) {
   {
     void* sceSystemServiceLaunchApp = nullptr;
     KERNEL_DLSYM(system_service, sceSystemServiceLaunchApp);
+  KERNEL_DLSYM(system_service, sceLncUtilIsShellUiFgAndGameBgCpuMode);
     if (!sceSystemServiceLaunchApp)
       LOG_ERROR("Failed to resolve sceSystemServiceLaunchApp");
   }
+  /* ShellCoreUtil is a library of the SystemService module on the PS5 (there
+     is no libSceShellCoreUtil.sprx). Disk space for the Shell Menu and the
+     overlay; telemetry falls back to statvfs on /user without these. */
+  KERNEL_DLSYM(system_service, sceShellCoreUtilGetFreeSizeOfUserPartition);
+  KERNEL_DLSYM(system_service,
+               sceShellCoreUtilGetEffectiveTotalSizeOfUserPartition);
 
   int reg = get_module_handle(pid, "libSceRegMgr.sprx");
   KERNEL_DLSYM(reg, sceRegMgrGetInt);
@@ -264,8 +342,15 @@ bool resolve_native_symbols(pid_t pid) {
 // Phase 2: mono runtime symbols
 // ---------------------------------------------------------------------------
 
+/* For code outside this file that needs a module's handle. */
+int shellui_module_handle(const char *name) {
+  return get_module_handle(getpid(), name);
+}
+
 bool resolve_mono_symbols(pid_t pid) {
   int libmono = get_module_handle(pid, "libmonosgen-2.0.sprx");
+  g_libmono_handle = libmono;
+  g_module_handle_fn = &shellui_module_handle;
 
   KERNEL_DLSYM(libmono, mono_object_to_string);
   KERNEL_DLSYM(libmono, mono_get_root_domain);
@@ -312,6 +397,28 @@ bool resolve_mono_symbols(pid_t pid) {
   KERNEL_DLSYM(libmono, mono_class_vtable);
   KERNEL_DLSYM(libmono, mono_domain_unload);
   KERNEL_DLSYM(libmono, mono_string_to_utf8);
+  /* Shell Menu port: reflection helpers. Optional; every caller null-checks. */
+  KERNEL_DLSYM(libmono, mono_gchandle_new_weakref); /* optional */
+  KERNEL_DLSYM(libmono, mono_gchandle_get_target);  /* optional */
+  KERNEL_DLSYM(libmono, mono_class_get_methods);
+  KERNEL_DLSYM(libmono, mono_class_get_name);
+  KERNEL_DLSYM(libmono, mono_class_get_namespace);
+  KERNEL_DLSYM(libmono, mono_method_get_name);
+  KERNEL_DLSYM(libmono, mono_method_get_flags);
+  KERNEL_DLSYM(libmono, mono_method_signature);
+  KERNEL_DLSYM(libmono, mono_signature_get_param_count);
+  KERNEL_DLSYM(libmono, mono_signature_get_params);
+  KERNEL_DLSYM(libmono, mono_signature_get_return_type);
+  KERNEL_DLSYM(libmono, mono_type_get_name);
+  KERNEL_DLSYM(libmono, mono_class_get_fields);
+  KERNEL_DLSYM(libmono, mono_field_get_name);
+  KERNEL_DLSYM(libmono, mono_field_get_type);
+  KERNEL_DLSYM(libmono, mono_field_get_offset);
+  KERNEL_DLSYM(libmono, mono_field_get_flags);
+  KERNEL_DLSYM(libmono, mono_field_static_get_value);
+  KERNEL_DLSYM(libmono, mono_object_clone);
+  KERNEL_DLSYM(libmono, mono_class_get_parent);
+  KERNEL_DLSYM(libmono, mono_field_set_value);
 
   const bool ok =
       mono_object_to_string && mono_get_root_domain && mono_property_get_get_method &&
@@ -373,8 +480,10 @@ void init_resource_names() {
 
 bool init_version_string(const OrbisKernelSwVersion& sw) {
   /* XOR with base64_decode(kXorKeyB64) == "SISTR0_I_SEE_YOU" (not the b64 text). */
-  /* XOR "OnionHEN " with SISTR0_I_SEE_YOU. Regenerate: encryptver.py "OnionHEN " */
-  const char enc_ver[] = "\x1c\x27\x3a\x3b\x3c\x78\x1a\x07\x7f"; /* "OnionHEN " */
+  /* XOR ONION_DIST_NAME " " ("AniketosHEN ") with SISTR0_I_SEE_YOU, byte i
+     against key byte i % 16. Regenerate when the distribution name changes;
+     test_migration.cpp checks this table against ONION_DIST_NAME. */
+  const char enc_ver[] = "\x12\x27\x3a\x3f\x37\x44\x30\x3a\x17\x16\x0b\x65"; /* "AniketosHEN " */
   const std::string key = base64_decode(kXorKeyB64);
   auto dev_ver_bytes =
       encrypt_decrypt(reinterpret_cast<const unsigned char*>(enc_ver),
@@ -547,6 +656,10 @@ bool install_hooks(const ShellImages& img) {
       {"SettingsPlugin.CxmlUri", img.legacy, UI3_dec.c_str(), "SettingsPlugin",
        "CxmlUri", 1, reinterpret_cast<void*>(&CxmlUri_Hook),
        reinterpret_cast<void**>(&CxmlUri), false},
+      {"MenuListItem.set_IconImage", img.pui, "Sce.PlayStation.PUI.UI3",
+       "MenuListItem", "set_IconImage", 1,
+       reinterpret_cast<void*>(&MenuListItem_SetIconImage_Hook),
+       reinterpret_cast<void**>(&MenuListItem_SetIconImage), false},
       {"SettingPage.OnPressed", img.legacy, UI3_dec.c_str(), "SettingPage", "OnPressed",
        2, reinterpret_cast<void*>(&OnPress_Hook), reinterpret_cast<void**>(&oOnPress),
        false},
@@ -588,6 +701,19 @@ bool install_hooks(const ShellImages& img) {
       reinterpret_cast<void**>(&ReactNavigatorManager_UpdateNavigationState_Orig));
 
   install_homeui_top_nav_hooks(img.react_pui);
+
+  /* Shell appearance features controlled from the Shell Menu. Each resolves
+     its managed types by name and stays disabled on its own if they are not
+     there; none of them is required for the Toolbox. */
+  AniketosTheme::HomeTiles::Install(img.react_pui, img.pui);
+  AniketosTheme::SharedUI::Install(img.pui);
+  AniketosTheme::ToggleStyles::Install(img.pui);
+  ShellClock::Install(img.pui);
+  SystemDialogs::Install(img.pui);
+  ControlCenterEntry::Install(img.react_pui);
+  HomeTabs::Install(img.pui);
+  HomeFolders::Install();
+  HomeJs::Install(img.react_pui);
 
   (void)install_optional_diag(
       "[DBG-GETMODEL] GetModel", img.rn_shell, "ReactNative.Modules.ShellUI.Settings",
@@ -730,6 +856,20 @@ int main(int argc, char const* argv[]) {
   if (!resolve_native_symbols(pid))
     return -1;
 
+  /* SceShellUI has no console; keep a rotating file so the Shell Menu and
+     the hooks can be diagnosed from a PC over FTP. */
+  onion_log_configure(ONION_DIST_NAME " shellui",
+                      ONION_DIST_USER_DATA_ROOT "/" ONION_DIST_NAME
+                                                "_shellui.log");
+  LOG_INFO("=========== " ONION_DIST_NAME " ShellUI module starting ===========");
+  LOG_INFO("console exports: buzzer=%d buzzer_volume=%d led_boot=%d "
+           "led_standby=%d led_brightness=%d led_status=%d",
+           sceKernelIccSetBuzzer ? 1 : 0,
+           sceKernelIccSetBuzzerDimSetting ? 1 : 0,
+           sceKernelIccIndicatorBootDone ? 1 : 0,
+           sceKernelIccIndicatorStandby ? 1 : 0,
+           sceKernelIccSetDynamicLedDimSetting ? 1 : 0,
+           sceKernelIccNotifyBootStatus ? 1 : 0);
   LOG_DEBUG("Starting ShellUI Module ....");
 
   if (!resolve_mono_symbols(pid))
@@ -776,6 +916,13 @@ int main(int argc, char const* argv[]) {
   if (!resolve_game_container(images.app_system))
     return -1;
 
+  /* Shell Menu (L1+R3). Optional: a ShellUI build it cannot bind to must not
+     stop the Toolbox from loading, so a failure only disables the menu. */
+  const bool shell_menu_ready =
+      AniketosShell::Initialize(images.app_system, images.pui);
+  if (!shell_menu_ready)
+    LOG_WARN("Shell Menu unavailable: host classes not resolved");
+
   LOG_DEBUG("Starting hooking...");
   shellui_hooks_begin_install();
   if (!install_hooks(images)) {
@@ -796,12 +943,31 @@ int main(int argc, char const* argv[]) {
   toolbox_i18n::apply_system_or_ui_lang(g_settings.ui_lang);
 
   shellui_hooks_publish_ready();
+  /* From here on this process logs from the render thread, which must never
+     wait for I/O: hand records to the background writer. Start-up above stays
+     synchronous on purpose, so if ShellUI dies while the hooks are being
+     installed the last line in the log is the step it died in. */
+  (void)onion_log_set_async(true);
+  if (shell_menu_ready) {
+    /* Workers live outside PUI.Application.Update: Home is React/RNPS and
+       does not run that callback. Either one failing leaves the menu off
+       or without live metrics; nothing else depends on them. */
+    if (!AniketosShell::Telemetry::Start())
+      LOG_WARN("Shell Menu: telemetry worker did not start");
+    if (!AniketosShell::Input::Start())
+      LOG_WARN("Shell Menu: controller shortcut reader did not start");
+    (void)AniketosHEN::Controller::Start();
+  }
   /*
    * Home already cached pre-inject state. Display-TID spoof and the top-nav
    * RNPS patch both need NPXS40002 ReloadApp on the UI thread (OnRender), not
    * this inject worker. One pending flag coalesces both reasons.
    */
   shellui_request_home_reload();
+  /* Control Center draws the user's avatar too and does not restart by
+     itself; it has to, for the script that forces the dot to get in. */
+  if ((AniketosTheme::CustomizationOn() ? g_settings.home_presence_dot : 0) != 0)
+    shellui_request_presence_reload(4000, false);
   hooked = true;
   run_keep_alive();
   return 0;

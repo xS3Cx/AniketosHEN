@@ -196,7 +196,10 @@ class KProc : public KernelObject<KProc, PROC_SIZE> {
 };
 
 inline KIterator<KProc> getAllProcs() {
-	return {kernel_base + offsets::allproc()};
+	/* A firmware without a known allproc offset iterates nothing instead of
+	 * walking from a made-up kernel address (offsets::allproc() is -1). */
+	const size_t allproc = offsets::allproc();
+	return {allproc == static_cast<size_t>(-1) ? 0 : kernel_base + allproc};
 }
 
 UniquePtr<KProc> getProc(int pid);

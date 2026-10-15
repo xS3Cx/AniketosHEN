@@ -1,6 +1,6 @@
-/* OnionHEN: launch ELFs via elfldr sockets.
+/* AniketosHEN: launch ELFs via elfldr sockets.
  *
- * 9020 is OnionHEN's private runtime loader. 9021 is the legacy/external
+ * 9020 is AniketosHEN's private runtime loader. 9021 is the legacy/external
  * ps5-payload-dev elfldr port reserved for bootstrap and loader recovery.
  * User payload policy is strict 9020-only and requires an exact PID response.
  */
@@ -33,7 +33,7 @@ extern "C" {
 bool elfldr_remote_available_on(uint16_t port);
 
 /**
- * True only if OnionHEN's private embedded loader answers on 127.0.0.1:9020.
+ * True only if AniketosHEN's private embedded loader answers on 127.0.0.1:9020.
  */
 bool elfldr_remote_onion_available(void);
 
@@ -56,7 +56,7 @@ bool elfldr_remote_send_bytes_to(uint16_t port, const uint8_t *elf,
 bool elfldr_remote_send_file_to(uint16_t port, const char *abs_path);
 
 /**
- * Stage @elf at @abs_path, launch it exclusively through OnionHEN :9020, and
+ * Stage @elf at @abs_path, launch it exclusively through AniketosHEN :9020, and
  * wait for its exact PID. Returns the loader-reported PID (>1), or -1 for any
  * staging, transport, protocol, timeout, spawn, or invalid-PID failure.
  */

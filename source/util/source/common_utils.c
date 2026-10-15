@@ -43,7 +43,7 @@ int elfldr_set_procname(pid_t pid, const char* name);
 int sceKernelGetProcessName(int pid, char *name);
 int sceKernelGetAppInfo(int pid, app_info_t *title);
 
-/* OnionHEN: user payloads launch exclusively via private elfldr :9020.
+/* AniketosHEN: user payloads launch exclusively via private elfldr :9020.
  * ptrace attach/mmap: libonion_elfldr (pt_attach / pt_mmap). Authid is raised
  * once in util main via set_ucred_to_ptrace(), not flipped per ptrace call.
  */

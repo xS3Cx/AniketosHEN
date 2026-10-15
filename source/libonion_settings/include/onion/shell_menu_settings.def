@@ -1,0 +1,157 @@
+/* Settings owned by the Shell Menu and the shell appearance features it
+ * controls. One row per field:
+ *   ONION_SHELL_SETTING_<KIND>(name, default)
+ * The Settings struct, the [shell_menu] parser and the serializer are all
+ * generated from this list, so a field is added in exactly one place.
+ *
+ * Out of the box the menu uses the Apparition skin and the red global theme:
+ * the colour, background, outline, panel and clock defaults below are what
+ * the global theme writes for red, 255 10 20 (apply_global_theme() in
+ * akari_menu/settings_actions.inc). */
+
+ONION_SHELL_SETTING_INT(controller_custom_a_b, 0xff)
+ONION_SHELL_SETTING_INT(controller_custom_a_g, 0x60)
+ONION_SHELL_SETTING_INT(controller_custom_a_r, 0x20)
+ONION_SHELL_SETTING_INT(controller_custom_b_b, 0xd0)
+ONION_SHELL_SETTING_INT(controller_custom_b_g, 0x30)
+ONION_SHELL_SETTING_INT(controller_custom_b_r, 0xff)
+/* strength of the Shell Menu's rumble tests, percent */
+ONION_SHELL_SETTING_INT(controller_vibration_strength, 80)
+ONION_SHELL_SETTING_INT(overlay_display_mode, 0)
+ONION_SHELL_SETTING_BOOL(overlay_firmware, true)
+ONION_SHELL_SETTING_INT(overlay_fps_precision, 1)
+ONION_SHELL_SETTING_BOOL(overlay_free_ram, true)
+ONION_SHELL_SETTING_INT(overlay_horizontal, 2)
+ONION_SHELL_SETTING_INT(overlay_memory_unit, 1)
+ONION_SHELL_SETTING_INT(overlay_refresh_seconds, 1)
+ONION_SHELL_SETTING_BOOL(overlay_resolution, true)
+ONION_SHELL_SETTING_BOOL(overlay_storage, true)
+ONION_SHELL_SETTING_INT(overlay_temp_unit, 0)
+ONION_SHELL_SETTING_FLOAT(overlay_text_size, 20.0f)
+ONION_SHELL_SETTING_BOOL(overlay_uptime, true)
+ONION_SHELL_SETTING_INT(overlay_vertical, 1)
+ONION_SHELL_SETTING_INT(shell_background_animation, 0)
+ONION_SHELL_SETTING_INT(shell_background_animation_speed, 100)
+ONION_SHELL_SETTING_INT(shell_background_base_b, 4)
+ONION_SHELL_SETTING_INT(shell_background_base_g, 4)
+ONION_SHELL_SETTING_INT(shell_background_base_r, 17)
+ONION_SHELL_SETTING_BOOL(shell_background_enabled, true)
+ONION_SHELL_SETTING_BOOL(shell_background_force_home, false)
+ONION_SHELL_SETTING_INT(shell_background_glow_b, 20)
+ONION_SHELL_SETTING_INT(shell_background_glow_g, 10)
+ONION_SHELL_SETTING_INT(shell_background_glow_intensity, 100)
+ONION_SHELL_SETTING_INT(shell_background_glow_r, 255)
+ONION_SHELL_SETTING_BOOL(shell_background_image_enabled, false)
+ONION_SHELL_SETTING_STRING(shell_background_image_path, ONION_DIST_USER_DATA_ROOT "/ShellUI/background/background.png")
+ONION_SHELL_SETTING_INT(shell_background_image_transition, 3)
+ONION_SHELL_SETTING_INT(shell_background_particles, 0)
+ONION_SHELL_SETTING_INT(shell_background_preset, 9)
+ONION_SHELL_SETTING_BOOL(shell_background_wave_enabled, false)
+ONION_SHELL_SETTING_INT(shell_clock_date_b, 20)
+ONION_SHELL_SETTING_INT(shell_clock_date_font_size, 17)
+ONION_SHELL_SETTING_INT(shell_clock_date_g, 10)
+ONION_SHELL_SETTING_INT(shell_clock_date_order, 1)
+ONION_SHELL_SETTING_INT(shell_clock_date_r, 255)
+ONION_SHELL_SETTING_INT(shell_clock_date_separator, 4)
+ONION_SHELL_SETTING_INT(shell_clock_date_spacing, -2)
+ONION_SHELL_SETTING_BOOL(shell_clock_enabled, true)
+ONION_SHELL_SETTING_INT(shell_clock_hour_format, 0)
+ONION_SHELL_SETTING_INT(shell_clock_month_style, 1)
+ONION_SHELL_SETTING_BOOL(shell_clock_show_date, true)
+ONION_SHELL_SETTING_BOOL(shell_clock_show_seconds, true)
+ONION_SHELL_SETTING_BOOL(shell_clock_show_year, true)
+ONION_SHELL_SETTING_INT(shell_clock_time_b, 20)
+ONION_SHELL_SETTING_INT(shell_clock_time_font_size, 31)
+ONION_SHELL_SETTING_INT(shell_clock_time_g, 10)
+ONION_SHELL_SETTING_INT(shell_clock_time_r, 255)
+ONION_SHELL_SETTING_INT(shell_clock_weekday_style, 1)
+ONION_SHELL_SETTING_BOOL(shell_tiles_circular, true)
+ONION_SHELL_SETTING_INT(shell_tiles_outline_animation, 0)
+ONION_SHELL_SETTING_INT(shell_tiles_outline_animation_speed, 100)
+ONION_SHELL_SETTING_INT(shell_tiles_outline_b, 20)
+ONION_SHELL_SETTING_BOOL(shell_tiles_outline_enabled, true)
+ONION_SHELL_SETTING_INT(shell_tiles_outline_g, 10)
+ONION_SHELL_SETTING_INT(shell_tiles_outline_preset, 10)
+ONION_SHELL_SETTING_INT(shell_tiles_outline_r, 255)
+ONION_SHELL_SETTING_BOOL(shell_tiles_outline_sync_background, true)
+ONION_SHELL_SETTING_BOOL(shell_tiles_ps5_case_mockup, false)
+ONION_SHELL_SETTING_INT(shell_ui_panels_animation, 0)
+ONION_SHELL_SETTING_INT(shell_ui_panels_animation_speed, 100)
+ONION_SHELL_SETTING_INT(shell_ui_panels_b, 20)
+ONION_SHELL_SETTING_BOOL(shell_ui_panels_enabled, true)
+ONION_SHELL_SETTING_INT(shell_ui_panels_g, 10)
+ONION_SHELL_SETTING_INT(shell_ui_panels_opacity, 100)
+ONION_SHELL_SETTING_INT(shell_ui_panels_r, 255)
+ONION_SHELL_SETTING_INT(shell_ui_panels_strength, 100)
+ONION_SHELL_SETTING_INT(vsh_animation, 0)
+ONION_SHELL_SETTING_FLOAT(vsh_background_opacity, 0.75f)
+ONION_SHELL_SETTING_FLOAT(vsh_border, 4.0f)
+ONION_SHELL_SETTING_BOOL(vsh_border_enabled, true)
+ONION_SHELL_SETTING_INT(vsh_buzzer_volume, 0)
+ONION_SHELL_SETTING_INT(vsh_color_animation, 3)
+ONION_SHELL_SETTING_INT(vsh_color_animation_speed, 100)
+ONION_SHELL_SETTING_BOOL(vsh_dual_color, false)
+ONION_SHELL_SETTING_INT(vsh_font_weight, 1)
+ONION_SHELL_SETTING_BOOL(vsh_global_theme_enabled, true)
+ONION_SHELL_SETTING_INT(vsh_gradient_direction, 0)
+ONION_SHELL_SETTING_FLOAT(vsh_left_b, 0.08f)
+ONION_SHELL_SETTING_FLOAT(vsh_left_g, 0.04f)
+ONION_SHELL_SETTING_FLOAT(vsh_left_r, 1.0f)
+ONION_SHELL_SETTING_INT(vsh_menu_appearance, 0)
+ONION_SHELL_SETTING_FLOAT(vsh_menu_scale, 1.0f)
+ONION_SHELL_SETTING_BOOL(vsh_menu_sounds, true)
+ONION_SHELL_SETTING_INT(vsh_menu_theme, 5)
+ONION_SHELL_SETTING_FLOAT(vsh_menu_width, 450.0f)
+ONION_SHELL_SETTING_FLOAT(vsh_menu_x, 960.0f)
+ONION_SHELL_SETTING_FLOAT(vsh_menu_y, 540.0f)
+ONION_SHELL_SETTING_INT(vsh_power_indicator_animation, 0)
+ONION_SHELL_SETTING_INT(vsh_power_indicator_brightness, 0)
+ONION_SHELL_SETTING_INT(vsh_power_indicator_color, 0)
+ONION_SHELL_SETTING_FLOAT(vsh_right_b, 0.08f)
+ONION_SHELL_SETTING_FLOAT(vsh_right_g, 0.04f)
+ONION_SHELL_SETTING_FLOAT(vsh_right_r, 1.0f)
+ONION_SHELL_SETTING_BOOL(vsh_show_controls, true)
+ONION_SHELL_SETTING_FLOAT(vsh_text_size, 18.0f)
+
+/* Home-screen OSD drawn by the Shell Menu. Separate from the in-game monitor
+ * bar ([overlay]): this one is drawn on the home screen, that one in games. */
+ONION_SHELL_SETTING_BOOL(home_osd_enabled, true)
+ONION_SHELL_SETTING_BOOL(home_osd_fps, true)
+ONION_SHELL_SETTING_BOOL(home_osd_cpu, true)
+ONION_SHELL_SETTING_BOOL(home_osd_gpu, true)
+ONION_SHELL_SETTING_BOOL(home_osd_ram, true)
+ONION_SHELL_SETTING_BOOL(home_osd_ip, true)
+ONION_SHELL_SETTING_BOOL(home_osd_fan, true)
+
+/* A looping video behind the Home screen (shellui: aniketos_shell/home_video).
+ * home_video_path is the chosen file; empty means the first one found. */
+ONION_SHELL_SETTING_BOOL(home_video_enabled, false)
+ONION_SHELL_SETTING_STRING(home_video_path, "")
+ONION_SHELL_SETTING_BOOL(home_video_sound, false)
+/* A still image in the same place, shown when no video is. */
+ONION_SHELL_SETTING_BOOL(home_image_enabled, false)
+ONION_SHELL_SETTING_STRING(home_image_path, "")
+/* Drifting particles behind Home (shellui: aniketos_shell/home_particles). */
+ONION_SHELL_SETTING_BOOL(home_particles_enabled, false)
+ONION_SHELL_SETTING_INT(home_particles_count, 110)
+/* The presence dot forced onto avatars in Home while not online: 0 as the
+ * system has it, 1 online, 2 busy, 3 appearing offline (shellui: home_js). */
+ONION_SHELL_SETTING_INT(home_presence_dot, 0)
+/* Folders of games on Home's Games row, filled from a game's Options menu
+ * (shellui: aniketos_shell/home_folders). */
+ONION_SHELL_SETTING_BOOL(home_folders, true)
+/* A Favorites tab on Home next to Emulators, filled from a game's Options
+ * menu; shown while it holds a game (shellui: aniketos_shell/home_folders). */
+ONION_SHELL_SETTING_BOOL(home_favorites, true)
+/* The look of the system's on/off switches: 0 the system's own, 1 and up
+ * the styles of shellui's aniketos_theme/toggle_styles. */
+ONION_SHELL_SETTING_INT(shell_toggle_style, 0)
+
+/* Master switch for every change to the interface's look the menu makes
+ * (shellui: aniketos_theme/customization.hpp). The HEN button and the
+ * Emulators tab stay either way. */
+ONION_SHELL_SETTING_BOOL(shell_customization_enabled, true)
+
+/* The shape ShellUI is laid out for: 0 is the console's 16:9, the others are
+ * the ultrawide formats of aniketos_shell/screen_rotation (by index). */
+ONION_SHELL_SETTING_INT(screen_format, 0)

@@ -1,5 +1,5 @@
 ###################################################################################################
-# OnionHEN shared settings (single INI schema for daemon / util / shellui)
+# AniketosHEN shared settings (single INI schema for daemon / util / shellui)
 ###################################################################################################
 
 cmake_minimum_required(VERSION 3.20)

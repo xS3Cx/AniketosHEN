@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# OnionHEN one-shot build pipeline
+# AniketosHEN one-shot build pipeline
 #
 # Phases:
 #   1) configure (prospero-cmake / PS5 payload SDK)
@@ -7,7 +7,7 @@
 #   3) stage the kstuff dependency
 #   4) build daemon + util
 #   5) build bootstrapper  (-> bin/bootstrapper.elf + .lzma)
-#   6) build unpacker / OnionHEN.elf   (embeds bootstrapper.elf.lzma)
+#   6) build unpacker / AniketosHEN.elf   (embeds bootstrapper.elf.lzma)
 #
 # Usage:
 #   export PS5_PAYLOAD_SDK=/path/to/ps5-payload-sdk
@@ -57,7 +57,7 @@ die()  { printf '\033[1;31m[error]\033[0m %s\n' "$*" >&2; exit 1; }
 
 usage() {
   cat <<EOF
-OnionHEN build pipeline
+AniketosHEN build pipeline
 
 Usage: $(basename "$0") [options]
 
@@ -72,7 +72,7 @@ Options:
   --cache-dir <path>   Download cache directory (default: <repo>/.cache/dependencies)
   --stub-missing       Create tiny placeholder ELFs if external blobs are missing
                        (links, but NOT for real hardware)
-  --skip-unpacker      Stop after bootstrapper (no OnionHEN.elf unpacker)
+  --skip-unpacker      Stop after bootstrapper (no AniketosHEN.elf unpacker)
   --skip-dependency-sync
                        Do not call scripts/sync_dependencies.sh
   --force-dependency-sync
@@ -91,12 +91,12 @@ Third-party (pinned source under third_party/ + release fallbacks):
 
   kstuff.elf              <- EchoStretch/kstuff-lite
   External elfldr @ 9021 is required for initial bootstrap but is not vendored.
-  OnionHEN embeds its private runtime loader as onion_elfldr.elf @ 9020.
+  AniketosHEN embeds its private runtime loader as onion_elfldr.elf @ 9020.
 
   Removed: external elfldr.elf (9021), ps5debug, app-dumper, Byepervisor/hen, Discord RPC
 
 Built-in outputs (under <repo>/build/):
-  build/bin/*.elf           final ELFs (util, daemon, bootstrapper, OnionHEN, …)
+  build/bin/*.elf           final ELFs (util, daemon, bootstrapper, AniketosHEN, …)
   build/lib/*.a             first-party static libs
   build/bin/shellui.elf     daemon embed input
 EOF
@@ -299,6 +299,9 @@ configure() {
     -G Ninja \
     -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" \
     -DONIONHEN_KSTUFF_ELF="${CACHE}/kstuff.elf" \
+    -DANIKETOSHEN_ISSUES_URL="${ANIKETOSHEN_ISSUES_URL:-}" \
+    -DANIKETOSHEN_REPORT_URL="${ANIKETOSHEN_REPORT_URL:-}" \
+    ${ANIKETOSHEN_VERSION:+-DANIKETOSHEN_VERSION="${ANIKETOSHEN_VERSION}"} \
     -DPS5_PAYLOAD_SDK="${PS5_PAYLOAD_SDK}"
   ok "configured -> ${BUILD}"
 }
@@ -313,7 +316,7 @@ build_targets() {
 # Main pipeline
 # ---------------------------------------------------------------------------
 main() {
-  log "OnionHEN build"
+  log "AniketosHEN build"
   echo "  ROOT     = ${ROOT}"
   echo "  SDK      = ${PS5_PAYLOAD_SDK}"
   echo "  BUILD    = ${BUILD}"
@@ -425,18 +428,18 @@ main() {
   if [[ "${SKIP_UNPACKER}" -eq 1 ]]; then
     log "Skip unpacker (--skip-unpacker)"
   else
-    # Phase 5 — final payload (OnionHEN.elf embeds lzma bootstrapper)
-    log "Phase 5/5: unpacker (OnionHEN.elf)"
-    # Target project name is OnionHEN (see unpacker/CMakeLists.txt)
-    if cmake --build "${BUILD}" -j"${JOBS}" --target OnionHEN 2>/dev/null; then
-      ok "OnionHEN target built"
+    # Phase 5 — final payload (AniketosHEN.elf embeds lzma bootstrapper)
+    log "Phase 5/5: unpacker (AniketosHEN.elf)"
+    # Target project name is AniketosHEN (see unpacker/CMakeLists.txt)
+    if cmake --build "${BUILD}" -j"${JOBS}" --target AniketosHEN 2>/dev/null; then
+      ok "AniketosHEN target built"
     else
-      build_targets unpacker 2>/dev/null || build_targets OnionHEN
+      build_targets unpacker 2>/dev/null || build_targets AniketosHEN
     fi
-    if [[ -f "${BIN}/OnionHEN.elf" ]]; then
-      ok "final payload: ${BIN}/OnionHEN.elf"
+    if [[ -f "${BIN}/AniketosHEN.elf" ]]; then
+      ok "final payload: ${BIN}/AniketosHEN.elf"
     else
-      warn "OnionHEN.elf not found under bin/ — check unpacker target name/output"
+      warn "AniketosHEN.elf not found under bin/ — check unpacker target name/output"
       ls -la "${BIN}" || true
     fi
   fi

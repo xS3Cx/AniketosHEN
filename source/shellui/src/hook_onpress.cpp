@@ -138,7 +138,7 @@ int OnPress_Hook(MonoObject *Instance, MonoObject *element, MonoObject *e) {
   const OnPressResult result = dispatch_toolbox_press(domain, ctx);
 
   if (result == OnPressResult::Consumed) {
-    // Fully owned by OnionHEN (dynamic XML). Skip stock SettingPage.OnPressed.
+    // Fully owned by AniketosHEN (dynamic XML). Skip stock SettingPage.OnPressed.
     if (ctx.dirty) {
       settings_commit(ctx.reload_main, ctx.reload_util);
     }

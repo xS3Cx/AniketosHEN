@@ -1,6 +1,6 @@
 /* Copyright (C) 2026 OnionHEN / LightningMods
  *
- * Shared /system_tmp namespace for OnionHEN runtime state.
+ * Shared /system_tmp namespace for AniketosHEN runtime state.
  */
 #pragma once
 
@@ -8,6 +8,11 @@
 #include <stddef.h>
 #include <stdio.h>
 
+/* The directory keeps OnionHEN's name on purpose; it is not derived from
+ * <onion/distribution.h>. Plugins built against the OnionHEN Plugin SDK
+ * connect to ipc/plugin_service under this exact path, and the ready/pid
+ * markers here are how a freshly loaded stack recognises and replaces one
+ * that is already running (OnionHEN or this distribution). */
 #if defined(ONION_HOST_TEST)
 #define ONION_SYSTEM_TMP_ROOT "/tmp/onionhen"
 #else

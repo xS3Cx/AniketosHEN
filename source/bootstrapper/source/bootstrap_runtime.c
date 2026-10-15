@@ -104,7 +104,9 @@ static int redirect_standard_streams(void) {
 }
 
 void bootstrap_runtime_enable_remote_logging(void) {
-  if (!if_exists("/data/I_want_logging_for_onionhen"))
+  /* Opt-in marker file. OnionHEN's name for it keeps working. */
+  if (!if_exists("/data/I_want_logging_for_aniketoshen") &&
+      !if_exists("/data/I_want_logging_for_onionhen"))
     return;
 
   LOG_DEBUG("Redirecting stdout and stderr to logger ...");

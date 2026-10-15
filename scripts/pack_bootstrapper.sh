@@ -13,7 +13,7 @@ else
 fi
 
 # SHA-1 of the uncompressed ELF (not the .lzma). Unpacker embeds this and
-# uses it to decide whether /user/data/OnionHEN/onionhen.elf is still valid.
+# uses it to decide whether /user/data/AniketosHEN/aniketoshen.elf is still valid.
 write_sha1() {
   local src="$1"
   local dest="$2"

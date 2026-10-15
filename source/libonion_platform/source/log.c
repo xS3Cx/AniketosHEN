@@ -1,5 +1,6 @@
 /* Copyright (C) 2025 OnionHEN / LightningMods */
 
+#include <onion/distribution.h>
 #include <onion/log.h>
 
 #include <fcntl.h>
@@ -25,7 +26,7 @@ void klog_printf(const char *fmt, ...);
  * g_lock covers everything below it.
  */
 static pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;
-static char g_tag[LOG_TAG_MAX] = "OnionHEN";
+static char g_tag[LOG_TAG_MAX] = ONION_DIST_NAME;
 static char g_log_path[LOG_PATH_MAX] = "";
 static int g_fd = -1;
 static char g_crash_path[LOG_PATH_MAX] = "";
@@ -33,6 +34,28 @@ static int g_crash_fd = -1;
 static size_t g_max_bytes = ONION_LOG_DEFAULT_MAX_BYTES;
 
 volatile int onion_log_runtime_level = ONION_LOG_INFO;
+
+/*
+ * Optional background writer (onion_log_set_async). The three sinks together
+ * cost a caller several milliseconds per record on a console, which is a
+ * third of a frame for a process that logs from its render thread. In async
+ * mode a record is copied into a small ring and written by a worker thread;
+ * the caller only pays for formatting and a short lock.
+ *
+ * A full ring drops the new record and counts it rather than block the
+ * caller. onion_log_emergency() never uses the ring.
+ */
+#define LOG_ASYNC_SLOTS 128
+#define LOG_ASYNC_RECORD_MAX 512
+
+static pthread_mutex_t g_async_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t g_async_wake = PTHREAD_COND_INITIALIZER;
+static char g_async_ring[LOG_ASYNC_SLOTS][LOG_ASYNC_RECORD_MAX];
+static unsigned short g_async_length[LOG_ASYNC_SLOTS];
+static unsigned g_async_head = 0; /* next slot to write */
+static unsigned g_async_count = 0;
+static unsigned g_async_dropped = 0;
+static volatile int g_async_enabled = 0;
 
 static const char *const kLevelNames[] = {"off",   "error", "warn",
                                           "info",  "debug", "trace"};
@@ -292,10 +315,109 @@ void onion_log_shutdown(void) {
  *
  * The lock still spans all three sinks so records never interleave.
  */
+static void write_sinks(const char *msg, size_t len);
+
+static void *async_worker(void *unused) {
+  (void)unused;
+  char record[LOG_ASYNC_RECORD_MAX];
+  for (;;) {
+    pthread_mutex_lock(&g_async_lock);
+    while (g_async_count == 0)
+      pthread_cond_wait(&g_async_wake, &g_async_lock);
+    const unsigned tail =
+        (g_async_head + LOG_ASYNC_SLOTS - g_async_count) % LOG_ASYNC_SLOTS;
+    const size_t len = g_async_length[tail];
+    memcpy(record, g_async_ring[tail], len + 1);
+    const unsigned dropped = g_async_dropped;
+    g_async_dropped = 0;
+    pthread_mutex_unlock(&g_async_lock);
+
+    if (dropped != 0) {
+      char note[96];
+      const int n = snprintf(note, sizeof(note),
+                             "[log] %u record(s) dropped: writer fell behind\n",
+                             dropped);
+      if (n > 0)
+        write_sinks(note, (size_t)n);
+    }
+    write_sinks(record, len);
+
+    /* Release the slot only after the write, so onion_log_flush() can wait
+       for "count == 0" and know everything reached the sinks. */
+    pthread_mutex_lock(&g_async_lock);
+    g_async_count--;
+    if (g_async_count == 0)
+      pthread_cond_broadcast(&g_async_wake);
+    pthread_mutex_unlock(&g_async_lock);
+  }
+  return NULL;
+}
+
+bool onion_log_set_async(bool enabled) {
+  static bool worker_started = false;
+  pthread_mutex_lock(&g_async_lock);
+  if (enabled && !worker_started) {
+    pthread_t thread;
+    if (pthread_create(&thread, NULL, async_worker, NULL) == 0) {
+      pthread_detach(thread);
+      worker_started = true;
+    }
+  }
+  g_async_enabled = enabled && worker_started;
+  const bool active = g_async_enabled != 0;
+  pthread_mutex_unlock(&g_async_lock);
+  if (!enabled)
+    onion_log_flush();
+  return active == enabled;
+}
+
+void onion_log_flush(void) {
+  pthread_mutex_lock(&g_async_lock);
+  while (g_async_count != 0)
+    pthread_cond_wait(&g_async_wake, &g_async_lock);
+  pthread_mutex_unlock(&g_async_lock);
+}
+
+static bool async_enqueue(const char *msg, size_t len) {
+  if (len >= LOG_ASYNC_RECORD_MAX) {
+    len = LOG_ASYNC_RECORD_MAX - 1; /* keep the head of an oversized record */
+  }
+  pthread_mutex_lock(&g_async_lock);
+  if (!g_async_enabled) {
+    pthread_mutex_unlock(&g_async_lock);
+    return false;
+  }
+  if (g_async_count == LOG_ASYNC_SLOTS) {
+    g_async_dropped++;
+    pthread_mutex_unlock(&g_async_lock);
+    return true;
+  }
+  char *slot = g_async_ring[g_async_head];
+  memcpy(slot, msg, len);
+  if (len > 0 && slot[len - 1] != '\n') {
+    slot[len - 1] = '\n'; /* truncated: keep records line-delimited */
+  }
+  slot[len] = '\0';
+  g_async_length[g_async_head] = (unsigned short)len;
+  g_async_head = (g_async_head + 1) % LOG_ASYNC_SLOTS;
+  g_async_count++;
+  pthread_cond_signal(&g_async_wake);
+  pthread_mutex_unlock(&g_async_lock);
+  return true;
+}
+
 static void log_emit(onion_log_level level, const char *fmt, va_list args) {
   char msg[LOG_MSG_MAX];
   const size_t len = format_record(msg, sizeof(msg), level, fmt, args);
 
+  /* Errors stay synchronous: they are rare, and the record explaining a
+     failure must not be the one lost if the process dies right after it. */
+  if (g_async_enabled && level != ONION_LOG_ERROR && async_enqueue(msg, len))
+    return;
+  write_sinks(msg, len);
+}
+
+static void write_sinks(const char *msg, size_t len) {
   pthread_mutex_lock(&g_lock);
   /* Volatile sinks first: if the file write fails the record is still seen. */
   klog_printf("%s", msg);

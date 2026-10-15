@@ -1,6 +1,12 @@
 /* Copyright (C) 2025 OnionHEN / LightningMods
  * Extracted from hook_functions.cpp — hook_boot
  */
+#include "aniketos_shell/home_menu.hpp"
+#include "controller_tools.hpp"
+#include "aniketos_shell/shell_manager.hpp"
+#include "aniketos_shell/trophy_tools.hpp"
+#include "aniketos_shell/home_folders.hpp"
+#include <onion/distribution.h>
 #include "hooked_funcs.hpp"
 #include "debug_settings_route_runtime.hpp"
 #include "detour.h"
@@ -24,6 +30,24 @@ static constexpr const char kLegacyHomeTopNavUri[] = "OnionHEN?NavUI";
 
 static bool is_home_top_nav_uri(const std::string &uri) {
   return uri == kHomeTopNavUri || uri == kLegacyHomeTopNavUri;
+}
+
+/* How the top-bar icon last asked to be opened, so its menu can open the
+   Toolbox the same way later. */
+static int s_toolbox_boot_variant = 0;
+static int s_toolbox_boot_opt = 0;
+
+bool shellui_open_toolbox() {
+  if (s_toolbox_boot_variant == 2 && boot_orig_2)
+    return boot_orig_2(
+        mono_string_new(Root_Domain,
+                        shellui_debug_settings_toolbox_uri_simple()),
+        s_toolbox_boot_opt);
+  if (boot_orig)
+    return boot_orig(
+        mono_string_new(Root_Domain, shellui_debug_settings_toolbox_uri()),
+        s_toolbox_boot_opt, nullptr);
+  return false;
 }
 
 bool handle_uri_boot_common(MonoString* uri, int opt, MonoString* titleIdForBootAction) {
@@ -60,7 +84,7 @@ bool handle_uri_boot_common(MonoString* uri, int opt, MonoString* titleIdForBoot
     }
     else if (is_home_top_nav_uri(uri_string)) {
 #if SHELL_DEBUG==1
-      LOG_DEBUG("HomeUI top-nav OnionHEN URI detected");
+      LOG_DEBUG("HomeUI top-nav " ONION_DIST_NAME " URI detected");
 #endif
       return true;
     }
@@ -72,6 +96,18 @@ bool handle_uri_boot_common(MonoString* uri, int opt, MonoString* titleIdForBoot
     if (!shellui_hooks_are_ready())
       return boot_orig ? boot_orig(uri, opt, titleIdForBootAction) : false;
 
+    if (HomeFolders::HandleUri(Mono_to_String(uri), g_ui.current_menu_tid))
+      return true;
+    if (Mono_to_String(uri) == TrophyTools::kUnlockAllUri) {
+      TrophyTools::RequestUnlockAll(g_ui.current_menu_tid);
+      return true;
+    }
+    if (HomeMenu::Available() && is_home_top_nav_uri(Mono_to_String(uri))) {
+      s_toolbox_boot_variant = 1;
+      s_toolbox_boot_opt = opt;
+      HomeMenu::Request();
+      return true;
+    }
     if(handle_uri_boot_common(uri, opt, titleIdForBootAction)) {
       return boot_orig(
           mono_string_new(Root_Domain, shellui_debug_settings_toolbox_uri()), opt,
@@ -100,6 +136,18 @@ bool handle_uri_boot_common(MonoString* uri, int opt, MonoString* titleIdForBoot
   #if SHELL_DEBUG==1
     LOG_DEBUG("uri_boot_hook_2: %s, opt: %i", original_uri.c_str(), opt);
   #endif
+    if (HomeFolders::HandleUri(original_uri, g_ui.current_menu_tid))
+      return true;
+    if (original_uri == TrophyTools::kUnlockAllUri) {
+      TrophyTools::RequestUnlockAll(g_ui.current_menu_tid);
+      return true;
+    }
+    if (HomeMenu::Available() && is_home_top_nav_uri(original_uri)) {
+      s_toolbox_boot_variant = 2;
+      s_toolbox_boot_opt = opt;
+      HomeMenu::Request();
+      return true;
+    }
     if(handle_uri_boot_common(uri, opt, nullptr)) {
       // Redirect to debug settings (no titleId parameter for older fw).
       return boot_orig_2(
@@ -141,6 +189,17 @@ bool handle_uri_boot_common(MonoString* uri, int opt, MonoString* titleIdForBoot
 
   
     result = GetData(deviceIndex);
+
+    /* Advances the Shell Menu's DualSense light-bar animations. */
+    controller_handle_buttons(static_cast<uint32_t>(result.ButtonsDown));
+
+    if (AniketosShell::ShouldSuppressShellInput()) {
+      /* The open Shell Menu owns the controller: hand ShellUI an empty state
+         so the same press cannot also navigate Home underneath it. */
+      result.Buttons = None;
+      result.ButtonsDown = None;
+      return result;
+    }
 
     // Cheats Shortcut
     if (g_settings.cheats_shortcut_opt != CHEATS_SC_OFF) {

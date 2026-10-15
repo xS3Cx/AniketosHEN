@@ -15,6 +15,7 @@ along with this program; see the file COPYING. If not, see
 <http://www.gnu.org/licenses/>.  */
 
 #include "homeui_top_nav_patch.hpp"
+#include "aniketos_theme/customization.hpp"
 
 #if SHELLUI_HOMEUI_TOP_NAV_PATCH == 1
 
@@ -24,12 +25,24 @@ along with this program; see the file COPYING. If not, see
 #include "hooked_funcs.hpp"
 #include "ipc.hpp"
 #include <sha1.hpp>
+#include <onion/settings.hpp>
 
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <onion/distribution.h>
 #include <atomic>
 #include <stddef.h>
 #include <stdint.h>
 #include <string>
 #include <string.h>
+
+const char *AniketosIconPath(); /* aniketos_shell/control_center_entry.cpp */
+
+/* Set when a Home bundle was given the top-bar icon by the patch below. */
+static std::atomic<bool> g_top_nav_patched{false};
+
+extern onion::Settings g_settings;
 
 namespace {
 
@@ -884,6 +897,8 @@ static void update_hbc_footer_sha1(HbcView &hbc, size_t file_length) {
   SHA1Final(hbc.data + footer_offset, &ctx);
 }
 
+#include "homeui_home_tiles.inc"
+
 /*
  * Focused top-nav buttons use invertedIconSource. Named system icons (Search,
  * Settings) resolve both states from iconId; a custom file URI only fills the
@@ -904,8 +919,12 @@ static bool is_homeui_top_nav_icon_source(MonoObject *source) {
     return false;
   }
 
-  return Mono_to_String(text).find(kOnionHenTopNavIconPath) !=
-         std::string::npos;
+  /* The byte patch names the picture by its system path; where it has no
+     profile, the script home_js.cpp puts into Home names our own file. */
+  const std::string uri = Mono_to_String(text);
+  const char *own = AniketosIconPath();
+  return uri.find(kOnionHenTopNavIconPath) != std::string::npos ||
+         (own && *own && uri.find(own) != std::string::npos);
 }
 
 static void ReactButtonShadowNode_SetIconSource_Hook(MonoObject *instance,
@@ -1071,6 +1090,34 @@ void patch_homeui_top_nav(unsigned char *buffer, int *size_ptr,
 
   HbcView hbc = {};
   const size_t visible_size = (size_t)*size_ptr;
+  { /* Development: keep a copy of the decoded bundle for analysis, when the
+       Shell Menu profiler marker is present. */
+    /* every React app's bundle passes here, each under its own name */
+    static int dumped = 0;
+    struct stat marker {};
+    if (dumped < 16 && visible_size > 64 * 1024 &&
+        stat(ONION_DIST_USER_DATA_ROOT "/shellmenu_profile", &marker) == 0) {
+      char path[128];
+      snprintf(path, sizeof(path),
+               ONION_DIST_USER_DATA_ROOT "/bundle_%02d_%zu.bin", dumped,
+               visible_size);
+      ++dumped;
+      const int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+      if (fd >= 0) {
+        size_t off = 0;
+        while (off < visible_size) {
+          const ssize_t n = write(fd, buffer + off,
+                                  visible_size - off > (1u << 20)
+                                      ? (1u << 20)
+                                      : visible_size - off);
+          if (n <= 0)
+            break;
+          off += (size_t)n;
+        }
+        close(fd);
+      }
+    }
+  }
   const size_t capacity =
       buffer_capacity > *size_ptr ? (size_t)buffer_capacity : visible_size;
 
@@ -1078,7 +1125,8 @@ void patch_homeui_top_nav(unsigned char *buffer, int *size_ptr,
     SourceBundleView source_bundle = {};
     if (locate_source_bundle(buffer, visible_size, capacity, format,
                              &source_bundle)) {
-      patch_source_homeui_top_nav(source_bundle, format.kind);
+      if (patch_source_homeui_top_nav(source_bundle, format.kind))
+        g_top_nav_patched.store(true, std::memory_order_relaxed);
       return;
     }
   }
@@ -1254,7 +1302,30 @@ void patch_homeui_top_nav(unsigned char *buffer, int *size_ptr,
     any_change = any_change || !helper_already_applied;
   }
 
+  /* Circular tiles. The case-mockup frame draws on the stock rectangular
+     surface, so the two are never combined. */
+  const bool circle_tiles = (AniketosTheme::CustomizationOn() && g_settings.shell_tiles_circular) &&
+                            !g_settings.shell_tiles_ps5_case_mockup;
+  HomeTileShapePatch tile_shape{};
+  const bool tile_shape_ready =
+      locate_home_tile_shape_patch(hbc, hbc_file_length, &tile_shape);
+  if (tile_shape_ready)
+    any_change = any_change || tile_shape.is_circular != circle_tiles;
+  HomeTileContentClipPatch tile_content_clip{};
+  const bool tile_content_clip_ready = locate_home_tile_content_clip_patch(
+      hbc, hbc_file_length, &tile_content_clip);
+  if (tile_content_clip_ready)
+    any_change = any_change ||
+                 tile_content_clip.tail_clipped != circle_tiles ||
+                 tile_content_clip.image_style_shared != circle_tiles;
+  LOG_INFO("home_tiles: circular=%d shape_site=%d (now %s) clip_site=%d",
+           circle_tiles ? 1 : 0, tile_shape_ready ? 1 : 0,
+           tile_shape_ready ? (tile_shape.is_circular ? "circle" : "stock")
+                            : "n/a",
+           tile_content_clip_ready ? 1 : 0);
+
   if (!any_change) {
+    g_top_nav_patched.store(true, std::memory_order_relaxed);
 #if SHELL_DEBUG == 1
     LOG_WARN("homeui_top_nav_patch: already applied profile='%s' "
                 "(hbc_base=0x%llx)",
@@ -1269,8 +1340,20 @@ void patch_homeui_top_nav(unsigned char *buffer, int *size_ptr,
   if (bytes.requires_image_source_object) {
     apply_patch(hbc, kImageSourceHelperPatch);
   }
+  if (tile_shape_ready && tile_shape.is_circular != circle_tiles) {
+    apply_home_tile_shape_patch(tile_shape, circle_tiles);
+    LOG_INFO("home_tiles: shape=%s applied", circle_tiles ? "circle" : "stock");
+  }
+  if (tile_content_clip_ready &&
+      (tile_content_clip.tail_clipped != circle_tiles ||
+       tile_content_clip.image_style_shared != circle_tiles)) {
+    apply_home_tile_content_clip_patch(tile_content_clip, circle_tiles);
+    LOG_INFO("home_tiles: content mask=%s applied",
+             circle_tiles ? "circle" : "stock");
+  }
   update_hbc_footer_sha1(hbc, hbc_file_length);
 
+  g_top_nav_patched.store(true, std::memory_order_relaxed);
 #if SHELL_DEBUG == 1
   LOG_DEBUG("homeui_top_nav_patch: activated OnionHEN top-nav slot "
               "profile='%s' "
@@ -1282,4 +1365,8 @@ void patch_homeui_top_nav(unsigned char *buffer, int *size_ptr,
   (void)size_ptr;
   (void)buffer_capacity;
 #endif
+}
+
+bool homeui_top_nav_patched() {
+  return g_top_nav_patched.load(std::memory_order_relaxed);
 }

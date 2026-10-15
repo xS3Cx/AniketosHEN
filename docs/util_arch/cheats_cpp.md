@@ -78,7 +78,7 @@ IPC handleIPC
 
 | 扩展名 | Parser | 说明 |
 |--------|--------|------|
-| `.json` | `JsonCheatParser` | GoldHEN/OnionHEN JSON（cJSON） |
+| `.json` | `JsonCheatParser` | GoldHEN/AniketosHEN JSON（cJSON） |
 | `.shn` | `XmlCheatParser` | Trainer XML |
 | `.mc4` | `Mc4CheatParser` | Base64 + AES-256-CBC → XML |
 | `.ShnExt` | `ShnExtCheatParser` | deflate + AES + cJSON + 可选 keystone |

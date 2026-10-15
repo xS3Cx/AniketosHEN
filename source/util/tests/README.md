@@ -1,4 +1,4 @@
-# OnionHEN host unit tests
+# AniketosHEN host unit tests
 
 Host-side unit tests for shared libraries and util cheat **file parsing**
 (no PS5 SDK). Modeled after `kylin-core/tests`.

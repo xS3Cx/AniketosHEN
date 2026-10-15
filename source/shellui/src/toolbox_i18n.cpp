@@ -1,6 +1,7 @@
 /* Copyright (C) 2025 OnionHEN / LightningMods */
 
 #include "toolbox_i18n.hpp"
+#include <mutex>
 #include <onion/log.h>
 #include <onion/notify_i18n.h>
 
@@ -18,12 +19,44 @@ namespace {
 
 #include "toolbox_i18n_catalog.inc"
 
+/* Key -> entry index, built on first use. The catalog holds several hundred
+ * keys and the Shell Menu translates every visible row whenever it repaints,
+ * so a linear strcmp scan per lookup was measurable on the UI thread. */
+constexpr size_t kIndexSlots = 2048; /* power of two, > 2x the catalog size */
+
+uint32_t key_hash(const char *key) {
+  uint32_t hash = 2166136261u;
+  for (; *key; ++key) {
+    hash ^= static_cast<unsigned char>(*key);
+    hash *= 16777619u;
+  }
+  return hash;
+}
+
+const Entry *const *entry_index() {
+  static const Entry *slots[kIndexSlots];
+  static std::once_flag once;
+  std::call_once(once, [] {
+    static_assert(sizeof(kTable) / sizeof(kTable[0]) * 2 < kIndexSlots,
+                  "grow kIndexSlots with the catalog");
+    for (const Entry &e : kTable) {
+      size_t at = key_hash(e.key) & (kIndexSlots - 1);
+      while (slots[at])
+        at = (at + 1) & (kIndexSlots - 1);
+      slots[at] = &e;
+    }
+  });
+  return slots;
+}
+
 const Entry *find_entry(const char *key) {
   if (!key)
     return nullptr;
-  for (const Entry &e : kTable) {
-    if (std::strcmp(e.key, key) == 0)
-      return &e;
+  const Entry *const *slots = entry_index();
+  for (size_t at = key_hash(key) & (kIndexSlots - 1); slots[at];
+       at = (at + 1) & (kIndexSlots - 1)) {
+    if (std::strcmp(slots[at]->key, key) == 0)
+      return slots[at];
   }
   return nullptr;
 }

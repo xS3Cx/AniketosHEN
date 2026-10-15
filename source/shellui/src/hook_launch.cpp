@@ -5,6 +5,8 @@
 #include "ipc.hpp"
 #include "external_symbols.hpp"
 #include "toolbox_i18n.hpp"
+#include "aniketos_shell/trophy_tools.hpp"
+#include "aniketos_shell/home_folders.hpp"
 #include <onion/platform.h>
 #include <onion/system_tmp.h>
 #include <string>
@@ -12,6 +14,7 @@
 #include <sys/stat.h>
 
 #include "shellui_state.hpp"
+#include <cctype>
 #include <cstring>
 
 void save_appid(int value, const char* filename) {
@@ -98,6 +101,38 @@ int sceRegMgrGetInt_hook(long regid, int* out_val){
 
   return ret;
 }
+/* The title an Options menu entry is about, read from its URL: a
+   "titleId=" parameter (any case, "npTitleId=" too) or the first of the
+   "titleIds" list some dialogs carry, percent-encoded or not. */
+static std::string menu_entry_title(const std::string &url) {
+    std::string text;
+    for (size_t i = 0; i < url.size(); ++i) {
+        if (url[i] == '%' && i + 2 < url.size() &&
+            std::isxdigit(static_cast<unsigned char>(url[i + 1])) &&
+            std::isxdigit(static_cast<unsigned char>(url[i + 2]))) {
+            text += static_cast<char>(std::stoi(url.substr(i + 1, 2), nullptr, 16));
+            i += 2;
+        } else {
+            text += url[i];
+        }
+    }
+    std::string lower = text;
+    for (char &c : lower)
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    for (const char *key : {"titleid=", "\"titleids\":[\""}) {
+        const size_t at = lower.find(key);
+        if (at == std::string::npos)
+            continue;
+        const std::string id = text.substr(at + std::strlen(key), 9);
+        bool clean = id.size() == 9;
+        for (const char c : id)
+            clean = clean && std::isalnum(static_cast<unsigned char>(c));
+        if (clean)
+            return id;
+    }
+    return std::string();
+}
+
 static std::string extractTIDFromURI(const std::string& url) {
     const std::string prefix = "titleId=";
     size_t pos = url.find(prefix);
@@ -134,6 +169,44 @@ void createJson_hook(MonoObject* inst, MonoObject* array, MonoString* id, MonoSt
                Mono_to_String(messageId).c_str());
 #endif
 
+    /* Favorites and game folders on Home: just above "Delete", which every
+       game and app of the user's has and the system's own tiles do not. */
+    if (id_str == "MENU_ID_APPLICATION_DELETE") {
+        const std::string title = menu_entry_title(Mono_to_String(actionUrl));
+        if (!title.empty())
+            g_ui.current_menu_tid = title;
+        if (HomeFolders::FavoriteAllowed(title)) {
+            const bool favorite = HomeFolders::IsFavorite(title);
+            createJson(inst, array,
+                       mono_string_new(Root_Domain,
+                                       "MENU_ID_ANIKETOS_FAVORITE"),
+                       mono_string_new(Root_Domain,
+                                       toolbox_i18n::tr(favorite
+                                           ? "favorites.menu_remove"
+                                           : "favorites.menu_add")),
+                       mono_string_new(Root_Domain,
+                                       favorite ? HomeFolders::kFavoriteRemoveUri
+                                                : HomeFolders::kFavoriteAddUri),
+                       actionId, nullptr, subMenu, enable);
+        }
+        if (HomeFolders::Fileable(title)) {
+            createJson(inst, array,
+                       mono_string_new(Root_Domain, "MENU_ID_ANIKETOS_FOLDER_ADD"),
+                       mono_string_new(Root_Domain,
+                                       toolbox_i18n::tr("folders.menu_add")),
+                       mono_string_new(Root_Domain, HomeFolders::kAddUri),
+                       actionId, nullptr, subMenu, enable);
+            if (HomeFolders::InFolder(title))
+                createJson(inst, array,
+                           mono_string_new(Root_Domain,
+                                           "MENU_ID_ANIKETOS_FOLDER_REMOVE"),
+                           mono_string_new(Root_Domain,
+                                           toolbox_i18n::tr("folders.menu_remove")),
+                           mono_string_new(Root_Domain, HomeFolders::kRemoveUri),
+                           actionId, nullptr, subMenu, enable);
+        }
+    }
+
     if(!g_settings.onionhen_game_opts) {
         createJson(inst, array, id, label, actionUrl, actionId, messageId, subMenu, enable);
         return;
@@ -155,6 +228,12 @@ void createJson_hook(MonoObject* inst, MonoObject* array, MonoString* id, MonoSt
                    mono_string_new(Root_Domain,
                                    toolbox_i18n::tr("cheats.game_menu")),
                    mono_string_new(Root_Domain, "OnionHEN?Cheats_not_open"),
+                   actionId, nullptr, subMenu, enable);
+        createJson(inst, array,
+                   mono_string_new(Root_Domain, "MENU_ID_TROPHY_UNLOCK_ALL"),
+                   mono_string_new(Root_Domain,
+                                   toolbox_i18n::tr("trophy.game_menu")),
+                   mono_string_new(Root_Domain, TrophyTools::kUnlockAllUri),
                    actionId, nullptr, subMenu, enable);
         return;
     }

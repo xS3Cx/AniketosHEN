@@ -81,6 +81,8 @@ const ExactValueEntry kExactValues[] = {
      }},
     {"id_debug_jb",
      +[]() -> std::string { return bool_str(g_settings.debug_app_jb_msg); }},
+    {"id_error_reports",
+     +[]() -> std::string { return bool_str(g_settings.reports_send); }},
     {"id_app_jailbreak_enabled",
      +[]() -> std::string {
        return bool_str(g_settings.app_jailbreak_enabled);

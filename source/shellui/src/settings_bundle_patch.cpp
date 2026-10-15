@@ -78,8 +78,10 @@ static constexpr LegacySettingsProfile kLegacySettingsProfiles[] = {
 static constexpr unsigned char kLegacyOldLabel[] = {
     0xe2, 0x98, 0x85, 'D', 'e', 'b', 'u', 'g', ' ', 'S', 'e', 't', 't', 'i',
     'n', 'g', 's'};
+/* "Aniketos Tools": the replacement has to be exactly as long as
+   "Debug Settings", which the distribution's full name is not. */
 static constexpr unsigned char kLegacyNewLabel[] = {
-    0xe2, 0x98, 0x85, 'O', 'n', 'i', 'o', 'n', 'H', 'E', 'N', ' ', 'T', 'o',
+    0xe2, 0x98, 0x85, 'A', 'n', 'i', 'k', 'e', 't', 'o', 's', ' ', 'T', 'o',
     'o', 'l', 's'};
 static constexpr unsigned char kLegacyOldIcon[] = {
     'i', 'c', 'o', 'n', '_', 's', 'e', 't', 't', 'i', 'n', 'g'};
@@ -91,8 +93,8 @@ static constexpr unsigned char kHermesOldLabel[] = {
     't',  0x00, 'i', 0x00, 'n', 0x00, 'g', 0x00, 's', 0x00,
 };
 static constexpr unsigned char kHermesNewLabel[] = {
-    0x05, 0x26, 'O', 0x00, 'n', 0x00, 'i', 0x00, 'o', 0x00,
-    'n',  0x00, 'H', 0x00, 'E', 0x00, 'N', 0x00, ' ', 0x00,
+    0x05, 0x26, 'A', 0x00, 'n', 0x00, 'i', 0x00, 'k', 0x00,
+    'e',  0x00, 't', 0x00, 'o', 0x00, 's', 0x00, ' ', 0x00,
     'T',  0x00, 'o', 0x00, 'o', 0x00, 'l', 0x00, 's', 0x00,
 };
 
@@ -207,15 +209,17 @@ static int apply_equal_length_patch(const BundleView &bundle, size_t offset,
   return 1;
 }
 
-static int replace_first(const BundleView &bundle, const unsigned char *stock,
-                         const unsigned char *replacement, size_t size) {
+static int replace_all(const BundleView &bundle, const unsigned char *stock,
+                       const unsigned char *replacement, size_t size) {
+  int count = 0;
   for (size_t offset = 0; offset + size <= bundle.size; ++offset) {
     if (memcmp(bundle.data + offset, stock, size) == 0) {
       memcpy(bundle.data + offset, replacement, size);
-      return 1;
+      offset += size - 1;
+      ++count;
     }
   }
-  return 0;
+  return count;
 }
 
 static bool validate_hermes_settings(const BundleView &hbc,
@@ -230,9 +234,11 @@ static bool validate_hermes_settings(const BundleView &hbc,
 
   const uint32_t declared_length =
       read_u32le(hbc.data + kHbcFileLengthOffset);
+  /* Recognised by what it holds, not by a list of known builds: the label is
+     one equal-length run of text in the string storage, the same on every
+     firmware that has it, so a Settings bundle this distribution has never
+     seen is renamed like the known ones. */
   if (declared_length < kHbcFooterSha1Size || declared_length > hbc.size ||
-      !onion::debug_settings_route::settings_bundle_is_supported(
-          declared_length, hbc.data + kHbcSourceHashOffset) ||
       !contains(hbc, kSettingsUriPrefix, sizeof(kSettingsUriPrefix) - 1) ||
       !contains(hbc, kDebugSettingsFunction,
                 sizeof(kDebugSettingsFunction) - 1)) {
@@ -286,16 +292,13 @@ void patch_settings_bundle(unsigned char *buffer, int size) {
   }
 
   const int label_count =
-      replace_first(hbc, kHermesOldLabel, kHermesNewLabel,
-                    sizeof(kHermesOldLabel));
+      replace_all(hbc, kHermesOldLabel, kHermesNewLabel,
+                  sizeof(kHermesOldLabel));
   if (label_count != 0) {
     update_hermes_footer_sha1(hbc, file_length);
   }
-#if SHELL_DEBUG == 1
-  LOG_DEBUG("settings_bundle_patch: Hermes NPXS40008 label=%d footer=%s "
-            "(stock icon id preserved)",
-            label_count, label_count != 0 ? "updated" : "unchanged");
-#else
-  (void)label_count;
-#endif
+  LOG_INFO("settings_bundle_patch: Hermes Settings bundle length=0x%zx "
+           "label=%d footer=%s",
+           file_length, label_count,
+           label_count != 0 ? "updated" : "unchanged");
 }

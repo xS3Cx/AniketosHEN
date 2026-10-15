@@ -1,6 +1,6 @@
 /* Copyright (C) 2025 OnionHEN / LightningMods
  *
- * OnionHEN logging.
+ * AniketosHEN logging.
  *
  * Sinks: klog (volatile, read live from a PC) + an optional bounded file.
  * stdout is also written when the process has one.
@@ -106,6 +106,19 @@ void onion_log_write(onion_log_level level, const char *fmt, ...)
  */
 void onion_log_emergency(const char *fmt, ...)
     __attribute__((format(printf, 1, 2)));
+
+/**
+ * Write records from a background thread instead of the caller's. For
+ * processes that log from a latency-sensitive thread (SceShellUI's render
+ * thread): on a console the sinks cost a caller milliseconds per record.
+ * Error records and onion_log_emergency() are still written synchronously.
+ * Returns false if the worker could not be started (logging stays
+ * synchronous). Off by default.
+ */
+bool onion_log_set_async(bool enabled);
+
+/** Block until every queued record has been written. No-op when synchronous. */
+void onion_log_flush(void);
 
 /** Close the file sink. */
 void onion_log_shutdown(void);

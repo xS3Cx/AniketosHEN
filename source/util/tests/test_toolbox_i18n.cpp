@@ -13,7 +13,7 @@ using namespace toolbox_i18n;
 
 static int test_default_zh(void) {
   set_lang(Lang::ZhHans);
-  TEST_ASSERT_TRUE(std::strcmp(tr("root.title"), "★OnionHEN 工具箱") == 0);
+  TEST_ASSERT_TRUE(std::strcmp(tr("root.title"), "★AniketosHEN 工具箱") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("group.pkg"), "内容安装与管理") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("group.game"), "游戏辅助") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("group.game.sub"),
@@ -25,7 +25,7 @@ static int test_default_zh(void) {
                                "风扇、外部存储与光盘许可证激活") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("group.preferences"), "操作偏好") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("startup.open_after_load"),
-                               "OnionHEN 加载后自动打开") == 0);
+                               "AniketosHEN 加载后自动打开") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("startup.home_menu"), "主菜单") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("log.level"), "日志输出等级") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("log.info"), "信息（推荐）") == 0);
@@ -43,9 +43,8 @@ static int test_default_zh(void) {
                   "远程游玩配对已中止。") == 0);
   TEST_ASSERT_TRUE(
       std::strcmp(onion_notify_tr("notify.crash.main"),
-                  "OnionHEN 已崩溃……\n\n请将 /data/OnionHEN/"
-                  "OnionHEN_crash.log 附加到 GitHub Issue：https://github.com/"
-                  "aydencharles/onionHEN/issues") == 0);
+                  "AniketosHEN 已崩溃……\n\n请将 /data/AniketosHEN/"
+                  "AniketosHEN_crash.log 附加到 GitHub Issue：%s") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("overlay.pos.top"), "顶部贴边") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("overlay.align.center"), "居中") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("cheats.enable_fmt"),
@@ -56,9 +55,9 @@ static int test_default_zh(void) {
                   "%s 与 %s 冲突（%s）于 0x%s") == 0);
   TEST_ASSERT_TRUE(
       std::strcmp(onion_notify_tr("notify.boot.conflict"),
-                  "OnionHEN 已拒绝启动：%s 正在运行") == 0);
+                  "AniketosHEN 已拒绝启动：%s 正在运行") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("cheats.game_menu"),
-                               "★ OnionHEN 金手指") == 0);
+                               "★ AniketosHEN 金手指") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("cheats.repo.download"),
                                "下载金手指合集") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("cheats.repo.download.desc"),
@@ -66,15 +65,13 @@ static int test_default_zh(void) {
   TEST_ASSERT_TRUE(std::strcmp(tr("cheats.repo.mirror.auto"), "自动") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("pkg.msg.options"),
                                "PKG 安装器选项") == 0);
-  TEST_ASSERT_TRUE(std::strcmp(tr("about.donors"), "★ 捐赠者 ★") == 0);
-  TEST_ASSERT_TRUE(std::strcmp(tr("about.wechat"),
-                               "- 微信｜polichan01") == 0);
+  TEST_ASSERT_TRUE(std::strcmp(tr("about.find_me"), "在这里找到我") == 0);
   return 0;
 }
 
 static int test_en(void) {
   set_lang(Lang::En);
-  TEST_ASSERT_TRUE(std::strcmp(tr("root.title"), "★OnionHEN Toolbox") == 0);
+  TEST_ASSERT_TRUE(std::strcmp(tr("root.title"), "★AniketosHEN Toolbox") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("group.pkg"), "Content Install & Management") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("group.game"), "Game Tools") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("group.game.sub"),
@@ -88,7 +85,7 @@ static int test_en(void) {
                                "activation") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("group.preferences"), "Preferences") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("startup.open_after_load"),
-                               "Automatically open after OnionHEN loads") == 0);
+                               "Automatically open after AniketosHEN loads") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("startup.home_menu"), "Home Menu") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("log.level"), "Log output level") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("log.info"),
@@ -105,9 +102,8 @@ static int test_en(void) {
                   "Remote Play pairing cancelled.") == 0);
   TEST_ASSERT_TRUE(
       std::strcmp(onion_notify_tr("notify.crash.main"),
-                  "OnionHEN has crashed ...\n\nPlease attach /data/OnionHEN/"
-                  "OnionHEN_crash.log to a GitHub issue: https://github.com/"
-                  "aydencharles/onionHEN/issues") == 0);
+                  "AniketosHEN has crashed ...\n\nPlease attach /data/AniketosHEN/"
+                  "AniketosHEN_crash.log to a GitHub issue: %s") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("cheats.enable_fmt"),
                                "Enable/disable %s for %s") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("cheats.group.unnamed"), "Source") == 0);
@@ -116,7 +112,7 @@ static int test_en(void) {
                   "%s conflicts with %s (%s) at 0x%s") == 0);
   TEST_ASSERT_TRUE(
       std::strcmp(onion_notify_tr("notify.boot.conflict"),
-                  "OnionHEN refused to start: %s is already running") == 0);
+                  "AniketosHEN refused to start: %s is already running") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("payload.start_stop_fmt"),
                                "Start/stop %s (path: %s) (%s)") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("debug.np_env.sub"),
@@ -125,35 +121,35 @@ static int test_en(void) {
   TEST_ASSERT_TRUE(std::strcmp(tr("rest.delay"),
                                "Delay toolbox activation (seconds)") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("cheats.game_menu"),
-                               "★ OnionHEN Cheats") == 0);
+                               "★ AniketosHEN Cheats") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("cheats.repo.download"),
                                "Download cheat collection") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("cheats.repo.download.desc"),
                                "Thanks to TeeKay87 (Official Cheats Repo) & "
                                "PS5_Xiexiyu (Chinese Mirror Repo).") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("pkg.msg.installing"),
-                               "OnionHEN is installing the selected PKG") == 0);
+                               "AniketosHEN is installing the selected PKG") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("pkg.msg.select_all"), "Select all") == 0);
-  TEST_ASSERT_TRUE(std::strcmp(tr("about.donors"), "★ Donors ★") == 0);
-  TEST_ASSERT_TRUE(std::strcmp(tr("about.wechat"),
-                               "- WeChat | polichan01") == 0);
+  TEST_ASSERT_TRUE(std::strcmp(tr("about.find_me"), "Find me on") == 0);
+  /* The donation page is gone; its keys must not linger in the catalog. */
+  TEST_ASSERT_TRUE(std::strcmp(tr("about.donate"), "about.donate") == 0);
   return 0;
 }
 
 static int test_ar(void) {
   set_lang(Lang::Ar);
-  TEST_ASSERT_TRUE(std::strcmp(tr("root.title"), "★صندوق أدوات OnionHEN") == 0);
+  TEST_ASSERT_TRUE(std::strcmp(tr("root.title"), "★صندوق أدوات AniketosHEN") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("lang.ar"), "العربية") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("cheats.enable_fmt"),
                                "تفعيل/تعطيل %s لـ %s") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("cheats.game_menu"),
-                               "★ غش OnionHEN") == 0);
+                               "★ غش AniketosHEN") == 0);
   return 0;
 }
 
 static int test_zh_hant(void) {
   set_lang(Lang::ZhHant);
-  TEST_ASSERT_TRUE(std::strcmp(tr("root.title"), "★OnionHEN 工具箱") == 0);
+  TEST_ASSERT_TRUE(std::strcmp(tr("root.title"), "★AniketosHEN 工具箱") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("cheats.link"), "金手指") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("startup.home_menu"), "主畫面") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("cheats.enable_fmt"),
@@ -163,7 +159,7 @@ static int test_zh_hant(void) {
 
 static int test_ja(void) {
   set_lang(Lang::Ja);
-  TEST_ASSERT_TRUE(std::strcmp(tr("root.title"), "★OnionHEN ツールボックス") ==
+  TEST_ASSERT_TRUE(std::strcmp(tr("root.title"), "★AniketosHEN ツールボックス") ==
                    0);
   TEST_ASSERT_TRUE(std::strcmp(tr("cheats.link"), "チート") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("lang.ja"), "日本語") == 0);
@@ -174,7 +170,7 @@ static int test_ja(void) {
 
 static int test_fr(void) {
   set_lang(Lang::Fr);
-  TEST_ASSERT_TRUE(std::strcmp(tr("root.title"), "★Boîte à outils OnionHEN") ==
+  TEST_ASSERT_TRUE(std::strcmp(tr("root.title"), "★Boîte à outils AniketosHEN") ==
                    0);
   TEST_ASSERT_TRUE(std::strcmp(tr("cheats.link"), "Codes de triche") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("lang.fr"), "Français") == 0);
@@ -185,7 +181,7 @@ static int test_fr(void) {
 
 static int test_de(void) {
   set_lang(Lang::De);
-  TEST_ASSERT_TRUE(std::strcmp(tr("root.title"), "★OnionHEN-Toolbox") == 0);
+  TEST_ASSERT_TRUE(std::strcmp(tr("root.title"), "★AniketosHEN-Toolbox") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("cheats.link"), "Cheats") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("lang.de"), "Deutsch") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("cheats.enable_fmt"),
@@ -195,7 +191,7 @@ static int test_de(void) {
 
 static int test_ko(void) {
   set_lang(Lang::Ko);
-  TEST_ASSERT_TRUE(std::strcmp(tr("root.title"), "★OnionHEN 툴박스") == 0);
+  TEST_ASSERT_TRUE(std::strcmp(tr("root.title"), "★AniketosHEN 툴박스") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("cheats.link"), "치트") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("lang.ko"), "한국어") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("cheats.enable_fmt"),
@@ -206,7 +202,7 @@ static int test_ko(void) {
 static int test_es(void) {
   set_lang(Lang::Es);
   TEST_ASSERT_TRUE(
-      std::strcmp(tr("root.title"), "★Caja de herramientas OnionHEN") == 0);
+      std::strcmp(tr("root.title"), "★Caja de herramientas AniketosHEN") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("cheats.link"), "Trucos") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("lang.es"), "Español") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("cheats.enable_fmt"),
@@ -217,7 +213,7 @@ static int test_es(void) {
 static int test_pt_br(void) {
   set_lang(Lang::PtBr);
   TEST_ASSERT_TRUE(
-      std::strcmp(tr("root.title"), "★Caixa de ferramentas OnionHEN") == 0);
+      std::strcmp(tr("root.title"), "★Caixa de ferramentas AniketosHEN") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("cheats.link"), "Cheats") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("lang.pt_br"), "Português (Brasil)") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("cheats.enable_fmt"),
@@ -228,7 +224,7 @@ static int test_pt_br(void) {
 static int test_it(void) {
   set_lang(Lang::It);
   TEST_ASSERT_TRUE(
-      std::strcmp(tr("root.title"), "★Cassetta degli attrezzi OnionHEN") == 0);
+      std::strcmp(tr("root.title"), "★Cassetta degli attrezzi AniketosHEN") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("cheats.link"), "Trucchi") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("lang.it"), "Italiano") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("cheats.enable_fmt"),
@@ -238,7 +234,7 @@ static int test_it(void) {
 
 static int test_ru(void) {
   set_lang(Lang::Ru);
-  TEST_ASSERT_TRUE(std::strcmp(tr("root.title"), "★Инструменты OnionHEN") == 0);
+  TEST_ASSERT_TRUE(std::strcmp(tr("root.title"), "★Инструменты AniketosHEN") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("cheats.link"), "Читы") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("lang.ru"), "Русский") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("cheats.enable_fmt"),
@@ -248,7 +244,7 @@ static int test_ru(void) {
 
 static int test_pl(void) {
   set_lang(Lang::Pl);
-  TEST_ASSERT_TRUE(std::strcmp(tr("root.title"), "★Narzędzia OnionHEN") == 0);
+  TEST_ASSERT_TRUE(std::strcmp(tr("root.title"), "★Narzędzia AniketosHEN") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("cheats.link"), "Cheaty") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("lang.pl"), "Polski") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("cheats.enable_fmt"),
@@ -258,7 +254,7 @@ static int test_pl(void) {
 
 static int test_th(void) {
   set_lang(Lang::Th);
-  TEST_ASSERT_TRUE(std::strcmp(tr("root.title"), "★OnionHEN Toolbox") == 0);
+  TEST_ASSERT_TRUE(std::strcmp(tr("root.title"), "★AniketosHEN Toolbox") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("cheats.link"), "สูตรโกง") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("lang.th"), "ไทย") == 0);
   TEST_ASSERT_TRUE(std::strcmp(tr("cheats.enable_fmt"),

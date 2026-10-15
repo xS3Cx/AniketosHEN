@@ -2,7 +2,7 @@
  *
  * Payload ELF load helpers (PID files + elfldr socket).
  * User payloads are bare .elf files. Plugin ELFs are managed separately under
- * /data/OnionHEN/plugins by libonion_plugin_manager.
+ * /data/AniketosHEN/plugins by libonion_plugin_manager.
  */
 #pragma once
 
@@ -37,7 +37,7 @@ void onion_payload_write_pid_file(const char *pid_path, pid_t pid);
 bool onion_payload_running(const char *title_id);
 
 /**
- * Launch an existing absolute ELF path exclusively through OnionHEN's private
+ * Launch an existing absolute ELF path exclusively through AniketosHEN's private
  * 9020 elfldr. User payloads never fall back to the external 9021
  * bootstrap/recovery loader and never infer a PID from process snapshots.
  *

@@ -1,5 +1,6 @@
 /* Copyright (C) 2026 OnionHEN / LightningMods */
 
+#include <onion/distribution.h>
 #include "payload_autostart.h"
 
 #include "bootstrap_notify.h"
@@ -28,14 +29,25 @@ typedef struct PayloadList {
   size_t count;
 } PayloadList;
 
+/* Internal storage only lists this distribution's root: OnionHEN's payloads
+ * are copied there once by onion_migrate_legacy_data(), and listing both
+ * roots would auto-start every migrated payload twice. Removable drives
+ * cannot be migrated, so the OnionHEN folder names stay accepted there. */
 static const char *const kPayloadDirectories[] = {
-    "/mnt/usb0/onionhen/payloads", "/mnt/usb0/OnionHEN/payloads",
-    "/mnt/usb1/onionhen/payloads", "/mnt/usb1/OnionHEN/payloads",
-    "/mnt/usb2/onionhen/payloads", "/mnt/usb2/OnionHEN/payloads",
-    "/mnt/usb3/onionhen/payloads", "/mnt/usb3/OnionHEN/payloads",
-    "/user/data/OnionHEN/payloads",
-    "/user/data/onionhen/payloads", "/data/OnionHEN/payloads",
-    "/data/onionhen/payloads",
+    "/mnt/usb0/" ONION_DIST_DIR_NAME "/payloads",
+    "/mnt/usb1/" ONION_DIST_DIR_NAME "/payloads",
+    "/mnt/usb2/" ONION_DIST_DIR_NAME "/payloads",
+    "/mnt/usb3/" ONION_DIST_DIR_NAME "/payloads",
+    "/mnt/usb0/onionhen/payloads",
+    "/mnt/usb0/" ONION_DIST_LEGACY_DIR_NAME "/payloads",
+    "/mnt/usb1/onionhen/payloads",
+    "/mnt/usb1/" ONION_DIST_LEGACY_DIR_NAME "/payloads",
+    "/mnt/usb2/onionhen/payloads",
+    "/mnt/usb2/" ONION_DIST_LEGACY_DIR_NAME "/payloads",
+    "/mnt/usb3/onionhen/payloads",
+    "/mnt/usb3/" ONION_DIST_LEGACY_DIR_NAME "/payloads",
+    ONION_DIST_USER_DATA_ROOT "/payloads",
+    ONION_DIST_DATA_ROOT "/payloads",
 };
 
 static void payload_list_destroy(PayloadList *list) {

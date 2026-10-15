@@ -175,6 +175,12 @@ void settings_commit(bool reload_main = false, bool reload_util = false);
 void shellui_request_home_reload(void);
 /** Drain the one-shot Home reload; call only from UI thread after hooks ready. */
 void shellui_poll_home_reload(void);
+/* The presence dot (home_js) is read by Home and Control Center when they
+ * start: reload Control Center, and Home with it if asked, delay_ms after
+ * the last request, so stepping through the choices reloads once. */
+void shellui_request_presence_reload(int delay_ms, bool home_too);
+/** UI thread only. */
+void shellui_poll_presence_reload(void);
 
 /** UI-thread ticker for the cheat-download XML progress page. */
 void shellui_poll_cheat_progress(void);
@@ -366,6 +372,8 @@ extern MonoObject* Game;
 
 
 MonoObject* CreateUIColor(float r, float g, float b, float a);
+/* Boxed UIColor (a real MonoObject, safe to pin); CreateUIColor returns the unboxed payload. */
+MonoObject* CreateUIColorBoxed(float r, float g, float b, float a);
 MonoObject* CreateUIFont(int size, int style, int weight);
 MonoObject* CreateLabel(const char* name, float x, float y, const char* text, MonoObject* font, int horzAlign, int vertAlign, float r, float g, float b, float a);
 void Widget_Append_Child(MonoObject* widget, MonoObject* child);
@@ -381,6 +389,8 @@ void SettingPageStackOnPopping_Hook(MonoObject* Instance,
                                     MonoObject* incoming);
 MonoImage * getDLLimage(const char* dll_file);
 MonoString* CxmlUri_Hook(MonoObject* obj, MonoString* uri);
+extern void (*MenuListItem_SetIconImage)(MonoObject *item, MonoObject *asset);
+void MenuListItem_SetIconImage_Hook(MonoObject *item, MonoObject *asset);
 MonoObject* InvokeByDesc(MonoClass* p_Class, const char* p_MethodDesc, void* p_Instance, void* p_Args);
 MonoString* GetString(MonoString* str);
 int ItemzLaunchByUri(const char* uri);

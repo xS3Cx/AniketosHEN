@@ -231,7 +231,7 @@ void handleIPC(clientArgs *client, std::string &inputStr,
     reply(sender_app, true);
     break;
   case BREW_UNUSED_DECRYPT_DIR:
-    /* SELF directory decrypt removed from OnionHEN. */
+    /* SELF directory decrypt removed from AniketosHEN. */
     LOG_WARN("BREW_DECRYPT_DIR: unsupported (removed)");
     reply(sender_app, true);
     break;
@@ -451,6 +451,13 @@ void handleIPC(clientArgs *client, std::string &inputStr,
     reply(sender_app, false, "shutting down");
     usleep(100 * 1000);
     cmd_shutdown_onion_stack();
+    break;
+  }
+  case BREW_RESTART_SHELLUI: {
+    LOG_INFO("BREW_RESTART_SHELLUI from client");
+    reply(sender_app, false);
+    usleep(100 * 1000);
+    cmd_restart_shellui();
     break;
   }
   case BREW_FORCE_KILL_PID: {

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <onion/distribution.h>
 #include <cstdint>
 #include <string_view>
 #include <sys/types.h>
@@ -10,7 +11,7 @@
 namespace onion::daemon::sprx_plugins {
 
 inline constexpr const char *kCatalogPath =
-    "/data/OnionHEN/sprx/catalog.ini";
+    ONION_DIST_DATA_ROOT "/sprx/catalog.ini";
 
 void start();
 void reconcile();

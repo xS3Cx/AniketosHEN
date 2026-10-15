@@ -9,7 +9,7 @@ modules, IPC, runtime paths, or dependencies.
 ## Runtime
 
 ```
-OnionHEN.elf (unpacker)
+AniketosHEN.elf (unpacker)
   → bootstrapper.elf
     → onion_elfldr.elf :9020
       → util.elf → kstuff.elf → daemon.elf

@@ -1,4 +1,4 @@
-# OnionHEN shared CMake helpers.
+# AniketosHEN shared CMake helpers.
 #
 # Every module under source/ used to repeat the same prologue: language
 # standards, the PS5 SDK header paths, a clang check, the cross-compile target

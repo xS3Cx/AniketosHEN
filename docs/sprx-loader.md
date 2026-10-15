@@ -1,4 +1,4 @@
-# OnionHEN SPRX Loader
+# AniketosHEN SPRX Loader
 
 `libonion_sprx` provides a reusable, synchronous use-case for loading a
 `.sprx`/`.prx` module into an already-running PS5 process. It is intentionally

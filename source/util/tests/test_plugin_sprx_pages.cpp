@@ -81,11 +81,11 @@ static int test_sprx_list_is_flat_links(void) {
   toolbox_i18n::set_lang(toolbox_i18n::Lang::En);
   std::vector<SprxInventoryItem> sprx = {
       {.id = "overlay",
-       .path = "/data/OnionHEN/sprx/overlay.sprx",
+       .path = "/data/AniketosHEN/sprx/overlay.sprx",
        .enabled = true,
        .loaded_for_current_target = true},
       {.id = "fps.overlay",
-       .path = "/data/OnionHEN/sprx/fps.sprx",
+       .path = "/data/AniketosHEN/sprx/fps.sprx",
        .enabled = true,
        .matches_current_target = true},
   };
@@ -113,7 +113,7 @@ static int test_sprx_list_is_flat_links(void) {
 static int test_sprx_config_has_status_and_path(void) {
   toolbox_i18n::set_lang(toolbox_i18n::Lang::En);
   const SprxInventoryItem entry{.id = "overlay",
-                                .path = "/data/OnionHEN/sprx/overlay.sprx",
+                                .path = "/data/AniketosHEN/sprx/overlay.sprx",
                                 .enabled = false,
                                 .matches_current_target = true};
 
@@ -123,7 +123,7 @@ static int test_sprx_config_has_status_and_path(void) {
 
   TEST_ASSERT_TRUE(xml.find("id=\"id_external_sprx_status_overlay\"") !=
                    std::string::npos);
-  TEST_ASSERT_TRUE(xml.find("/data/OnionHEN/sprx/overlay.sprx") !=
+  TEST_ASSERT_TRUE(xml.find("/data/AniketosHEN/sprx/overlay.sprx") !=
                    std::string::npos);
   TEST_ASSERT_TRUE(xml.find("id=\"id_external_sprx_enabled_overlay\"") !=
                    std::string::npos);

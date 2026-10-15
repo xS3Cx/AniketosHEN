@@ -1,4 +1,5 @@
 /* Copyright (C) 2025 OnionHEN / LightningMods — OnPress misc (kstuff, account, credits) */
+#include <onion/distribution.h>
 #include "onpress.hpp"
 #include "account_activator.h"
 #include "progress_dialog.hpp"
@@ -14,12 +15,12 @@ OnPressResult onpress_kstuff_autoload(OnPressContext &ctx) {
 
   g_settings.kstuff_autoload = enabled;
   if (enabled) {
-    unlink("/user/data/OnionHEN/no_kstuff");
-    unlink("/data/OnionHEN/no_kstuff");
+    unlink(ONION_DIST_USER_DATA_ROOT "/no_kstuff");
+    unlink(ONION_DIST_DATA_ROOT "/no_kstuff");
     notify("notify.kstuff.next_boot_on");
   } else {
-    touch_file("/user/data/OnionHEN/no_kstuff");
-    touch_file("/data/OnionHEN/no_kstuff");
+    touch_file(ONION_DIST_USER_DATA_ROOT "/no_kstuff");
+    touch_file(ONION_DIST_DATA_ROOT "/no_kstuff");
     notify("notify.kstuff.next_boot_off");
   }
   return OnPressResult::Handled;
@@ -54,7 +55,7 @@ static OnPressResult id_download_cheats(OnPressContext &ctx) {
 
 OnPressResult onpress_delete_kstuff(OnPressContext &ctx) {
   (void)ctx;
-  unlink("/user/data/OnionHEN/kstuff.elf");
+  unlink(ONION_DIST_USER_DATA_ROOT "/kstuff.elf");
   notify("notify.kstuff.deleted");
   return OnPressResult::Handled;
 }
@@ -89,20 +90,36 @@ static OnPressResult id_onionhen_credits(OnPressContext &ctx) {
   return OnPressResult::EarlyReturn;
 }
 
-static OnPressResult id_presentation_card(OnPressContext &ctx) {
-  // Author and donator cards in the dynamic Toolbox XML are display-only.
-  ctx.dirty = false;
-  return OnPressResult::Consumed;
+/* The rows of "Find me on": show where that is, nothing to save. */
+static OnPressResult find_me(const char *where) {
+  notify("%s", where);
+  return OnPressResult::EarlyReturn;
+}
+static OnPressResult id_find_me_x(OnPressContext &) {
+  return find_me("X: x.com/Alex0_SH");
+}
+static OnPressResult id_find_me_youtube(OnPressContext &) {
+  return find_me("YouTube: AlexZero");
+}
+static OnPressResult id_find_me_discord(OnPressContext &) {
+  return find_me("Discord: alex0sh");
+}
+static OnPressResult id_find_me_telegram(OnPressContext &) {
+  return find_me("Telegram: t.me/missgoodpussy");
+}
+static OnPressResult id_find_me_tiktok(OnPressContext &) {
+  return find_me("TikTok: tiktok.com/@mealexzero");
 }
 
 static const OnPressExactEntry kRootExact[] = {
     {"id_download_cheats", id_download_cheats},
     {"id_lm_test", id_lm_test},
     {"id_onionhen_credits", id_onionhen_credits},
-    {"id_author_0xp0co", id_presentation_card},
-    {"id_donator_aglx", id_presentation_card},
-    {"id_donator_ljf", id_presentation_card},
-    {"id_donator_szx", id_presentation_card},
+    {"id_find_me_x", id_find_me_x},
+    {"id_find_me_youtube", id_find_me_youtube},
+    {"id_find_me_discord", id_find_me_discord},
+    {"id_find_me_telegram", id_find_me_telegram},
+    {"id_find_me_tiktok", id_find_me_tiktok},
 };
 
 const OnPressExactEntry *onpress_misc_root_exact(size_t *count) {

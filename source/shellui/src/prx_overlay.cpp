@@ -1,6 +1,21 @@
 /* Copyright (C) 2025 OnionHEN / LightningMods — P0 split. */
 
 
+#include "aniketos_theme/toggle_styles.hpp"
+#include "aniketos_shell/home_tabs.hpp"
+#include "aniketos_shell/home_folders.hpp"
+#include "aniketos_shell/home_particles.hpp"
+#include "aniketos_shell/home_video.hpp"
+#include "aniketos_shell/trophy_tools.hpp"
+#include "aniketos_shell/screen_rotation.hpp"
+#include "aniketos_shell/migration_notice.hpp"
+#include "aniketos_shell/home_menu.hpp"
+#include "aniketos_shell/frame_profile.hpp"
+#include "aniketos_theme/home_tiles.hpp"
+#include "aniketos_theme/shared_ui.hpp"
+#include "aniketos_theme/theme_manager.hpp"
+#include "shell_clock.hpp"
+#include "aniketos_shell/shell_manager.hpp"
 #include "hooked_funcs.hpp"
 #include "ipc.hpp"
 #include "external_symbols.hpp"
@@ -597,6 +612,48 @@ void OnRender_Hook(MonoObject* instance) {
 
   /* UI thread: one NPXS40002 reload covers display TIDs and top-nav patch. */
   shellui_poll_home_reload();
+  shellui_poll_presence_reload();
+  AniketosTheme::ToggleStyles::Tick();
+  /* Shell appearance (clock, panels, background) then the Shell Menu itself:
+     resolve its host, drain controller input, animate. All are no-ops until
+     their Install()/Initialize() has succeeded. */
+  namespace Profile = AniketosShell::Profile;
+  {
+    Profile::Scope scope(Profile::kShellClock);
+    ShellClock::Tick();
+  }
+  HomeMenu::Tick();
+  ControlCenterEntry::Tick();
+  MigrationNotice::Tick();
+  HomeTabs::Tick();
+  HomeFolders::Tick();
+  HomeVideo::Tick();
+  HomeParticles::Tick();
+  TrophyTools::Tick();
+  {
+    Profile::Scope scope(Profile::kSharedUi);
+    AniketosTheme::SharedUI::Tick();
+  }
+  {
+    Profile::Scope scope(Profile::kTheme);
+    AniketosTheme::Tick();
+  }
+  {
+    Profile::Scope scope(Profile::kShellManager);
+    AniketosShell::Tick();
+  }
+  /* Sony rewrites the tile focus settings while it renders Home. Run the tile
+     pass after the native frame, on every exit path of this hook, so ours is
+     the value the outline renderer finally consumes. */
+  struct AfterNativeFrame {
+    ~AfterNativeFrame() {
+      {
+        AniketosShell::Profile::Scope scope(AniketosShell::Profile::kHomeTiles);
+        AniketosTheme::HomeTiles::Tick();
+      }
+      AniketosShell::Profile::EndFrame();
+    }
+  } after_native_frame;
 
   static bool inited = false;
   static unsigned int idle_thread_id[kCpuCores] = {};

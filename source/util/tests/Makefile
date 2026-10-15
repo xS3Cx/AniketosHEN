@@ -1,4 +1,4 @@
-# Host unit tests for OnionHEN shared libs + util cheats (no PS5 SDK).
+# Host unit tests for AniketosHEN shared libs + util cheats (no PS5 SDK).
 # Usage (from this directory):
 #   make
 #   make test
@@ -65,11 +65,14 @@ PROD_C_SRCS := \
 	$(UTIL_ROOT)/source/cheats/cheat_engine_utils.c \
 	$(UTIL_ROOT)/source/cheats/cheat_engine_parser_shnext.c \
 	$(UTIL_ROOT)/source/cheats/cheat_flatten.c \
+	$(REPO_ROOT)/source/libonion_platform/source/boot_safety.c \
 	$(REPO_ROOT)/source/libonion_platform/source/fs.c \
 	$(REPO_ROOT)/source/libonion_platform/source/log.c \
+	$(REPO_ROOT)/source/libonion_platform/source/migrate.c \
 	$(REPO_ROOT)/source/libonion_platform/source/net.c \
 	$(REPO_ROOT)/source/libonion_platform/source/notify.c \
 	$(REPO_ROOT)/source/libonion_platform/source/notify_i18n.c \
+	$(REPO_ROOT)/source/libonion_platform/source/report.c \
 	$(REPO_ROOT)/source/libonion_ready/source/ready.c \
 	$(REPO_ROOT)/source/libonion_payload/source/payload.c \
 	$(REPO_ROOT)/source/libonion_payload/source/payload_config.c \
@@ -125,6 +128,8 @@ TEST_C_SRCS := \
 	test_platform_log.c \
 	test_platform_net.c \
 	test_platform_notify.c \
+	test_boot_safety.c \
+	test_report.c \
 	test_util_language.c \
 	test_hijack_retry.c \
 	stubs/host_stubs.c
@@ -136,6 +141,7 @@ TEST_CXX_SRCS := \
 	test_cheat_catalog.cpp \
 	test_cheat_sync.cpp \
 	test_settings.cpp \
+	test_migration.cpp \
 	test_msg_protocol.cpp \
 	test_app_jailbreak_policy.cpp \
 	test_big_app_collect_policy.cpp \
@@ -167,11 +173,14 @@ TEST_CXX_SRCS := \
 	test_main.cpp
 
 PROD_C_OBJS := $(patsubst $(UTIL_ROOT)/%.c,$(BUILD_DIR)/prod/%.o,$(filter $(UTIL_ROOT)/%,$(PROD_C_SRCS)))
+PROD_C_OBJS += $(BUILD_DIR)/prod/libonion_platform/boot_safety.o
 PROD_C_OBJS += $(BUILD_DIR)/prod/libonion_platform/fs.o
 PROD_C_OBJS += $(BUILD_DIR)/prod/libonion_platform/log.o
+PROD_C_OBJS += $(BUILD_DIR)/prod/libonion_platform/migrate.o
 PROD_C_OBJS += $(BUILD_DIR)/prod/libonion_platform/net.o
 PROD_C_OBJS += $(BUILD_DIR)/prod/libonion_platform/notify.o
 PROD_C_OBJS += $(BUILD_DIR)/prod/libonion_platform/notify_i18n.o
+PROD_C_OBJS += $(BUILD_DIR)/prod/libonion_platform/report.o
 PROD_C_OBJS += $(BUILD_DIR)/prod/libonion_ready/ready.o
 PROD_C_OBJS += $(BUILD_DIR)/prod/libonion_payload/payload.o
 PROD_C_OBJS += $(BUILD_DIR)/prod/libonion_payload/payload_config.o
@@ -377,6 +386,18 @@ $(BUILD_DIR)/prod/libonion_platform/fs.o: $(REPO_ROOT)/source/libonion_platform/
 	$(HOST_CC) $(CFLAGS) -c -o $@ $<
 
 $(BUILD_DIR)/prod/libonion_platform/log.o: $(REPO_ROOT)/source/libonion_platform/source/log.c | $(BUILD_DIR)
+	@mkdir -p $(dir $@)
+	$(HOST_CC) $(CFLAGS) -c -o $@ $<
+
+$(BUILD_DIR)/prod/libonion_platform/migrate.o: $(REPO_ROOT)/source/libonion_platform/source/migrate.c | $(BUILD_DIR)
+	@mkdir -p $(dir $@)
+	$(HOST_CC) $(CFLAGS) -c -o $@ $<
+
+$(BUILD_DIR)/prod/libonion_platform/boot_safety.o: $(REPO_ROOT)/source/libonion_platform/source/boot_safety.c | $(BUILD_DIR)
+	@mkdir -p $(dir $@)
+	$(HOST_CC) $(CFLAGS) -c -o $@ $<
+
+$(BUILD_DIR)/prod/libonion_platform/report.o: $(REPO_ROOT)/source/libonion_platform/source/report.c | $(BUILD_DIR)
 	@mkdir -p $(dir $@)
 	$(HOST_CC) $(CFLAGS) -c -o $@ $<
 

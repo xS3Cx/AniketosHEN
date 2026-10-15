@@ -118,12 +118,12 @@ These user-visible strings are **not** in the JSON catalogs on purpose:
 
 | Surface | Why |
 |---|---|
-| Settings menu label `★OnionHEN Tools` | Equal-length binary patch of `★Debug Settings`. Length is fixed. |
-| HomeUI top-nav `OnionHEN` | Brand token, same in every language. |
-| Notification watermark `[OnionHEN]` | Brand prefix in `onion_notify_format`. |
+| Settings menu label `★Aniketos Tools` | Equal-length binary patch of `★Debug Settings`. Length is fixed, so the distribution's full name does not fit. |
+| HomeUI top-nav `AniketosHEN` | Brand token, same in every language. |
+| Notification watermark `[AniketosHEN]` | Brand prefix in `onion_notify_format`. |
 | About names, handles, Ko-fi URL, project URLs | Proper nouns / addresses. |
 | Unpacker start-failure toasts | First-stage loader; no language setting and its own `notify()`. English only until it is wired to `onion_notify`. |
-| Cheat names / descriptions from cheat files | Come from the cheat JSON, not OnionHEN. |
+| Cheat names / descriptions from cheat files | Come from the cheat JSON, not AniketosHEN. |
 
 Logs (`LOG_*`) are developer-facing and stay English.
 
@@ -143,6 +143,6 @@ Checked against call sites (not just the JSON files):
   That word order is correct for current zh and en; the other locales use
   the same concatenation.
 - External plugins own their dynamic UI and service-specific translations;
-  the OnionHEN catalog contains only host-owned strings.
+  the AniketosHEN catalog contains only host-owned strings.
 
 Arabic is a complete key-for-key trial locale, not a native RTL layout.

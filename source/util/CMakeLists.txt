@@ -89,6 +89,9 @@ target_link_directories(${PROJECT_NAME} PUBLIC
 )
 target_link_options(${PROJECT_NAME} PRIVATE "-Wl,--gc-sections" "-Wl,--icf=safe")
 add_dependencies(${PROJECT_NAME} hijacker onion_settings onion_ipc onion_proc onion_platform onion_payload onion_ready onion_elfldr)
+if(TARGET onion_version)
+  add_dependencies(${PROJECT_NAME} onion_version)
+endif()
 # keystone: ShnExt ASM only
 target_link_libraries(${PROJECT_NAME} PUBLIC
     onion_ipc

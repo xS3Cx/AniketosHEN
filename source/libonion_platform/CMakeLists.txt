@@ -1,5 +1,5 @@
 ###################################################################################################
-# OnionHEN platform leaves: fs / log / net / notify
+# AniketosHEN platform leaves: fs / log / net / notify
 ###################################################################################################
 
 cmake_minimum_required(VERSION 3.20)
@@ -17,11 +17,14 @@ set_source_files_properties("${ONION_CJSON_SOURCE}" PROPERTIES
 )
 
 add_library(${PROJECT_NAME} STATIC
+  source/boot_safety.c
   source/fs.c
   source/log.c
+  source/migrate.c
   source/net.c
   source/notify.c
   source/notify_i18n.c
+  source/report.c
   "${ONION_CJSON_SOURCE}"
 )
 set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "${PROJECT_NAME}")
@@ -46,6 +49,9 @@ add_custom_command(
 )
 add_custom_target(onion_platform_i18n_catalog DEPENDS "${NOTIFY_I18N_CATALOG}")
 add_dependencies(${PROJECT_NAME} onion_platform_i18n_catalog)
+if(TARGET onion_version)
+  add_dependencies(${PROJECT_NAME} onion_version)
+endif()
 
 set(CMAKE_C_FLAGS "${ONION_PS5_TARGET_FLAGS_MARCH} -fPIC -fstack-protector-all -O2 -Wall -Wextra -Werror")
 

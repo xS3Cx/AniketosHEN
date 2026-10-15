@@ -1,6 +1,6 @@
 # util 守护进程架构
 
-`util.elf` 是 OnionHEN 的 **Utility 守护进程**：与 `daemon.elf`（critical）分离，承载网络 IO、金手指和 Toolbox 相关服务。
+`util.elf` 是 AniketosHEN 的 **Utility 守护进程**：与 `daemon.elf`（critical）分离，承载网络 IO、金手指和 Toolbox 相关服务。
 
 | 项 | 值 |
 |----|-----|
@@ -8,8 +8,8 @@
 | 源码根 | `source/util/` |
 | Unix IPC | `/system_tmp/onionhen/ipc/util_service` |
 | IPC 命令前缀 | `0x8000000`（`BREW_UTIL_*`） |
-| 日志 | `OnionHEN_log` → stdout + klog + `/data/OnionHEN/OnionHEN_util_daemon.log` |
-| 崩溃日志 | `/data/OnionHEN/OnionHEN_util_crash.log` |
+| 日志 | `OnionHEN_log` → stdout + klog + `/data/AniketosHEN/AniketosHEN_util_daemon.log` |
+| 崩溃日志 | `/data/AniketosHEN/AniketosHEN_util_crash.log` |
 
 全局架构见 [arch.md](../arch.md)。  
 金手指 **C++ 设计**见 [cheats_cpp.md](cheats_cpp.md)；格式细节见 `source/util/source/cheats/README.md`。
@@ -189,7 +189,7 @@ util handleIPC ──► param.json / sfo ──► version 字符串
   ▼
 cheat_service_export_list
   │  Browse: title/version; Runtime: title/version/process + source identity
-  │  load + parse → 写带请求 ID 的 /user/data/OnionHEN/<tid>_cheats_* 文件
+  │  load + parse → 写带请求 ID 的 /user/data/AniketosHEN/<tid>_cheats_* 文件
   ▼
 ShellUI 读列表 JSON；只有 Runtime 响应可切换
   │
@@ -262,7 +262,7 @@ cheat_engine_runtime
 #### 路径与格式
 
 ```text
-/data/OnionHEN/cheats/<TITLE_ID>_<VERSION>[_<PROCESS>][_<SOURCE_ID>].{json,shn,mc4,ShnExt}
+/data/AniketosHEN/cheats/<TITLE_ID>_<VERSION>[_<PROCESS>][_<SOURCE_ID>].{json,shn,mc4,ShnExt}
 ```
 
 `PROCESS` 与 8 位十六进制 `SOURCE_ID` 均可省略。`SOURCE_ID` 只标识物理来源。同步安装把 catalog 的 `json/`、`shn/`、`mc4/` 文件按原名拷到该目录。Repository 返回所有兼容来源，进程限定来源只匹配对应进程。
@@ -289,7 +289,7 @@ cheat_engine_runtime
 
 #### 下载 flatten
 
-在线 `DOWNLOAD_CHEATS` 走 `onion::cheats::sync`：Catalog（仓库身份）+ Mirror（github / cnb.cool）生成 archive URL，使用 HTTPS 下载 ZIP 到临时目录，miniz 只提取 catalog 声明的 `flattenRoots`（HEN 集合为 `cheats/`），再把 `json/`、`shn/`、`mc4/` 顶层文件按原名拷到 `/data/OnionHEN/cheats/`，完成后清理临时文件。`[cheats] mirror=auto|github|cnb`；`auto` 时简体中文走 cnb.cool，其它地区走 GitHub。进度经 `CHEAT_SYNC_STATUS.progress` 回传 Toolbox。
+在线 `DOWNLOAD_CHEATS` 走 `onion::cheats::sync`：Catalog（仓库身份）+ Mirror（github / cnb.cool）生成 archive URL，使用 HTTPS 下载 ZIP 到临时目录，miniz 只提取 catalog 声明的 `flattenRoots`（HEN 集合为 `cheats/`），再把 `json/`、`shn/`、`mc4/` 顶层文件按原名拷到 `/data/AniketosHEN/cheats/`，完成后清理临时文件。`[cheats] mirror=auto|github|cnb`；`auto` 时简体中文走 cnb.cool，其它地区走 GitHub。进度经 `CHEAT_SYNC_STATUS.progress` 回传 Toolbox。
 
 ---
 
@@ -311,12 +311,12 @@ cheat_engine_runtime
 
 | 路径 | 用途 |
 |------|------|
-| `/data/OnionHEN/config.ini` | toolbox 与守护进程配置 |
-| `/data/OnionHEN/cheats/` | 金手指 flat 文件 |
-| `/data/OnionHEN/cheats_staging/` | 下载解压临时区 |
-| `/user/data/OnionHEN/<tid>_cheats` | ShellUI 消费的列表 JSON |
-| `/data/OnionHEN/OnionHEN_util_daemon.log` | 运行日志 |
-| `/data/OnionHEN/kstuff.elf` | 下载的 kstuff |
+| `/data/AniketosHEN/config.ini` | toolbox 与守护进程配置 |
+| `/data/AniketosHEN/cheats/` | 金手指 flat 文件 |
+| `/data/AniketosHEN/cheats_staging/` | 下载解压临时区 |
+| `/user/data/AniketosHEN/<tid>_cheats` | ShellUI 消费的列表 JSON |
+| `/data/AniketosHEN/AniketosHEN_util_daemon.log` | 运行日志 |
+| `/data/AniketosHEN/kstuff.elf` | 下载的 kstuff |
 | `ONION_FLAG_UTIL_BOOTED` | util 是否已完成过冷启动（typed ready flag） |
 
 `LoadSettings` 读取统一的 `config.ini` schema（`onion::Settings`），缺失键使用默认值。

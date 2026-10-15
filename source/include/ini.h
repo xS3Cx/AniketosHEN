@@ -23,7 +23,8 @@ extern "C" {
 #endif
 
 #define MAX_LINE 256
-#define MAX_PAIRS 100
+/* config.ini holds ~160 keys once the [shell_menu] section is present. */
+#define MAX_PAIRS 256
 
 typedef struct {
     char key[MAX_LINE];

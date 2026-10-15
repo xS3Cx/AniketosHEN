@@ -9,7 +9,7 @@
  * void*, int vs int32_t), which is how three subtly different get_ip_address
  * implementations grew. This header is the single source of truth.
  *
- * Declarations only — no OnionHEN behaviour lives here. For reading the
+ * Declarations only — no AniketosHEN behaviour lives here. For reading the
  * console IP use onion_net_get_ip_address() from <onion/net.h>.
  */
 

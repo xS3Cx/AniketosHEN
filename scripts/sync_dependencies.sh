@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sync / build external dependencies for OnionHEN.
+# Sync / build external dependencies for AniketosHEN.
 #
 # Embedded payload input: kstuff.elf
 # Also built from source: onion_elfldr.elf (private 9020 runtime loader)
@@ -17,7 +17,13 @@ STUB_MISSING=0
 INIT_SUBMODULES=0
 FORCE_DOWNLOAD=0
 
-KSTUFF_URL="https://github.com/EchoStretch/kstuff-lite/releases/download/v1.10/kstuff.elf"
+# kstuff-lite v1.11 supports firmware 1.00-13.60 (PS4 fpkg up to 11.60, per
+# its release notes). Keep ONION_KSTUFF_MAX_FIRMWARE in
+# source/bootstrapper/source/launch_pipeline.c in step with this version.
+KSTUFF_VERSION="v1.11"
+KSTUFF_URL="https://github.com/EchoStretch/kstuff-lite/releases/download/${KSTUFF_VERSION}/kstuff.elf"
+# Pinned: an upstream file that changed after review is refused, not embedded.
+KSTUFF_SHA256="ab9a6cb4d3b1daf139d4d646e402b1cf569071acd64599c936d7a3a6164dc779"
 KSTUFF_SOURCE_DIR="${TP}/kstuff-lite"
 # Real release blob is hundreds of KB+; stubs are tiny markers.
 KSTUFF_MIN_BYTES=65536
@@ -29,16 +35,16 @@ die()  { printf '\033[1;31m[error]\033[0m %s\n' "$*" >&2; exit 1; }
 
 usage() {
   cat <<EOF
-Sync OnionHEN external dependencies from open-source upstreams.
+Sync AniketosHEN external dependencies from open-source upstreams.
 
 Submodules (under third_party/):
   kstuff-lite      https://github.com/EchoStretch/kstuff-lite
 Runtime-only external dependency:
   elfldr @ 9021    https://github.com/ps5-payload-dev/elfldr
-                  Required only for initial bootstrap; OnionHEN starts
+                  Required only for initial bootstrap; AniketosHEN starts
                   onion_elfldr.elf @ 9020 for runtime launches.
 
-Removed from OnionHEN (not synced):
+Removed from AniketosHEN (not synced):
   external elfldr.elf (9021 service), ps5debug, ps5-app-dumper, Byepervisor/hen.bin
 
 Options:
@@ -106,7 +112,7 @@ download_verified() {
 stub() {
   local dest="$1" name="$2"
   mkdir -p "$(dirname "${dest}")"
-  printf 'OnionHEN-STUB:%s\0' "${name}" > "${dest}"
+  printf 'AniketosHEN-STUB:%s\0' "${name}" > "${dest}"
   warn "STUB ${dest} (not for real hardware)"
 }
 
@@ -128,14 +134,16 @@ kstuff_looks_cached() {
   [[ -f "${path}" ]] || return 1
   local sz
   sz="$(wc -c < "${path}" | tr -d ' ')"
-  # Reject empty / OnionHEN-STUB placeholders from --stub-missing.
+  # Reject empty / AniketosHEN-STUB placeholders from --stub-missing (and the
+  # OnionHEN-STUB ones an older checkout may have left in the cache).
   if [[ "${sz}" -lt "${KSTUFF_MIN_BYTES}" ]]; then
     return 1
   fi
-  if head -c 16 "${path}" 2>/dev/null | grep -q 'OnionHEN-STUB'; then
+  if head -c 32 "${path}" 2>/dev/null | grep -Eq '(AniketosHEN|OnionHEN)-STUB'; then
     return 1
   fi
-  return 0
+  # An older or unreviewed blob in the cache is replaced, not reused.
+  [[ "$(file_sha256 "${path}")" == "${KSTUFF_SHA256}" ]]
 }
 
 sync_kstuff() {
@@ -149,9 +157,9 @@ sync_kstuff() {
   fi
 
   if [[ "${FROM_SOURCE}" -eq 0 ]]; then
-    log "kstuff: download kstuff-lite release"
-    if download "${KSTUFF_URL}" "${dest}"; then
-      ok "kstuff.elf (kstuff-lite v1.10)"
+    log "kstuff: download kstuff-lite ${KSTUFF_VERSION}"
+    if download_verified "${KSTUFF_URL}" "${dest}" "${KSTUFF_SHA256}"; then
+      ok "kstuff.elf (kstuff-lite ${KSTUFF_VERSION}, sha256 verified)"
       return 0
     fi
     warn "download failed, trying submodule build"
@@ -181,7 +189,7 @@ sync_kstuff() {
 }
 
 main() {
-  log "OnionHEN dependency sync"
+  log "AniketosHEN dependency sync"
   echo "  third_party = ${TP}"
   echo "  cache       = ${CACHE}"
 

@@ -99,16 +99,16 @@ static int test_config_invalid(void) {
 }
 
 static int test_payload_order_and_aliases(void) {
-  const char *primary = "/data/OnionHEN/payloads/test.elf";
-  const char *sandbox = "/user/data/OnionHEN/payloads/test.elf";
-  const char *usb = "/mnt/usb0/OnionHEN/payloads/test.elf";
+  const char *primary = "/data/AniketosHEN/payloads/test.elf";
+  const char *sandbox = "/user/data/AniketosHEN/payloads/test.elf";
+  const char *usb = "/mnt/usb0/AniketosHEN/payloads/test.elf";
   char a[ONION_PAYLOAD_IDENTITY_SIZE], b[ONION_PAYLOAD_IDENTITY_SIZE];
   TEST_ASSERT_TRUE(onion_payload_identity_from_path(primary, a, sizeof(a)));
   TEST_ASSERT_TRUE(onion_payload_identity_from_path(sandbox, b, sizeof(b)));
   TEST_ASSERT_STREQ(a, b);
   TEST_ASSERT_TRUE(onion_payload_identity_from_path(usb, a, sizeof(a)));
   TEST_ASSERT_TRUE(onion_payload_identity_from_path(
-      "/usb0/OnionHEN/payloads/test.elf", b, sizeof(b)));
+      "/usb0/AniketosHEN/payloads/test.elf", b, sizeof(b)));
   TEST_ASSERT_STREQ(a, b);
   TEST_ASSERT_TRUE(onion_payload_compare(100, usb, 0, primary) < 0);
   TEST_ASSERT_TRUE(onion_payload_compare(0, usb, 100, primary) > 0);

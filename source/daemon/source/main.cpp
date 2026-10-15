@@ -15,6 +15,7 @@ along with this program; see the file COPYING. If not, see
 <http://www.gnu.org/licenses/>.  */
 
 // Include files
+#include <onion/distribution.h>
 #include <cstdint>
 #include <onion/ucred.h>
 #include <onion/net.h>
@@ -242,9 +243,9 @@ void sig_handler(int signo) {
         onion_log_emergency("signal handler disabled, ignoring signal %d", signo);
         return;
     }
-    onion_log_emergency("signal %d received; main OnionHEN has crashed", signo);
+    onion_log_emergency("signal %d received; main " ONION_DIST_NAME " has crashed", signo);
     onion_print_backtrace(onion_log_emergency);
-    onion_notify(true, "notify.crash.main");
+    onion_notify(true, "notify.crash.main", ONION_DIST_ISSUES_URL);
     _exit(128 + signo);
 }
 
@@ -254,8 +255,8 @@ int main() {
   /* Raw elfldr uploads default to "payload.elf"; publish our stable name. */
   (void)syscall(SYS_thr_set_name, -1, "onion_daemon.elf");
 
-  onion_log_configure("OnionHEN", "/data/OnionHEN/OnionHEN.log");
-  onion_log_configure_crash("/data/OnionHEN/OnionHEN_crash.log");
+  onion_log_configure(ONION_DIST_NAME, ONION_DIST_LOG_PATH);
+  onion_log_configure_crash(ONION_DIST_CRASH_LOG_PATH);
   /* Real linked kernel export (not a dlsym function-pointer variable). */
   onion_notify_set_send(reinterpret_cast<onion_notify_send_fn>(
       sceKernelSendNotificationRequest));
@@ -285,7 +286,7 @@ int main() {
   payload_args_t* args = payload_get_args();
   kernel_base = args->kdata_base_addr;
 
-  LOG_INFO("=========== starting OnionHEN (0x%X) ... ===========", fw_ver);
+  LOG_INFO("=========== starting " ONION_DIST_NAME " (0x%X) ... ===========", fw_ver);
   (void)sceKernelMprotect(&buz[0], 100, 0x7); // probe mprotect / kstuff state
   const bool toolbox_only = (fw_ver >= 0x10000);
   is_800 = (fw_ver >= 0x800);
@@ -332,7 +333,7 @@ int main() {
       debug_settings_route.toolbox_uri(
           onion::debug_settings_route::UriKind::Simple));
   onion_notify_try_rich(welcome_toast_json.c_str(), "notify.boot.welcome");
-  LOG_INFO("StartUp thread created!! - welcome to OnionHEN");
+  LOG_INFO("StartUp thread created!! - welcome to " ONION_DIST_NAME);
 
   onion::daemon::apply_startup_destination(boot_settings);
 

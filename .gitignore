@@ -27,6 +27,7 @@ source/.cache/
 *.a.tmp
 *.tmp*
 hen.bin
+source/util/tests/core
 source/libhijacker/libhijacker.a
 tools/stubber/main.exe
 tools/stubber/out/

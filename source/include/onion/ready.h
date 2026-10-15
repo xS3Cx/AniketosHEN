@@ -1,11 +1,11 @@
 /* Copyright (C) 2025 OnionHEN / LightningMods
 
-Cross-process readiness protocol for OnionHEN services.
+Cross-process readiness protocol for AniketosHEN services.
 
 Services publish a named marker under /system_tmp/onionhen/ready/<name>.
 Consumers wait with timeout instead of fixed sleep() races.
 
-All runtime markers live under the shared OnionHEN system_tmp namespace.
+All runtime markers live under the shared AniketosHEN system_tmp namespace.
 */
 
 #pragma once

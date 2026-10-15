@@ -1,4 +1,4 @@
-# OnionHEN configuration
+# AniketosHEN configuration
 #
 # This file uses semantic schema version 1.
 # Boolean fields accept true or false.
@@ -16,12 +16,12 @@ schema_version=1
 language=system
 
 [startup]
-# open_after_load chooses which page opens after OnionHEN finishes loading.
+# open_after_load chooses which page opens after AniketosHEN finishes loading.
 # Available values: none, home_menu
 open_after_load=none
 
 [logging]
-# level controls how much OnionHEN records to its log files.
+# level controls how much AniketosHEN records to its log files.
 # Available values: off, error, warn, info, debug, trace
 # Raise to debug when reproducing an issue for a bug report.
 # Release builds compile out trace, so trace behaves as debug.
@@ -33,9 +33,9 @@ level=info
 show_title_ids=false
 
 [game_menu]
-# show_onionhen_options adds OnionHEN entries to the game options menu.
+# show_aniketoshen_options adds AniketosHEN entries to the game options menu.
 # Available values: true, false
-show_onionhen_options=true
+show_aniketoshen_options=true
 
 [rest_mode]
 # resume_reinject_delay_seconds waits after trophy SPRX are ready,
@@ -51,10 +51,10 @@ mirror=auto
 
 [app_jailbreak]
 # enabled controls the App lifecycle and sandbox event listeners. When false,
-# OnionHEN does not register either listener.
+# AniketosHEN does not register either listener.
 # Available values: true, false
 enabled=true
-# debug_notifications shows a notification when OnionHEN jailbreaks an app.
+# debug_notifications shows a notification when AniketosHEN jailbreaks an app.
 # Available values: true, false
 debug_notifications=false
 # exact_title_ids is a comma-separated list of exact 9-character Title IDs.
@@ -117,11 +117,11 @@ order=fps,cpu,gpu,memory,ip,fan
 # cheats_menu controls the shortcut that opens the cheats menu.
 # Available values: off, r3_l3, l2_triangle, long_options, long_share, share
 cheats_menu=off
-# toolbox controls the shortcut that opens the OnionHEN Toolbox.
+# toolbox controls the shortcut that opens the AniketosHEN Toolbox.
 # Available values: off, l2_r3, long_share, share
 toolbox=off
 
 [kstuff]
-# autoload loads kstuff when OnionHEN starts.
+# autoload loads kstuff when AniketosHEN starts.
 # Available values: true, false
 autoload=true

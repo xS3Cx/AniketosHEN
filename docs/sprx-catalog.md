@@ -6,19 +6,19 @@ without introducing another parser or a nested JSON schema.
 
 ```ini
 [plugin.base-runtime]
-path=/data/OnionHEN/sprx/base-runtime.sprx
+path=/data/AniketosHEN/sprx/base-runtime.sprx
 exact_title_ids=CUSA12345,CUSA67890
 priority=10
 
 [plugin.overlay]
-path=/data/OnionHEN/sprx/overlay.sprx
+path=/data/AniketosHEN/sprx/overlay.sprx
 exact_title_ids=CUSA12345
 auto_start=true
 priority=100
 dependencies=base-runtime
 
 [plugin.native]
-path=/data/OnionHEN/sprx/native.prx
+path=/data/AniketosHEN/sprx/native.prx
 title_id_prefixes=PPSA
 auto_start=true
 ```

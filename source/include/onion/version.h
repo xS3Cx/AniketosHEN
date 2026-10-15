@@ -6,5 +6,8 @@
 #endif
 
 #ifndef ONIONHEN_AUTHOR
-#define ONIONHEN_AUTHOR "麒麟/0xp0co & kvnhrt"
+/* Maintainer of this distribution, shown as "made by" in the welcome toast.
+ * The authors of the code it is built from are credited on the About page
+ * (Lineage) and in NOTICE.md. */
+#define ONIONHEN_AUTHOR "AlexZero"
 #endif

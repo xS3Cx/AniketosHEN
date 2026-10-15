@@ -3,6 +3,8 @@
 
 #include <onion/settings.hpp>
 
+#include <ini.h>
+
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -45,7 +47,7 @@ static int test_defaults_and_serialize_keys(void) {
   TEST_ASSERT_TRUE(text.find("[app_jailbreak]\n# enabled controls the App "
                                  "lifecycle and sandbox event listeners. "
                                  "When false,\n"
-                                 "# OnionHEN does not register either listener.\n"
+                                 "# AniketosHEN does not register either listener.\n"
                                  "# Available values: true, false\n"
                                  "enabled=true\n") != std::string::npos);
   TEST_ASSERT_TRUE(text.find("edge=top") != std::string::npos);
@@ -677,6 +679,71 @@ static int test_overlay_font_and_order(void) {
   return 0;
 }
 
+/* [shell_menu] is generated from shell_menu_settings.def: every kind of field
+ * must survive a save/load cycle, and the whole schema must fit the parser. */
+static int test_shell_menu_section_roundtrip(void) {
+  std::string path = temp_ini_path();
+  TEST_ASSERT_TRUE(!path.empty());
+
+  onion::Settings in{};
+  TEST_ASSERT_TRUE(in.home_osd_enabled);     /* home-screen OSD is on */
+  TEST_ASSERT_EQ_INT(5, in.vsh_menu_theme);  /* Apparition skin */
+  TEST_ASSERT_TRUE(in.vsh_global_theme_enabled);
+  in.home_osd_enabled = false;
+  in.vsh_menu_theme = 3;
+  in.vsh_menu_x = 512.25f;
+  in.vsh_menu_y = -4.5f;
+  in.shell_clock_enabled = !in.shell_clock_enabled;
+  in.shell_background_image_path = "/user/data/AniketosHEN/ShellUI/background/a b.png";
+  in.kstuff_autoload = false; /* a key that precedes the section */
+
+  const std::string text = onion::settings_serialize(in);
+  TEST_ASSERT_TRUE(text.find("\n[shell_menu]\n") != std::string::npos);
+  TEST_ASSERT_TRUE(text.find("\nhome_osd_enabled=false\n") != std::string::npos);
+  TEST_ASSERT_TRUE(text.find("\nvsh_menu_x=512.25\n") != std::string::npos);
+  size_t keys = 0;
+  for (size_t at = 0; (at = text.find("\n", at)) != std::string::npos; ++at) {
+    const size_t eol = text.find("\n", at + 1);
+    const std::string line = text.substr(at + 1, eol - at - 1);
+    if (!line.empty() && line[0] != '#' && line[0] != '[' &&
+        line.find('=') != std::string::npos)
+      ++keys;
+  }
+  TEST_ASSERT_TRUE(keys > 100);
+  TEST_ASSERT_TRUE(keys < MAX_PAIRS); /* otherwise the last keys are dropped */
+
+  TEST_ASSERT_TRUE(onion::settings_save_file(path.c_str(), in));
+  onion::Settings out{};
+  TEST_ASSERT_TRUE(onion::settings_load_file(path.c_str(), &out));
+  TEST_ASSERT_TRUE(!out.home_osd_enabled);
+  TEST_ASSERT_EQ_INT(3, out.vsh_menu_theme);
+  TEST_ASSERT_TRUE(out.vsh_menu_x == 512.25f);
+  TEST_ASSERT_TRUE(out.vsh_menu_y == -4.5f);
+  TEST_ASSERT_TRUE(out.shell_clock_enabled == in.shell_clock_enabled);
+  TEST_ASSERT_STREQ(in.shell_background_image_path.c_str(),
+                    out.shell_background_image_path.c_str());
+  TEST_ASSERT_TRUE(!out.kstuff_autoload);
+  /* The last field of the table proves nothing was cut off. */
+  TEST_ASSERT_TRUE(out.home_osd_fan == in.home_osd_fan);
+
+  /* Garbage values keep the defaults instead of poisoning the menu. */
+  FILE *file = std::fopen(path.c_str(), "wb");
+  TEST_ASSERT_TRUE(file != nullptr);
+  std::fputs("[meta]\nschema_version=1\n[shell_menu]\nvsh_menu_theme=abc\n"
+             "vsh_menu_x=nan\nvsh_menu_y=1e30\nhome_osd_enabled=maybe\n",
+             file);
+  std::fclose(file);
+  const onion::Settings defaults{};
+  TEST_ASSERT_TRUE(onion::settings_load_file(path.c_str(), &out));
+  TEST_ASSERT_EQ_INT(defaults.vsh_menu_theme, out.vsh_menu_theme);
+  TEST_ASSERT_TRUE(out.vsh_menu_x == defaults.vsh_menu_x);
+  TEST_ASSERT_TRUE(out.vsh_menu_y == defaults.vsh_menu_y);
+  TEST_ASSERT_TRUE(out.home_osd_enabled == defaults.home_osd_enabled);
+
+  unlink(path.c_str());
+  return 0;
+}
+
 extern "C" int test_settings_suite(void) {
   int failures = 0;
   failures += onion_test_run("settings_defaults_serialize", test_defaults_and_serialize_keys);
@@ -708,5 +775,7 @@ extern "C" int test_settings_suite(void) {
                              test_v0_0_10_config_keeps_kstuff_autoload);
   failures += onion_test_run("settings_clamp_fan_threshold",
                              test_clamp_fan_threshold);
+  failures += onion_test_run("settings_shell_menu_section",
+                             test_shell_menu_section_roundtrip);
   return failures;
 }

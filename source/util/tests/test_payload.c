@@ -51,7 +51,7 @@ static int test_elf_key_from_name(void) {
   TEST_ASSERT_TRUE(onion_payload_elf_key_from_name("foo.elf", key, sizeof(key)));
   TEST_ASSERT_STREQ("foo", key);
   TEST_ASSERT_TRUE(
-      onion_payload_elf_key_from_name("/data/OnionHEN/payloads/bar.elf", key,
+      onion_payload_elf_key_from_name("/data/AniketosHEN/payloads/bar.elf", key,
                                      sizeof(key)));
   TEST_ASSERT_STREQ("bar", key);
   TEST_ASSERT_TRUE(onion_payload_elf_key_from_name("noext", key, sizeof(key)));
@@ -68,18 +68,18 @@ static int test_path_identity(void) {
   char second[ONION_PAYLOAD_IDENTITY_SIZE];
 
   TEST_ASSERT_TRUE(onion_payload_identity_from_path(
-      "/data/OnionHEN/payloads/tool.elf", first, sizeof(first)));
+      "/data/AniketosHEN/payloads/tool.elf", first, sizeof(first)));
   TEST_ASSERT_TRUE(onion_payload_identity_from_path(
-      "/data/OnionHEN/payloads/tool.elf", repeated, sizeof(repeated)));
+      "/data/AniketosHEN/payloads/tool.elf", repeated, sizeof(repeated)));
   TEST_ASSERT_TRUE(onion_payload_identity_from_path(
-      "/mnt/usb0/OnionHEN/payloads/tool.elf", second, sizeof(second)));
+      "/mnt/usb0/AniketosHEN/payloads/tool.elf", second, sizeof(second)));
   TEST_ASSERT_STREQ(first, repeated);
   TEST_ASSERT_TRUE(strcmp(first, second) != 0);
   TEST_ASSERT_EQ_INT(17, (int)strlen(first));
   TEST_ASSERT_TRUE(first[0] == 'p');
   TEST_ASSERT_TRUE(!onion_payload_identity_from_path("", first, sizeof(first)));
   TEST_ASSERT_TRUE(!onion_payload_identity_from_path(
-      "/data/OnionHEN/payloads/tool.elf", first, sizeof(first) - 1));
+      "/data/AniketosHEN/payloads/tool.elf", first, sizeof(first) - 1));
   return 0;
 }
 
@@ -133,7 +133,7 @@ static int test_read_file(void) {
 }
 
 static int test_strict_private_loader_policy(void) {
-  const char *path = "/data/OnionHEN/payloads/strict-test.elf";
+  const char *path = "/data/AniketosHEN/payloads/strict-test.elf";
 
   onion_test_elfldr_reset();
   TEST_ASSERT_EQ_INT(-1, (int)onion_payload_launch_elfldr(

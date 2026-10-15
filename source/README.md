@@ -1,6 +1,6 @@
-# OnionHEN — source tree
+# AniketosHEN — source tree
 
-This directory contains the **OnionHEN** CMake targets and first-party source,
+This directory contains the **AniketosHEN** CMake targets and first-party source,
 licensed under **GPLv3**. See the [root README](../README.md) for supported
 features, usage, configuration, and credits.
 

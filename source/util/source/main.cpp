@@ -14,10 +14,12 @@ You should have received a copy of the GNU General Public License
 along with this program; see the file COPYING. If not, see
 <http://www.gnu.org/licenses/>.  */
 
+#include <onion/distribution.h>
 #include "ipc.hpp"
 #include "cheats/cheat_service.hpp"
 #include "util_language.h"
 #include "util_toolbox.h"
+#include "report_sender.hpp"
 #include <onion/settings.hpp>
 #include <onion/log_settings.hpp>
 #include <onion/platform.h>
@@ -105,7 +107,7 @@ int main(void) {
     sceNetCtlInit();
     sceUserServiceInitialize(NULL);
     onion_log_configure(
-        "OnionHEN utils", "/data/OnionHEN/OnionHEN_util_daemon.log");
+        ONION_DIST_NAME " utils", ONION_DIST_UTIL_LOG_PATH);
     /* Real linked kernel export (not a dlsym function-pointer variable). */
     onion_notify_set_send(reinterpret_cast<onion_notify_send_fn>(
         sceKernelSendNotificationRequest));
@@ -128,9 +130,11 @@ int main(void) {
     /* pt_* / code-cave require PTRACE_AUTHID (not DEBUG_AUTHID). */
     set_ucred_to_ptrace();
 
-    unlink("/data/OnionHEN/OnionHEN_util_crash.log");
+    /* Crash traces from the previous session become reports first. */
+    report_collect_previous_session();
+    unlink(ONION_DIST_UTIL_CRASH_LOG_PATH);
 
-    LOG_INFO("=========== starting OnionHEN Utilities... ===========");
+    LOG_INFO("=========== starting " ONION_DIST_NAME " Utilities... ===========");
 
     LoadSettings();
 
@@ -146,6 +150,10 @@ int main(void) {
     }
     /* Mark that util completed cold start (typed flag; replaces util_first_boot file). */
     onion_ready_signal(ONION_FLAG_UTIL_BOOTED);
+
+    /* Marks this start finished after a while, then sends pending error
+       reports when that is allowed. */
+    report_sender_start();
 
     LOG_INFO("Initializing cheat engine...");
     onion::cheats::CheatService::instance().ensureDir();

@@ -57,10 +57,7 @@ endforeach()
 foreach(_raster_icon IN ITEMS
 		icon_xml_monitor.png
 		icon_xml_network.png
-		icon_xml_author_avatar.png
-		icon_xml_donator_ljf.png
-		icon_xml_donator_szx.png
-		icon_xml_donator_aglx.png)
+		)
 	set(_raster_source "${D_CWD}/assets/${_raster_icon}")
 	set(_raster_output "${_icon_output_dir}/${_raster_icon}")
 	add_custom_command(
@@ -112,7 +109,7 @@ target_compile_options(${PROJECT_NAME} PUBLIC
 )
 target_link_options(${PROJECT_NAME} PRIVATE "-Wl,--gc-sections" "-Wl,--icf=safe")
 
-# Byepervisor removed from OnionHEN — bootstrapper sources only.
+# Byepervisor removed from AniketosHEN — bootstrapper sources only.
 # pt.c / elfldr.c live in libonion_elfldr (raise_privileges + inject primitives).
 file(GLOB SrcFiles CONFIGURE_DEPENDS ${D_SRC}/*.c ${D_SRC}/*.cpp ${D_SRC}/../include/*.h ${D_SRC}/../include/*.hpp ${D_SRC}/*.s)
 list(FILTER SrcFiles EXCLUDE REGEX ".*/(pt|elfldr)\\.c$")
@@ -138,7 +135,7 @@ endif()
 set_source_files_properties(
 	${D_SRC}/daemon.c
 	PROPERTIES OBJECT_DEPENDS
-		"${_onion_daemon_elf};${_onion_util_elf};${_onion_elfldr_elf};${ONIONHEN_KSTUFF_ELF};${D_CWD}/assets/onionhen_sicon.png;${_generated_icon_files}"
+		"${_onion_daemon_elf};${_onion_util_elf};${_onion_elfldr_elf};${ONIONHEN_KSTUFF_ELF};${D_CWD}/assets/aniketoshen_sicon.png;${_generated_icon_files}"
 )
 target_compile_definitions(${PROJECT_NAME} PRIVATE
 	ONIONHEN_DAEMON_ELF="${_onion_daemon_elf}"

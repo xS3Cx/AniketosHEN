@@ -480,7 +480,7 @@ static int test_welcome_toast_replaces_toolbox_uri(void) {
   TEST_ASSERT_TRUE(fields.valid);
   TEST_ASSERT_STREQ(uri, fields.action_url.c_str());
   TEST_ASSERT_STREQ(ONION_NOTIFY_ICON_PATH, fields.icon_url.c_str());
-  TEST_ASSERT_STREQ("Welcome to OnionHEN", fields.sub_message.c_str());
+  TEST_ASSERT_STREQ("Welcome to AniketosHEN", fields.sub_message.c_str());
   TEST_ASSERT_STREQ(ONIONHEN_VERSION " made by " ONIONHEN_AUTHOR,
                     fields.message.c_str());
   return 0;
@@ -501,8 +501,8 @@ static int test_welcome_toast_localizes_text(void) {
       onion::daemon::make_welcome_toast_json(
           "pssettings:play?function=debug_settings"));
   TEST_ASSERT_TRUE(fields.valid);
-  TEST_ASSERT_STREQ("欢迎使用 OnionHEN", fields.sub_message.c_str());
-  TEST_ASSERT_STREQ("前往 OnionHEN 工具箱", fields.action_name.c_str());
+  TEST_ASSERT_STREQ("欢迎使用 AniketosHEN", fields.sub_message.c_str());
+  TEST_ASSERT_STREQ("前往 AniketosHEN 工具箱", fields.action_name.c_str());
   const std::string expected =
       std::string(ONIONHEN_VERSION) + " · 作者：" + ONIONHEN_AUTHOR;
   TEST_ASSERT_STREQ(expected.c_str(), fields.message.c_str());

@@ -1,4 +1,4 @@
-# OnionHEN Cheats (C++ orchestration)
+# AniketosHEN Cheats (C++ orchestration)
 
 ## Architecture
 
@@ -41,7 +41,7 @@ IPC DOWNLOAD_CHEATS
 ## Formats / paths
 
 ```text
-/data/OnionHEN/cheats/<TITLE_ID>_<VERSION>[_<PROCESS>][_<SOURCE_ID>].{json,shn,mc4,ShnExt}
+/data/AniketosHEN/cheats/<TITLE_ID>_<VERSION>[_<PROCESS>][_<SOURCE_ID>].{json,shn,mc4,ShnExt}
 ```
 
 `PROCESS` and 8-hex `SOURCE_ID` are optional. `SOURCE_ID` identifies a

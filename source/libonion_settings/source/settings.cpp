@@ -14,6 +14,7 @@ You should have received a copy of the GNU General Public License
 along with this program; see the file COPYING. If not, see
 <http://www.gnu.org/licenses/>.  */
 
+#include <onion/distribution.h>
 #include <onion/settings.hpp>
 
 #include <cctype>
@@ -613,10 +614,18 @@ bool apply_parser(IniParser *parser, Settings *out) {
       out->startup_open_after_load);
   out->log_level =
       parse_log_level(ini_get(parser, "logging.level"), out->log_level);
+  out->reports_send =
+      parse_bool(ini_get(parser, "reports.send"), out->reports_send);
   out->display_tids = parse_bool(
       ini_get(parser, "home_screen.show_title_ids"), out->display_tids);
+  /* The OnionHEN spelling stays readable so a config.ini written by OnionHEN
+     (or hand-edited from its documentation) keeps the user's choice. When
+     both are present the current key wins. */
   out->onionhen_game_opts =
       parse_bool(ini_get(parser, "game_menu.show_onionhen_options"),
+                 out->onionhen_game_opts);
+  out->onionhen_game_opts =
+      parse_bool(ini_get(parser, "game_menu.show_aniketoshen_options"),
                  out->onionhen_game_opts);
   out->rest_mode_delay_seconds = static_cast<uint64_t>(parse_int_range(
       ini_get(parser, "rest_mode.resume_reinject_delay_seconds"),
@@ -686,6 +695,33 @@ bool apply_parser(IniParser *parser, Settings *out) {
                              out->toolbox_shortcut_opt);
   out->kstuff_autoload =
       parse_bool(ini_get(parser, "kstuff.autoload"), out->kstuff_autoload);
+
+  /* [shell_menu]: keys are the field names. A missing or unparsable value
+     keeps the default; range checks belong to the code that uses a value. */
+#define ONION_SHELL_SETTING_BOOL(name, def)                                    \
+  out->name = parse_bool(ini_get(parser, "shell_menu." #name), out->name);
+#define ONION_SHELL_SETTING_INT(name, def)                                     \
+  if (const char *v = ini_get(parser, "shell_menu." #name)) {                  \
+    char *end = nullptr;                                                       \
+    const long parsed = std::strtol(v, &end, 10);                              \
+    if (end != v && parsed >= -1000000 && parsed <= 1000000)                   \
+      out->name = static_cast<int>(parsed);                                    \
+  }
+#define ONION_SHELL_SETTING_FLOAT(name, def)                                   \
+  if (const char *v = ini_get(parser, "shell_menu." #name)) {                  \
+    char *end = nullptr;                                                       \
+    const float parsed = std::strtof(v, &end);                                 \
+    if (end != v && parsed == parsed && parsed > -1.0e6f && parsed < 1.0e6f)   \
+      out->name = parsed;                                                      \
+  }
+#define ONION_SHELL_SETTING_STRING(name, def)                                  \
+  if (const char *v = ini_get(parser, "shell_menu." #name))                    \
+    out->name = v;
+#include <onion/shell_menu_settings.def>
+#undef ONION_SHELL_SETTING_BOOL
+#undef ONION_SHELL_SETTING_INT
+#undef ONION_SHELL_SETTING_FLOAT
+#undef ONION_SHELL_SETTING_STRING
   return true;
 }
 
@@ -706,7 +742,7 @@ bool try_load_path(const char *path, Settings *out) {
   if (!path_exists(path)) {
     return false;
   }
-  /* IniParser is about 51 KiB.  This function also runs on daemon IPC client
+  /* IniParser is about 131 KiB.  This function also runs on daemon IPC client
      threads, where keeping it on the stack can exhaust the thread stack in
      unoptimised/debug builds. */
   std::unique_ptr<IniParser> parser(new (std::nothrow) IniParser{});
@@ -727,7 +763,7 @@ bool try_load_path(const char *path, Settings *out) {
 std::string settings_serialize(const Settings &in) {
   std::string b;
   b.reserve(4096);
-  b += "# OnionHEN configuration\n";
+  b += "# " ONION_DIST_NAME " configuration\n";
   b += "#\n";
   b += "# This file uses semantic schema version 1.\n";
   b += "# Boolean fields accept true or false.\n";
@@ -745,18 +781,26 @@ std::string settings_serialize(const Settings &in) {
   b += "language=" + std::string(language_name(in.ui_lang)) + "\n";
   b += "\n";
   b += "[startup]\n";
-  b += "# open_after_load chooses which page opens after OnionHEN finishes loading.\n";
+  b += "# open_after_load chooses which page opens after " ONION_DIST_NAME " finishes loading.\n";
   b += "# Available values: none, home_menu\n";
   b += "open_after_load=" +
        std::string(startup_open_after_load_name(in.startup_open_after_load)) +
        "\n";
   b += "\n";
   b += "[logging]\n";
-  b += "# level controls how much OnionHEN records to its log files.\n";
+  b += "# level controls how much " ONION_DIST_NAME " records to its log files.\n";
   b += "# Available values: off, error, warn, info, debug, trace\n";
   b += "# Raise to debug when reproducing an issue for a bug report.\n";
   b += "# Release builds compile out trace, so trace behaves as debug.\n";
   b += "level=" + std::string(log_level_name(in.log_level)) + "\n";
+  b += "\n";
+  b += "[reports]\n";
+  b += "# send shares error reports (failed starts, crashes, failed data imports)\n";
+  b += "# with the " ONION_DIST_NAME " maintainers. Console IDs, serial numbers,\n";
+  b += "# IP and MAC addresses, account IDs and user names are removed first.\n";
+  b += "# Reports are kept in " ONION_DIST_DATA_ROOT "/reports either way.\n";
+  b += "# Available values: true, false\n";
+  b += "send=" + bool_text(in.reports_send) + "\n";
   b += "\n";
   b += "[home_screen]\n";
   b += "# show_title_ids displays app Title IDs on the PS5 home screen.\n";
@@ -764,9 +808,10 @@ std::string settings_serialize(const Settings &in) {
   b += "show_title_ids=" + bool_text(in.display_tids) + "\n";
   b += "\n";
   b += "[game_menu]\n";
-  b += "# show_onionhen_options adds OnionHEN entries to the game options menu.\n";
+  b += "# show_aniketoshen_options adds " ONION_DIST_NAME " entries to the game options menu.\n";
   b += "# Available values: true, false\n";
-  b += "show_onionhen_options=" + bool_text(in.onionhen_game_opts) + "\n";
+  b += std::string(kGameMenuOptionsKey) + "=" +
+       bool_text(in.onionhen_game_opts) + "\n";
   b += "\n";
   b += "[rest_mode]\n";
   b += "# resume_reinject_delay_seconds waits after trophy SPRX are ready,\n";
@@ -785,10 +830,10 @@ std::string settings_serialize(const Settings &in) {
   b += "[app_jailbreak]\n";
   b += "# enabled controls the App lifecycle and sandbox event listeners. "
        "When false,\n";
-  b += "# OnionHEN does not register either listener.\n";
+  b += "# " ONION_DIST_NAME " does not register either listener.\n";
   b += "# Available values: true, false\n";
   b += "enabled=" + bool_text(in.app_jailbreak_enabled) + "\n";
-  b += "# debug_notifications shows a notification when OnionHEN jailbreaks an app.\n";
+  b += "# debug_notifications shows a notification when " ONION_DIST_NAME " jailbreaks an app.\n";
   b += "# Available values: true, false\n";
   b += "debug_notifications=" + bool_text(in.debug_app_jb_msg) + "\n";
   b += "# exact_title_ids is a comma-separated list of exact 9-character Title IDs.\n";
@@ -862,15 +907,34 @@ std::string settings_serialize(const Settings &in) {
   b += "# Available values: off, r3_l3, l2_triangle, long_options, long_share, share\n";
   b += "cheats_menu=" + std::string(cheats_shortcut_name(in.cheats_shortcut_opt)) +
        "\n";
-  b += "# toolbox controls the shortcut that opens the OnionHEN Toolbox.\n";
+  b += "# toolbox controls the shortcut that opens the " ONION_DIST_NAME " Toolbox.\n";
   b += "# Available values: off, l2_r3, long_share, share\n";
   b += "toolbox=" + std::string(toolbox_shortcut_name(in.toolbox_shortcut_opt)) +
        "\n";
   b += "\n";
   b += "[kstuff]\n";
-  b += "# autoload loads kstuff when OnionHEN starts.\n";
+  b += "# autoload loads kstuff when " ONION_DIST_NAME " starts.\n";
   b += "# Available values: true, false\n";
   b += "autoload=" + bool_text(in.kstuff_autoload) + "\n";
+  b += "\n";
+  b += "[shell_menu]\n";
+  b += "# Shell Menu (L1+R3) and shell appearance. Managed from the menu itself;\n";
+  b += "# keys are internal field names and may change between versions.\n";
+  char number[48];
+#define ONION_SHELL_SETTING_BOOL(name, def)                                    \
+  b += #name "=" + bool_text(in.name) + "\n";
+#define ONION_SHELL_SETTING_INT(name, def)                                     \
+  b += #name "=" + std::to_string(in.name) + "\n";
+#define ONION_SHELL_SETTING_FLOAT(name, def)                                   \
+  std::snprintf(number, sizeof(number), "%.6g", static_cast<double>(in.name)); \
+  b += std::string(#name "=") + number + "\n";
+#define ONION_SHELL_SETTING_STRING(name, def)                                  \
+  b += #name "=" + in.name + "\n";
+#include <onion/shell_menu_settings.def>
+#undef ONION_SHELL_SETTING_BOOL
+#undef ONION_SHELL_SETTING_INT
+#undef ONION_SHELL_SETTING_FLOAT
+#undef ONION_SHELL_SETTING_STRING
   return b;
 }
 
@@ -889,7 +953,7 @@ bool settings_save_file(const char *path, const Settings &in) {
   return write_path(path, settings_serialize(in));
 }
 
-bool settings_load(Settings *out) {
+bool settings_load_from(const SettingsPaths &paths, Settings *out) {
   if (!out) {
     return false;
   }
@@ -897,13 +961,32 @@ bool settings_load(Settings *out) {
   g_last_loaded = "";
 
   // Prefer elevated path, then shellui sandbox view.
-  if (try_load_path(kConfigPathPrimary, out)) {
+  if (try_load_path(paths.primary, out)) {
     return true;
   }
-  if (try_load_path(kConfigPathShellui, out)) {
+  if (try_load_path(paths.shellui, out)) {
+    return true;
+  }
+  // An AniketosHEN config that exists but cannot be used (unreadable, wrong
+  // schema) must not be papered over with OnionHEN's: the user would see
+  // settings silently revert to an older file. Defaults apply, as before.
+  if (path_exists(paths.primary) || path_exists(paths.shellui)) {
+    return false;
+  }
+  // No AniketosHEN config yet: read OnionHEN's in place. This keeps the
+  // user's settings on the very first boot (before migration has run) and
+  // when migration could not complete. Saves still go to our own paths.
+  if (try_load_path(paths.legacy_primary, out)) {
+    return true;
+  }
+  if (try_load_path(paths.legacy_shellui, out)) {
     return true;
   }
   return false;
+}
+
+bool settings_load(Settings *out) {
+  return settings_load_from(SettingsPaths{}, out);
 }
 
 bool settings_save(const Settings &in) {
@@ -922,8 +1005,13 @@ bool settings_ensure_default() {
   if (path_exists(kConfigPathPrimary) || path_exists(kConfigPathShellui)) {
     return true;
   }
-  Settings def{};
-  return settings_save(def);
+  // Seed from OnionHEN's config when one is readable (settings_load falls
+  // back to it while we have none); otherwise these are plain defaults.
+  // Without this, creating the file here would shadow the user's OnionHEN
+  // settings whenever the data migration did not run or did not finish.
+  Settings seed{};
+  (void)settings_load(&seed);
+  return settings_save(seed);
 }
 
 const char *settings_last_loaded_path() { return g_last_loaded; }

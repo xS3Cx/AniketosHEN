@@ -59,7 +59,7 @@ Activator::Activator(bool skip_userservice_init) : currentUser{}
     }
 
     // The username is needed only when an offline account has no account ID
-    // and OnionHEN must generate one. Do not make an already activated account
+    // and AniketosHEN must generate one. Do not make an already activated account
     // unreadable merely because its display name lookup failed.
     if (sceUserServiceGetUserName(user_id, username, sizeof(username)) == 0)
         currentUser.Username = std::string(username);

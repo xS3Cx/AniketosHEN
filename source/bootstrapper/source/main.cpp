@@ -20,11 +20,14 @@ along with this program; see the file COPYING. If not, see
 #include "bootstrap_filesystem.h"
 #include "bootstrap_notify.h"
 #include "bootstrap_runtime.h"
+#include "bootstrap_safety.h"
 #include "launch_pipeline.h"
 #include "payload_autostart.h"
 
 #include <onion/conflict.h>
+#include <onion/fs.h>
 #include <onion/log.h>
+#include <onion/notify.h>
 
 int main(void) {
   BootstrapConfig config{};
@@ -35,6 +38,20 @@ int main(void) {
     return -1;
   bootstrap_runtime_enable_remote_logging();
 
+  /* One start at a time. A second bootstrapper (an autoloader plus a manual
+     send, or a send repeated while the first one was still importing data)
+     used to run the whole chain beside the first: both copied the same files
+     and both loaded kstuff. */
+  if (!bootstrap_safety_lock()) {
+    LOG_ERROR("refusing start: another " ONION_DIST_NAME " start is running");
+    if (if_exists(ONION_NOTIFY_ICON_PATH))
+      onion_notify_rich("notify.brand",
+                        ONION_DIST_NAME " is already starting. Please wait "
+                        "for it to finish.",
+                        ONION_NOTIFY_ICON_PATH, "download", "588193134");
+    return 0;
+  }
+
   const char *conflict = onion_conflict_detect();
   if (conflict) {
     LOG_ERROR("refusing start: %s already running", conflict);
@@ -43,22 +60,43 @@ int main(void) {
   }
 
   LOG_DEBUG("============== Spawner (Bootstrapper) Started =================");
+  /* Before anything else is written: a start cut short by a restart left
+     its logs, and they decide how cautious this start is. */
+  const onion_boot_level level = bootstrap_safety_begin(config.firmware_text);
+
+  /* Before anything creates files under the data root: an imported file must
+     never lose to a freshly generated default. */
+  if (level == ONION_BOOT_NORMAL)
+    bootstrap_migrate_legacy_data();
+  else
+    LOG_WARN("%s start: data import skipped", onion_boot_level_name(level));
   bootstrap_filesystem_create_directories();
   if (!bootstrap_filesystem_mount_system())
     return -1;
 
   LOG_DEBUG("Writing embedded assets ...");
-  bootstrap_notify_starting(bootstrap_assets_write());
+  const bool icon_ready = bootstrap_assets_write();
+  bootstrap_notify_starting(icon_ready);
+  bootstrap_safety_flush(icon_ready);
   LOG_DEBUG("   Written!");
 
   bootstrap_filesystem_disable_updates();
 
-  const int launch_result = bootstrap_launch_services(
-      config.firmware_version, config.kstuff_autoload);
+  const BootstrapLaunchPlan plan = {
+      .kstuff_autoload = config.kstuff_autoload && level < ONION_BOOT_MINIMAL,
+      .kstuff_user_override = level == ONION_BOOT_NORMAL,
+      .launch_daemon = level < ONION_BOOT_RECOVERY,
+  };
+  const int launch_result =
+      bootstrap_launch_services(config.firmware_version, &plan);
   if (launch_result != 0)
     return launch_result;
 
-  bootstrap_payload_autostart();
+  if (level == ONION_BOOT_NORMAL)
+    bootstrap_payload_autostart();
+  else
+    LOG_WARN("%s start: payload autostart skipped",
+             onion_boot_level_name(level));
   LOG_DEBUG("============== Spawner (Bootstrapper) Finished =================");
   return 0;
 }

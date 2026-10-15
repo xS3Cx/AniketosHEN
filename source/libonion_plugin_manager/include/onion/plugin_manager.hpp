@@ -1,5 +1,6 @@
 #pragma once
 
+#include <onion/distribution.h>
 #include <cstddef>
 #include <cstdint>
 #include <mutex>
@@ -29,7 +30,7 @@ inline constexpr uint32_t kKnownFlags = kFlagLongRunning | kFlagStopSupported;
 #endif
 inline constexpr const char *kInstallRoot = ONION_DATA_ROOT "/plugins";
 #else
-inline constexpr const char *kInstallRoot = "/data/OnionHEN/plugins";
+inline constexpr const char *kInstallRoot = ONION_DIST_DATA_ROOT "/plugins";
 #endif
 
 struct Descriptor {
@@ -139,7 +140,7 @@ public:
   // apply_auto_start launches plugins that have a .auto_start marker.
   // Only daemon startup should pass true. Watcher / mid-session calls
   // must pass false so toggling auto-start does not start the plugin
-  // until the next OnionHEN boot.
+  // until the next AniketosHEN boot.
   ReconcileReport reconcile(bool apply_auto_start = false);
   OperationResult start(std::string_view plugin_id);
   OperationResult stop(std::string_view plugin_id);

@@ -51,7 +51,7 @@ struct SprxInventoryEntry {
  * Manifest format:
  *
  *   [plugin.fps-overlay]
- *   path=/data/OnionHEN/sprx/fps-overlay.sprx
+ *   path=/data/AniketosHEN/sprx/fps-overlay.sprx
  *   exact_title_ids=CUSA12345,CUSA67890
  *   title_id_prefixes=PPSA
  *   auto_start=true

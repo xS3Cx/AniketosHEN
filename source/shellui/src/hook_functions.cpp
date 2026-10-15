@@ -19,6 +19,7 @@ along with this program; see the file COPYING. If not, see
 #include "settings_bundle_patch.hpp"
 #include "toolbox_i18n.hpp"
 #include <onion/platform.h>
+#include <onion/notify.h>
 #include "detour.h"
 #include <climits>
 #include <msg.hpp>
@@ -133,7 +134,7 @@ MonoString *GetString_Hook(MonoObject *Instance, MonoString *str) {
       return mono_str_ui(toolbox_i18n::tr("pkg.msg.select_all"));
     }
 
-    // XML title/description literals (e.g. "★OnionHEN 工具箱") are already valid
+    // XML title/description literals (e.g. "★AniketosHEN 工具箱") are already valid
     // MonoStrings. Re-allocating with mono_string_new(Root_Domain, ...) on the UI
     // thread has crashed ShellUI (wrong domain / GC). Pass the original through.
     if (resourceName.rfind("msg_", 0) != 0) {
@@ -205,7 +206,7 @@ MonoString * CxmlUri_Hook(MonoObject * Instance, MonoString * uri) {
   /*
    * NPXS40008 registers its Debug Settings icon as icon_setting.png.  Do not
    * rewrite that asset on disk (or mutate the RNPS string table): the stock
-   * file must remain visible whenever OnionHEN is not loaded.  CxmlUri is the
+   * file must remain visible whenever AniketosHEN is not loaded.  CxmlUri is the
    * SettingsPlugin asset resolver, so redirect only this request while our
    * hooks are ready.
    */
@@ -230,6 +231,65 @@ MonoString * CxmlUri_Hook(MonoObject * Instance, MonoString * uri) {
   }
   return CxmlUri(Instance, uri);
 }
+/*
+ * The Settings list is drawn by React on firmware where its rows no longer
+ * ask SettingsPlugin for their pictures, so the redirect above never sees
+ * the request. There the row is given its picture as a loaded asset; when
+ * that row is ours (by its name, or by the stock picture it was handed), it
+ * is told to show the distribution's icon instead. Nothing on disk changes:
+ * the icon is this distribution's own file in its data folder.
+ */
+void (*MenuListItem_SetIconImage)(MonoObject *item, MonoObject *asset) = nullptr;
+
+static MonoMethod *method_in_hierarchy(MonoObject *object, const char *name,
+                                       int argc) {
+  for (MonoClass *k = mono_object_get_class(object); k;
+       k = mono_class_get_parent(k))
+    if (MonoMethod *method = mono_class_get_method_from_name(k, name, argc))
+      return method;
+  return nullptr;
+}
+
+void MenuListItem_SetIconImage_Hook(MonoObject *item, MonoObject *asset) {
+  if (MenuListItem_SetIconImage)
+    MenuListItem_SetIconImage(item, asset);
+  if (!shellui_hooks_are_ready() || !item || !asset || !mono_object_to_string)
+    return;
+  static constexpr const char kOwnIcon[] = ONION_NOTIFY_ICON_PATH;
+  MonoObject *exception = nullptr;
+  MonoString *shown = mono_object_to_string(asset, &exception);
+  if (exception || !shown)
+    return;
+  const std::string picture = Mono_to_String(shown);
+  if (picture.find(kOwnIcon) != std::string::npos)
+    return; /* ours, arriving: done */
+  bool mine = picture.find("/icon_setting.png") != std::string::npos;
+  if (!mine) {
+    MonoMethod *get_name = method_in_hierarchy(item, "get_Name", 0);
+    exception = nullptr;
+    MonoObject *name = get_name ? mono_runtime_invoke(get_name, item, nullptr,
+                                                      &exception)
+                                : nullptr;
+    mine = name && !exception &&
+           Mono_to_String(reinterpret_cast<MonoString *>(name)) ==
+               "id_debug_settings";
+  }
+  if (!mine)
+    return;
+  MonoMethod *set_uri = method_in_hierarchy(item, "set_IconUri", 1);
+  if (!set_uri)
+    return;
+  void *args[1] = {mono_string_new(mono_domain_get(), kOwnIcon)};
+  exception = nullptr;
+  mono_runtime_invoke(set_uri, item, args, &exception);
+  static bool logged = false;
+  if (!logged) {
+    logged = true;
+    LOG_INFO("settings icon: row given %s (%s)", kOwnIcon,
+             exception ? "refused" : "ok");
+  }
+}
+
 MonoObject* MemoryStream_Instance = nullptr;
 
 

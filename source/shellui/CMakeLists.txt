@@ -23,7 +23,7 @@ target_link_options(${PROJECT_NAME} PRIVATE "-Wl,--gc-sections" "-Wl,--icf=safe"
 # A/B: disable HomeUI top-nav Hermes patch without editing sources.
 #   cmake -DONIONHEN_SHELLUI_HOMEUI_TOP_NAV_PATCH=OFF ...
 option(ONIONHEN_SHELLUI_HOMEUI_TOP_NAV_PATCH
-	"Patch HomeUI top-nav Fps slot into OnionHEN entry" ON)
+	"Patch HomeUI top-nav Fps slot into AniketosHEN entry" ON)
 if(NOT ONIONHEN_SHELLUI_HOMEUI_TOP_NAV_PATCH)
 	target_compile_definitions(${PROJECT_NAME} PRIVATE SHELLUI_HOMEUI_TOP_NAV_PATCH=0)
 	message(STATUS "shellui: HomeUI top-nav patch DISABLED")
@@ -49,6 +49,21 @@ add_custom_command(
 )
 add_custom_target(shellui_i18n_catalog DEPENDS "${I18N_CATALOG}")
 
+# Shell Menu (L1+R3) and the subsystems it drives. They keep their own
+# subdirectories.
+file(GLOB_RECURSE ShellMenuSrc CONFIGURE_DEPENDS
+	${D_SRC}/aniketos_shell/*.cpp ${D_SRC}/aniketos_ui/*.cpp
+	${D_SRC}/aniketos_theme/*.cpp ${D_SRC}/controller/*.cpp)
+
+set(ANIKETOS_ICON_PNG "${D_CWD}/../bootstrapper/assets/aniketoshen_sicon.png")
+set(HOME_MENU_ASSETS "${D_CWD}/assets/home_menu")
+set(PARTICLE_ASSETS "${D_CWD}/assets/particles")
+set(HOME_FOLDER_ASSETS "${D_CWD}/assets/home_folders")
+set(ANIKETOS_ICON_ASSEMBLY "${I18N_GENERATED_DIR}/aniketos_icon_asset.s")
+configure_file("${D_SRC}/aniketos_icon_asset.s.in" "${ANIKETOS_ICON_ASSEMBLY}" @ONLY)
+set_source_files_properties("${ANIKETOS_ICON_ASSEMBLY}" PROPERTIES
+	OBJECT_DEPENDS "${ANIKETOS_ICON_PNG};${HOME_MENU_ASSETS}/internet_on.png;${HOME_MENU_ASSETS}/internet_off.png;${HOME_MENU_ASSETS}/color_track.png;${HOME_MENU_ASSETS}/color_track_gray.png;${HOME_MENU_ASSETS}/color_track_solid.png;${HOME_MENU_ASSETS}/color_track_fade.png;${PARTICLE_ASSETS}/triangle.png;${PARTICLE_ASSETS}/circle.png;${PARTICLE_ASSETS}/cross.png;${PARTICLE_ASSETS}/square.png;${PARTICLE_ASSETS}/dot.png;${HOME_FOLDER_ASSETS}/folder.png")
+
 file(GLOB SrcFiles CONFIGURE_DEPENDS ${D_SRC}/*.c ${D_SRC}/*.cpp ${D_SRC}/../include/*.h ${D_SRC}/../include/*.hpp ${D_SRC}/*.s ${ONIONHEN_THIRD_PARTY_DIR}/cjson/*.cpp ${ONIONHEN_THIRD_PARTY_DIR}/cjson/*.hpp)
 
 set(CMAKE_C_FLAGS "${ONION_PS5_TARGET_FLAGS} ")
@@ -57,7 +72,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -gfull -gdwarf-2 -pedantic -pedantic-error
 set(CMAKE_C_FLAGS_RELEASE "-Os -DNDEBUG")
 set(CMAKE_CXX_FLAGS_RELEASE "-Os -DNDEBUG")
 
-target_sources(${PROJECT_NAME} PRIVATE ${SrcFiles})
+target_sources(${PROJECT_NAME} PRIVATE ${SrcFiles} ${ShellMenuSrc} "${ANIKETOS_ICON_ASSEMBLY}")
 add_dependencies(${PROJECT_NAME} shellui_i18n_catalog onion_version onion_ipc onion_settings onion_detour onion_proc onion_platform onion_ready onion_plugin_ui onion_plugin_bridge)
 onion_target_debug_define(${PROJECT_NAME})
 target_include_directories(${PROJECT_NAME} PRIVATE
@@ -76,7 +91,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 	"${PROJECT_ROOT}/include"
 )
 target_link_directories	(${PROJECT_NAME} PUBLIC "${ONIONHEN_PS5_STUB_DIR}")
-target_link_libraries	(${PROJECT_NAME} PUBLIC onion_payload onion_detour onion_proc onion_platform onion_ipc onion_settings onion_ready onion_plugin_ui onion_plugin_bridge SceRegMgr SceSystemService SceUserService SceNetCtl)
+target_link_libraries	(${PROJECT_NAME} PUBLIC onion_payload onion_detour onion_proc onion_platform onion_ipc onion_settings onion_ready onion_plugin_ui onion_plugin_bridge SceRegMgr SceSystemService SceSysCore SceUserService SceNet SceNetCtl ScePad)
 
 # Add post-build command
 onion_strip_debug(${PROJECT_NAME})

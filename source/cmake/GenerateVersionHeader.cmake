@@ -52,6 +52,12 @@ else()
   set(_version "dirty-${_git_sha}")
 endif()
 
+# A release version set in CMake (ANIKETOSHEN_VERSION) wins over git: it is
+# what testers and users are told, whatever state the tree was built from.
+if(DEFINED VERSION_OVERRIDE AND NOT VERSION_OVERRIDE STREQUAL "")
+  set(_version "${VERSION_OVERRIDE}")
+endif()
+
 # Keep the generated value safe inside both a C string and notification JSON.
 string(REGEX REPLACE "[^A-Za-z0-9._+-]" "-" _version "${_version}")
 
@@ -59,7 +65,7 @@ string(CONCAT _contents
     "#pragma once\n\n"
     "/* Generated at build time. Do not edit. */\n"
     "#define ONIONHEN_VERSION \"${_version}\"\n"
-    "#define ONIONHEN_AUTHOR \"麒麟/0xp0co\"\n")
+    "#define ONIONHEN_AUTHOR \"AlexZero\"\n")
 
 get_filename_component(_output_dir "${OUTPUT_FILE}" DIRECTORY)
 file(MAKE_DIRECTORY "${_output_dir}")
@@ -76,4 +82,4 @@ if(_write_header)
   file(WRITE "${OUTPUT_FILE}" "${_contents}")
 endif()
 
-message(STATUS "OnionHEN version: ${_version}")
+message(STATUS "AniketosHEN version: ${_version}")

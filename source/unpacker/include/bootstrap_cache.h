@@ -1,6 +1,6 @@
 /* Copyright (C) 2026 OnionHEN / LightningMods
  *
- * Persistent decompressed bootstrapper cache under /user/data/OnionHEN.
+ * Persistent decompressed bootstrapper cache under /user/data/AniketosHEN.
  *
  * The cache is an optimization only: callers must still be able to boot
  * from the embedded LZMA blob when the directory is missing, the file is
@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include <onion/distribution.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -17,10 +18,10 @@
 extern "C" {
 #endif
 
-#define ONIONHEN_USER_DATA_DIR "/user/data/OnionHEN"
-#define ONIONHEN_CACHED_ELF "/user/data/OnionHEN/onionhen.elf"
+#define ONIONHEN_USER_DATA_DIR ONION_DIST_USER_DATA_ROOT
+#define ONIONHEN_CACHED_ELF ONION_DIST_USER_DATA_ROOT "/aniketoshen.elf"
 
-/** Create /user/data/OnionHEN (and parents). False if it cannot exist. */
+/** Create /user/data/AniketosHEN (and parents). False if it cannot exist. */
 bool bootstrap_cache_prepare_dir(void);
 
 /**

@@ -38,7 +38,7 @@ static void begin(const char *tag) {
 
 static void end(void) {
   onion_log_configure_crash(NULL);
-  onion_log_configure("OnionHEN", NULL);
+  onion_log_configure("AniketosHEN", NULL);
   cleanup_log_files();
   onion_log_set_level(ONION_LOG_INFO);
   onion_log_set_max_bytes(0);
@@ -103,7 +103,7 @@ static int test_configure_appends_existing_log(void) {
 static int test_log_configure_tag_only(void) {
   onion_log_configure("TagOnly", NULL);
   LOG_INFO("no file sink configured"); /* must not crash */
-  onion_log_configure("OnionHEN", NULL);
+  onion_log_configure("AniketosHEN", NULL);
   return 0;
 }
 
@@ -252,6 +252,42 @@ static int test_oversized_record_truncates(void) {
   return 0;
 }
 
+/* Async mode: records are written by a worker, in order, none lost while the
+ * ring has room; a flush makes them visible; errors bypass the queue. */
+static int test_async_writer_preserves_order(void) {
+  static char content[32768];
+  const char *path = g_path;
+  begin("Async");
+
+  TEST_ASSERT_TRUE(onion_log_set_async(true));
+  for (int i = 0; i < 100; ++i)
+    LOG_INFO("async-record-%03d", i);
+  LOG_ERROR("async-error-is-synchronous");
+  /* The error was written by this thread, before or between queued records;
+     it must already be in the file without a flush. */
+  TEST_ASSERT_TRUE(read_file(path, content, sizeof(content)) > 0);
+  TEST_ASSERT_TRUE(strstr(content, "async-error-is-synchronous") != NULL);
+
+  onion_log_flush();
+  (void)read_file(path, content, sizeof(content));
+  const char *cursor = content;
+  for (int i = 0; i < 100; ++i) {
+    char want[32];
+    snprintf(want, sizeof(want), "async-record-%03d\n", i);
+    cursor = strstr(cursor, want);
+    TEST_ASSERT_TRUE(cursor != NULL); /* present, and after the previous one */
+  }
+
+  /* Back to synchronous: the next record is on disk when the call returns. */
+  TEST_ASSERT_TRUE(onion_log_set_async(false));
+  LOG_INFO("sync-again");
+  (void)read_file(path, content, sizeof(content));
+  TEST_ASSERT_TRUE(strstr(content, "sync-again\n") != NULL);
+
+  end();
+  return 0;
+}
+
 static int test_level_name_roundtrip(void) {
   onion_log_level lvl;
 
@@ -335,6 +371,7 @@ int test_platform_log_suite(void) {
                              test_rotation_observes_external_append);
   failures += onion_test_run("log.single_newline", test_single_trailing_newline);
   failures += onion_test_run("log.oversized_truncates", test_oversized_record_truncates);
+  failures += onion_test_run("log.async_writer", test_async_writer_preserves_order);
   failures += onion_test_run("log.level_name_roundtrip", test_level_name_roundtrip);
   failures += onion_test_run("log.set_level_clamps", test_set_level_clamps);
   failures += onion_test_run("log.emergency_bypasses_level", test_emergency_bypasses_level);

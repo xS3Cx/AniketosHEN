@@ -1,10 +1,11 @@
 #pragma once
 
+#include <onion/distribution.h>
 #include <stddef.h>
 
 /* Flat cheat directory only. */
 #ifndef ONION_DATA_ROOT
-#define ONION_DATA_ROOT "/data/OnionHEN"
+#define ONION_DATA_ROOT ONION_DIST_DATA_ROOT
 #endif
 #ifndef ONION_CHEATS_DIR
 #define ONION_CHEATS_DIR ONION_DATA_ROOT "/cheats"

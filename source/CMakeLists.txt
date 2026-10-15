@@ -1,6 +1,6 @@
 cmake_minimum_required (VERSION 3.20)
 
-project("OnionHEN")
+project("AniketosHEN")
 
 set(PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}")
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
@@ -12,6 +12,35 @@ set(ONIONHEN_COMMON_DIR "${PROJECT_ROOT}/common")
 set(ONIONHEN_PS5_STUB_DIR "${PROJECT_ROOT}/platform/ps5/stubs")
 set(ONIONHEN_KSTUFF_ELF "${ONIONHEN_ROOT}/.cache/dependencies/kstuff.elf"
 	CACHE FILEPATH "Path to the kstuff ELF embedded by the bootstrapper")
+# Bug-report address shown in crash notifications (see <onion/distribution.h>).
+# Left empty, the notification names the tracker without a link.
+set(ANIKETOSHEN_ISSUES_URL "" CACHE STRING
+	"Issue tracker URL shown in AniketosHEN crash notifications")
+if(ANIKETOSHEN_ISSUES_URL)
+	if(NOT ANIKETOSHEN_ISSUES_URL MATCHES "^https://[A-Za-z0-9._~:/?#@!$&'()*+,;=-]+$")
+		message(FATAL_ERROR
+			"ANIKETOSHEN_ISSUES_URL must be an https:// URL: ${ANIKETOSHEN_ISSUES_URL}")
+	endif()
+	add_compile_definitions(ONION_DIST_ISSUES_URL="${ANIKETOSHEN_ISSUES_URL}")
+endif()
+# Where util sends error reports (<onion/report.h>): the maintainers' relay,
+# which forwards them to Discord. Empty (the default) builds without sending;
+# reports then stay on the console. Never put a bot token here: the relay
+# holds it, the payload only knows this URL.
+set(ANIKETOSHEN_REPORT_URL "" CACHE STRING
+	"http(s) URL of the error report relay (empty: do not send)")
+if(ANIKETOSHEN_REPORT_URL)
+	if(NOT ANIKETOSHEN_REPORT_URL MATCHES "^https?://[A-Za-z0-9._~:/?#@!$&'()*+,;=-]+$")
+		message(FATAL_ERROR
+			"ANIKETOSHEN_REPORT_URL must be an http(s):// URL: ${ANIKETOSHEN_REPORT_URL}")
+	endif()
+	add_compile_definitions(ONION_REPORT_URL="${ANIKETOSHEN_REPORT_URL}")
+endif()
+# Version shown to users (welcome notification, About page, Settings banner,
+# error reports). Bump it for every build handed out. Empty falls back to the
+# git tag, or dirty-<sha> for an untagged tree.
+set(ANIKETOSHEN_VERSION "0.04b" CACHE STRING
+	"Release version shown to users (empty: derive from git)")
 set(ONIONHEN_GENERATED_INCLUDE_DIR "${CMAKE_BINARY_DIR}/generated/include")
 set(ONIONHEN_VERSION_HEADER
 	"${ONIONHEN_GENERATED_INCLUDE_DIR}/onion/version.h")
@@ -22,15 +51,16 @@ add_custom_target(onion_version
 	COMMAND "${CMAKE_COMMAND}"
 		"-DREPO_ROOT=${ONIONHEN_ROOT}"
 		"-DOUTPUT_FILE=${ONIONHEN_VERSION_HEADER}"
+		"-DVERSION_OVERRIDE=${ANIKETOSHEN_VERSION}"
 		-P "${PROJECT_ROOT}/cmake/GenerateVersionHeader.cmake"
 	BYPRODUCTS "${ONIONHEN_VERSION_HEADER}"
-	COMMENT "Generating OnionHEN build version"
+	COMMENT "Generating AniketosHEN build version"
 	VERBATIM
 )
 
 # ---------------------------------------------------------------------------
 # Artifact layout
-#   ${CMAKE_BINARY_DIR}/bin  — ELFs (daemon, util, bootstrapper, OnionHEN, …)
+#   ${CMAKE_BINARY_DIR}/bin  — ELFs (daemon, util, bootstrapper, AniketosHEN, …)
 #   ${CMAKE_BINARY_DIR}/lib  — built static libs (libonion_*, …)
 # PS5 system-library stubs stay under source/platform/ps5/stubs.
 #
@@ -57,7 +87,7 @@ link_directories("${ONIONHEN_OUT_LIB}" "${ONIONHEN_PS5_STUB_DIR}")
 add_subdirectory(libhijacker)
 add_subdirectory(libNidResolver)
 # add_subdirectory(libRPI)
-# libSelfDecryptor removed from OnionHEN.
+# libSelfDecryptor removed from AniketosHEN.
 # Shared proc/ucred before NineS (inject path links these symbols).
 add_subdirectory(libonion_proc)
 add_subdirectory(libonion_fps)

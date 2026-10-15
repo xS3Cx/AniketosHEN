@@ -1,5 +1,6 @@
 /* Copyright (C) 2025 OnionHEN / LightningMods */
 
+#include <onion/distribution.h>
 #include <onion/notify.h>
 #include <onion/notify_i18n.h>
 #include <onion/log.h>
@@ -54,7 +55,7 @@ void onion_notify_format(char *out, size_t out_sz, int show_watermark,
   /* notify.* key → onion_notify_tr → printf-style body. */
   vsnprintf(buff, sizeof(buff), onion_notify_tr(fmt), ap);
   if (show_watermark) {
-    snprintf(out, out_sz, "[OnionHEN] %s", buff);
+    snprintf(out, out_sz, "[" ONION_DIST_NAME "] %s", buff);
   } else {
     snprintf(out, out_sz, "%s", buff);
   }
