@@ -1,7 +1,9 @@
 /* JavaScript evaluated in Home's runtime right before its bundle (see
  * home_js.cpp). `__aniketosConfig` is defined by the native side just ahead
- * of it: {space, caption, label, limit, icon, presence}; space is empty in
- * an app other than Home, where only the presence dot is touched.
+ * of it: {space, emulators, caption, label, limit, icon, presence, and the
+ * bookmark's}; space is empty in an app other than Home, where only the
+ * presence dot is touched, and emulators is false when the Emulators tab is
+ * switched off.
  *
  * Home is a webpack bundle whose screens are driven by data: the tab bar is
  * `spaceIds.map(...)`, a tab's caption is `textBySpaceId[id]`, and each
@@ -30,10 +32,10 @@ R"JS((function () {
     return true;
   }
 
-  /* Our spaces after Games and Media: Emulators, and the user's bookmark
-     while it holds a game. */
+  /* Our spaces after Games and Media: Emulators unless switched off, and
+     the user's bookmark while it holds a game. */
   var EXTRA = [];
-  if (SPACE)
+  if (SPACE && cfg.emulators)
     EXTRA.push({ id: SPACE, caption: cfg.caption, label: cfg.label,
                  limit: cfg.limit });
   if (SPACE && cfg.bookmark)
@@ -398,7 +400,7 @@ R"JS((function () {
      unconfirmed. */
   setTimeout(function () {
     log('alive patched=' + JSON.stringify(A.patched) + ' errors=' + A.errors +
-        ' hooked=' + hooked);
+        ' hooked=' + hooked + ' spaces=' + JSON.stringify(A.spaceIds || null));
   }, 8000);
   log('installed for space ' + SPACE);
 })();)JS"

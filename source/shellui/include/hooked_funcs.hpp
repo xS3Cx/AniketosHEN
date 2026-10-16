@@ -178,6 +178,9 @@ void shellui_request_home_reload(void);
 void shellui_request_home_reload_after(int delay_ms);
 /** Drain the one-shot Home reload; call only from UI thread after hooks ready. */
 void shellui_poll_home_reload(void);
+/* Home's bundle is starting (home_js): a reload asked for in the next few
+ * seconds waits until Home is up. */
+void shellui_note_home_start(void);
 /* The presence dot (home_js) is read by Home and Control Center when they
  * start: reload Control Center, and Home with it if asked, delay_ms after
  * the last request, so stepping through the choices reloads once. */

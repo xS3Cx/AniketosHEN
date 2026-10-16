@@ -415,12 +415,28 @@ void shellui_request_home_reload_after(int delay_ms) {
   g_home_reload_due.store(steady_ms() + delay_ms, std::memory_order_release);
 }
 
+/* When Home's bundle last started to run; 0 before the first time. A
+   reload asked for while Home is still starting waits until it has been up
+   kHomeSettleMs: three switches flipped in a row once reloaded Home a second
+   into its start, and ShellUI hung (2026-10-17, slim 11.40). */
+static std::atomic<int64_t> g_home_started{0};
+static constexpr int64_t kHomeSettleMs = 4000;
+
+void shellui_note_home_start(void) {
+  g_home_started.store(steady_ms(), std::memory_order_release);
+}
+
 void shellui_poll_home_reload(void) {
   int64_t due = g_home_reload_due.load(std::memory_order_acquire);
   if (due != 0 && steady_ms() >= due &&
       g_home_reload_due.compare_exchange_strong(due, 0,
                                                 std::memory_order_acq_rel))
     g_home_reload_pending.store(true, std::memory_order_release);
+  if (!g_home_reload_pending.load(std::memory_order_acquire))
+    return;
+  const int64_t started = g_home_started.load(std::memory_order_acquire);
+  if (started != 0 && steady_ms() - started < kHomeSettleMs)
+    return; /* still pending: Home is starting */
   if (!g_home_reload_pending.exchange(false, std::memory_order_acq_rel)) {
     return;
   }

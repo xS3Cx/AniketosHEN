@@ -122,29 +122,73 @@ rounded tiles on.
   artwork to that corner. The focus outline drawn by `home_tiles.cpp` takes
   the same radius.
 
-## Bookmark tab
+## Home tabs
 
-A game's Options menu has *Add to Bookmark*. The first time, the system
-keyboard asks for a name: the bookmark becomes a tab of its own after
-Emulators, captioned with a star and that name, holding a row of the games
-added to it (they stay in the Games row too). After that the entry reads
-*Add to <name>*, and *Remove from <name>* for a game already in it. One
-bookmark for now; removing its last game removes it. L1 and R1 move through
-all the tabs (Games, Media, Emulators, the bookmark).
+*Appearance → System customize → Game tiles → Rename Games tab* and
+*Rename Media tab* ask for a new name with the system keyboard; Home reloads
+with it, the glyph in front kept. The field starts with the tab's current
+name of the user's, empty while it has the system's. An empty name, or the
+system's own, gives the tab back the system's caption, which follows the
+console's language; *Restore system tab names* does that for both tabs at
+once. *Emulators tab* (on by default) takes the Emulators tab out of Home:
+the emulators go back to the Games row, and L1 and R1 move through the tabs
+that are left.
+
+- **Settings:** `home_tab_games_name` and `home_tab_media_name` (empty: the
+  system's name) and `home_tab_emulators` in `[shell_menu]`.
+- **How it works:** React keeps the system's captions. The text hook that
+  puts the glyph in front of Games and Media (`home_tiles.cpp`) hands each
+  label it dresses to `home_tabs.cpp`, which writes the user's name into it
+  once the label turns out to sit in the tab bar's `space-switcher-game` or
+  `space-switcher-media` panel (Search shows the same words, and its labels
+  are left alone), then fits the tab to the new width. When React sets the
+  system's caption on a known tab label again (it does as the focus moves),
+  the hook hands it the name straight away. A Home reload or a new language
+  goes down the same path. Without the Emulators tab, the script in Home
+  (`home_inject_js.inc`) leaves that space out, and the query hook of
+  `home_tabs.cpp` stops taking the emulators out of Games.
+- **Safety:** with `no_home_js` in `/data/AniketosHEN` there is no Emulators
+  tab, and the Games row keeps its emulators. A Home reload asked for within
+  4 s of Home starting (switches flipped in a row) waits until Home is up
+  (`mono_runtime.cpp`).
+
+## Bookmark tab, and copying or moving between tabs
+
+A game's or app's Options menu has *Copy / move*, with the bookmark's star
+in front. It opens a menu like the HEN button's: *Copy to*, *Move to* and
+*Remove from*, each opening the tabs under the names they have now: Games,
+Media (a name of the user's if they were renamed) and the bookmark. A copy
+shows in both places; a moved title leaves the row it was in. *Remove from*
+lists only the tabs the title was put in (a moved title then goes back to
+its own row); a tab it was put in is not offered again.
+
+The first title copied or moved to the bookmark (*New Bookmark* in the
+submenu) asks for a name with the system keyboard: the bookmark becomes a
+tab of its own after Emulators (after Media while the Emulators tab is off),
+captioned with the star and that name. One bookmark for now; removing its
+last game removes it. L1 and R1 move through all the tabs (Games, Media,
+Emulators, the bookmark).
 
 - **Settings:** *Appearance → System customize → Game tiles → Bookmark tab*
   (`home_bookmark` in `[shell_menu]`, on by default) and *Rename bookmark*.
-  The bookmark is kept in `/data/AniketosHEN/home_bookmark.json`.
-- **How it works:** `home_bookmark.cpp` adds the Options entries
-  (`hook_launch.cpp`) and asks for the name (`system_dialogs.cpp`). The tab
-  is made the same way as Emulators: the script in Home
-  (`home_inject_js.inc`) adds the space, and the query hook of
-  `home_tabs.cpp` gives its list the bookmark's title ids. Home is reloaded
-  when the tab comes, goes or is renamed; while it is there, its row is
-  fetched again when it changes (the script follows a revision read through
-  Home's registry module). The system's own app database is only read.
+  The bookmark and the titles put in Games or Media are kept in
+  `/data/AniketosHEN/home_bookmark.json`.
+- **How it works:** `hook_launch.cpp` adds the one entry; its URI comes
+  back through the boot hook, and `home_bookmark.cpp` opens the menu with
+  the same native pop-up the HEN button uses (`system_dialogs.cpp`), keeps
+  the lists and asks for the bookmark's name. The tab is made the same way
+  as Emulators: the
+  script in Home (`home_inject_js.inc`) adds the space, and the query hook
+  of `home_tabs.cpp` gives its list the bookmark's title ids, lets the
+  titles copied or moved into Games or Media into those rows, and leaves the
+  moved ones out of the rows they left. A moved title is left out only while
+  it shows somewhere else in Home. Home is reloaded when the tab comes, goes
+  or is renamed; while it is there, the rows are fetched again when anything
+  changes (the script follows a revision read through Home's registry
+  module). The system's own app database is only read: a copy or a move is
+  a list in `home_bookmark.json` and a filter on the queries.
 - **Safety:** with the setting off, or `no_home_js` in `/data/AniketosHEN`,
-  Home stays as the system has it.
+  Home stays as the system has it, moved titles back in their rows.
 
 ## More on the Information screen
 

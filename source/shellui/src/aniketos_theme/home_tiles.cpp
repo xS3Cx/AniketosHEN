@@ -1310,8 +1310,8 @@ MonoString *DecorateSpaceSwitcherLabel(MonoObject *label, MonoString *text) {
   if (!label || !text)
     return text;
   const std::string original = Mono_to_String(text);
-  static constexpr char kGamesSymbol[] = "\xEE\xBF\x8E"; // U+EFCE
-  static constexpr char kMediaSymbol[] = "\xEF\xA1\xB1"; // U+F871
+  static constexpr auto &kGamesSymbol = HomeTabs::kGamesGlyph; // U+EFCE
+  static constexpr auto &kMediaSymbol = HomeTabs::kMediaGlyph; // U+F871
   /* Already carrying a glyph: ours, or the Emulators caption that stands in
      on the Games tab while that tab is showing. */
   if (original.empty() ||
@@ -1354,7 +1354,16 @@ MonoString *DecorateSpaceSwitcherLabel(MonoObject *label, MonoString *text) {
     return text;
 
   remember_space_tab_label_layout(label);
-  MonoString *replacement = managed_string(std::string(symbol) + " " + original);
+  /* A name of the user's for the tab, in a label found in Home's tab bar
+     (home_tabs; Search shows the same words): a new label gets it as soon
+     as it is found there, a known one at once. */
+  const std::string named = HomeTabs::TabLabelText(
+      label,
+      symbol == kGamesSymbol ? HomeTabs::StockTab::Games
+                             : HomeTabs::StockTab::Media,
+      original);
+  MonoString *replacement = managed_string(
+      named.empty() ? std::string(symbol) + " " + original : named);
   if (!replacement)
     return text;
   LOG_INFO("[HOME-SPACES:NATIVE] decorated match='%s' symbol=U+%04X "
@@ -1372,7 +1381,7 @@ bool IsSpaceSwitcherTabLabel(const std::string &text) {
 bool IsSpaceSwitcherMediaTabLabel(const std::string &text) {
   if (localized_space_tab(text) == 1)
     return true;
-  static constexpr char kMediaSymbol[] = "\xEF\xA1\xB1"; // U+F871
+  static constexpr auto &kMediaSymbol = HomeTabs::kMediaGlyph; // U+F871
   if (text.compare(0, sizeof(kMediaSymbol) - 1, kMediaSymbol) != 0)
     return false;
   size_t label_start = sizeof(kMediaSymbol) - 1;
@@ -1389,8 +1398,8 @@ void UpdateSpaceSwitcherFocusBounds(MonoObject *label,
       s_space_tab_focus_paddings.empty())
     return;
 
-  static constexpr char kGamesSymbol[] = "\xEE\xBF\x8E"; // U+EFCE
-  static constexpr char kMediaSymbol[] = "\xEF\xA1\xB1"; // U+F871
+  static constexpr auto &kGamesSymbol = HomeTabs::kGamesGlyph; // U+EFCE
+  static constexpr auto &kMediaSymbol = HomeTabs::kMediaGlyph; // U+F871
   const char *symbol = nullptr;
   int expected_tab = -1;
   if (text.compare(0, sizeof(kGamesSymbol) - 1, kGamesSymbol) == 0) {

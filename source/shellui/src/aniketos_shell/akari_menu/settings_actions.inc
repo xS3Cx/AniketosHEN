@@ -154,6 +154,7 @@ bool &toggle_target(OptionId id) {
   case OptionId::ShellTilesCircular: return g_settings.shell_tiles_circular;
   case OptionId::ShellTilesPS5CaseMockup:
     return g_settings.shell_tiles_ps5_case_mockup;
+  case OptionId::HomeEmulatorsTab: return g_settings.home_tab_emulators;
   case OptionId::HomeBookmark: return g_settings.home_bookmark;
   case OptionId::OskGlyphKey: return g_settings.osk_glyph_key;
   case OptionId::ShellTilesOutlineEnabled:
@@ -853,6 +854,12 @@ void activate(const Option &option) {
       shellui_request_home_reload();
       LOG_INFO("[BOOKMARK] enabled=%d", target ? 1 : 0);
     }
+    if (option.id == OptionId::HomeEmulatorsTab) {
+      /* the same for the Emulators tab, whose titles go back to Games */
+      request_save();
+      shellui_request_home_reload();
+      LOG_INFO("[HOMETABS] emulators tab enabled=%d", target ? 1 : 0);
+    }
     if (option.id == OptionId::OskGlyphKey) {
       /* the keyboard takes it in when it is next laid out */
       request_save();
@@ -1084,6 +1091,17 @@ void activate(const Option &option) {
       /* the system's prompt, on Home once this menu is gone */
       Hide();
       HomeBookmark::RequestRename();
+      break;
+    case OptionId::HomeTabRenameGames:
+    case OptionId::HomeTabRenameMedia:
+      Hide();
+      HomeTabs::RequestRename(option.id == OptionId::HomeTabRenameGames
+                                  ? HomeTabs::StockTab::Games
+                                  : HomeTabs::StockTab::Media);
+      break;
+    case OptionId::HomeTabRestoreNames:
+      /* Home reloads behind the menu, as Refresh Home does */
+      HomeTabs::RestoreNames();
       break;
     case OptionId::RefreshHome:
       // Keep the overlay open until ReloadApp consumes this Cross press. Its

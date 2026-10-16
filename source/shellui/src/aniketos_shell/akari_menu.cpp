@@ -10,6 +10,7 @@
 #include "aniketos_shell/akari_menu.hpp"
 #include "aniketos_shell/home_bookmark.hpp"
 #include "aniketos_shell/home_menu.hpp"
+#include "aniketos_shell/home_tabs.hpp"
 
 #include "external_symbols.hpp"
 #include "fan_control.hpp"
@@ -264,6 +265,10 @@ enum class OptionId {
   HomeParticlesEnabled,
   HomeParticlesCount,
   HomePresenceDot,
+  HomeTabRenameGames,
+  HomeTabRenameMedia,
+  HomeTabRestoreNames,
+  HomeEmulatorsTab,
   HomeBookmark,
   HomeBookmarkRename,
   OskGlyphKey,

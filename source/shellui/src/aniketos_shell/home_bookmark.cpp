@@ -1,5 +1,6 @@
 #include "aniketos_shell/home_bookmark.hpp"
 
+#include "aniketos_shell/home_tabs.hpp"
 #include "aniketos_shell/system_dialogs.hpp"
 #include "hooked_funcs.hpp"
 #include "onion_cjson.hpp"
@@ -11,6 +12,7 @@
 #include <onion/settings.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <cstdio>
 #include <cstring>
@@ -35,9 +37,18 @@ constexpr size_t kMaxNameBytes = 40;
 std::mutex s_mutex; /* everything down to s_revision */
 bool s_loaded = false;
 std::string s_name; /* empty while there is no bookmark */
-std::vector<std::string> s_titles;
+std::vector<std::string> s_titles; /* the bookmark's */
+/* Titles put in Home's Games and Media rows by us. */
+std::vector<std::string> s_games;
+std::vector<std::string> s_media;
+/* Titles moved rather than copied: out of the stock rows they are not in
+   by us, while they show somewhere else in Home (hidden_locked). */
+std::vector<std::string> s_moved;
 /* Changes whenever the script has to fetch the rows again. */
 unsigned s_revision = 1;
+/* The Home that is up has the script, and the tab (set by home_js). */
+std::atomic<bool> s_script_in{false};
+std::atomic<bool> s_tab_shown{false};
 
 bool valid_title(const std::string &id) {
   if (id.size() != 9)
@@ -68,6 +79,57 @@ std::string clean_name(const std::string &typed) {
   return name;
 }
 
+bool has(const std::vector<std::string> &list, const std::string &title) {
+  return std::find(list.begin(), list.end(), title) != list.end();
+}
+
+/* True when it was there. */
+bool erase(std::vector<std::string> &list, const std::string &title) {
+  const auto at = std::find(list.begin(), list.end(), title);
+  if (at == list.end())
+    return false;
+  list.erase(at);
+  return true;
+}
+
+std::vector<std::string> &list_locked(Target target) {
+  switch (target) {
+  case Target::Games: return s_games;
+  case Target::Media: return s_media;
+  case Target::Bookmark: break;
+  }
+  return s_titles;
+}
+
+/* A moved title stays out of a stock row that we did not put it in, but
+   only while it shows somewhere else in this Home, so that it never goes
+   missing: in the other row by us, or in the bookmark while the tab is in
+   Home. */
+bool hidden_locked(Target row, const std::string &title) {
+  if (!has(s_moved, title) || has(list_locked(row), title))
+    return false;
+  const Target other = row == Target::Games ? Target::Media : Target::Games;
+  return has(list_locked(other), title) ||
+         (s_tab_shown && has(s_titles, title));
+}
+
+void read_list(const cJSON *root, const char *key,
+               std::vector<std::string> &into) {
+  const cJSON *item = nullptr;
+  cJSON_ArrayForEach(item, cJSON_GetObjectItemCaseSensitive(root, key)) {
+    if (cJSON_IsString(item) && valid_title(item->valuestring) &&
+        !has(into, item->valuestring))
+      into.push_back(item->valuestring);
+  }
+}
+
+void write_list(cJSON *root, const char *key,
+                const std::vector<std::string> &list) {
+  cJSON *array = cJSON_AddArrayToObject(root, key);
+  for (const std::string &title : list)
+    cJSON_AddItemToArray(array, cJSON_CreateString(title.c_str()));
+}
+
 void load_locked() {
   if (s_loaded)
     return;
@@ -82,26 +144,33 @@ void load_locked() {
   if (!root)
     return;
   const char *name = onion_cjson::string_item(root.get(), "name", "");
-  const cJSON *titles = cJSON_GetObjectItemCaseSensitive(root.get(), "titles");
-  const cJSON *title = nullptr;
-  cJSON_ArrayForEach(title, titles) {
-    if (cJSON_IsString(title) && valid_title(title->valuestring) &&
-        std::find(s_titles.begin(), s_titles.end(), title->valuestring) ==
-            s_titles.end())
-      s_titles.push_back(title->valuestring);
-  }
+  read_list(root.get(), "titles", s_titles);
+  read_list(root.get(), "games", s_games);
+  read_list(root.get(), "media", s_media);
+  read_list(root.get(), "moved", s_moved);
   s_name = s_titles.empty() ? std::string() : clean_name(name);
   if (s_name.empty())
     s_titles.clear();
-  LOG_INFO("[BOOKMARK] loaded %zu titles", s_titles.size());
+  /* moved from where it was to one of ours */
+  s_moved.erase(std::remove_if(s_moved.begin(), s_moved.end(),
+                               [](const std::string &title) {
+                                 return !has(s_titles, title) &&
+                                        !has(s_games, title) &&
+                                        !has(s_media, title);
+                               }),
+                s_moved.end());
+  LOG_INFO("[BOOKMARK] loaded %zu titles, %zu in Games, %zu in Media, "
+           "%zu moved",
+           s_titles.size(), s_games.size(), s_media.size(), s_moved.size());
 }
 
 void save_locked() {
   cJSON *root = cJSON_CreateObject();
   cJSON_AddStringToObject(root, "name", s_name.c_str());
-  cJSON *titles = cJSON_AddArrayToObject(root, "titles");
-  for (const std::string &title : s_titles)
-    cJSON_AddItemToArray(titles, cJSON_CreateString(title.c_str()));
+  write_list(root, "titles", s_titles);
+  write_list(root, "games", s_games);
+  write_list(root, "media", s_media);
+  write_list(root, "moved", s_moved);
   const std::string text = onion_cjson::print_owned(root, true);
   const std::string temporary = std::string(kFile) + ".tmp";
   FILE *file = text.empty() ? nullptr : std::fopen(temporary.c_str(), "wb");
@@ -135,7 +204,7 @@ std::string sql_list(const std::vector<std::string> &titles) {
   return out.empty() ? "''" : out;
 }
 
-/* A text of the catalogue with the bookmark's name put in. */
+/* A text of the catalogue with a tab's name put in. */
 std::string with_name(const char *key, const std::string &name) {
   const std::string text = tr(key);
   const size_t at = text.find("%s");
@@ -223,7 +292,7 @@ void registry_get_hook(MonoObject *module, MonoObject *param,
 /* ---- requests from the menus ------------------------------------------ */
 
 struct Request {
-  enum class Kind { None, Add, Remove, Rename } kind = Kind::None;
+  enum class Kind { None, Menu, Rename } kind = Kind::None;
   std::string title;
 };
 std::mutex s_request_mutex;
@@ -233,6 +302,7 @@ Request s_request;
 enum class Step { Idle, Name, Rename };
 Step s_step = Step::Idle;
 std::string s_pending; /* the game the new bookmark is made for */
+bool s_pending_moved = false; /* ...and whether it is moved there */
 
 void open_prompt(Step step, const std::string &text) {
   SystemDialogs::PromptOptions options;
@@ -252,49 +322,79 @@ void open_prompt(Step step, const std::string &text) {
   s_step = step;
 }
 
-void add_title(const std::string &title) {
-  std::string name;
+/* A title in no list of ours any more is not moved either. */
+void unmove_if_free_locked(const std::string &title) {
+  if (!has(s_titles, title) && !has(s_games, title) && !has(s_media, title))
+    erase(s_moved, title);
+}
+
+/* A copy shows where it was and in `target`; a moved title shows in
+   `target` alone, as far as our lists go (hidden_locked does the rest). */
+void place(const std::string &title, Target target, bool moved) {
+  bool emptied = false;
+  bool made = false;
   {
     std::lock_guard<std::mutex> lock(s_mutex);
     load_locked();
-    if (s_name.empty()) {
+    if (target == Target::Bookmark && s_name.empty()) {
       /* no bookmark yet: it is made, with its name, around this game */
       s_pending = title;
+      s_pending_moved = moved;
+      made = true;
     } else {
-      if (std::find(s_titles.begin(), s_titles.end(), title) ==
-          s_titles.end()) {
-        s_titles.insert(s_titles.begin(), title);
-        changed_locked();
+      if (moved) {
+        for (const Target other : kTargets)
+          if (other != target)
+            erase(list_locked(other), title);
+        if (!has(s_moved, title))
+          s_moved.push_back(title);
+        /* the bookmark's last game moved elsewhere takes the tab with it */
+        if (s_titles.empty() && !s_name.empty()) {
+          s_name.clear();
+          emptied = true;
+        }
       }
-      name = s_name;
+      std::vector<std::string> &list = list_locked(target);
+      if (!has(list, title)) {
+        if (target == Target::Bookmark)
+          list.insert(list.begin(), title);
+        else
+          list.push_back(title);
+      }
+      changed_locked();
     }
   }
-  if (name.empty()) {
+  if (made) {
     open_prompt(Step::Name, tr("bookmark.default_name"));
     return;
   }
-  LOG_INFO("[BOOKMARK] %s added", title.c_str());
-  notify("%s", with_name("bookmark.added", name).c_str());
+  const std::string name = TargetName(target);
+  LOG_INFO("[BOOKMARK] %s %s to %s", title.c_str(),
+           moved ? "moved" : "copied", Key(target));
+  notify("%s",
+         with_name(moved ? "bookmark.moved" : "bookmark.copied", name).c_str());
+  if (emptied)
+    reload_home();
 }
 
-void remove_title(const std::string &title) {
-  std::string name;
+void remove_title(const std::string &title, Target target) {
+  const std::string name = TargetName(target);
   bool emptied = false;
   {
     std::lock_guard<std::mutex> lock(s_mutex);
     load_locked();
-    const auto at = std::find(s_titles.begin(), s_titles.end(), title);
-    if (at == s_titles.end())
+    if (!erase(list_locked(target), title))
       return;
-    s_titles.erase(at);
-    name = s_name;
+    /* a moved title in no list of ours goes back to its own row */
+    unmove_if_free_locked(title);
     /* the last game takes the bookmark with it */
-    emptied = s_titles.empty();
-    if (emptied)
+    if (target == Target::Bookmark && s_titles.empty()) {
       s_name.clear();
+      emptied = true;
+    }
     changed_locked();
   }
-  LOG_INFO("[BOOKMARK] %s removed%s", title.c_str(),
+  LOG_INFO("[BOOKMARK] %s removed from %s%s", title.c_str(), Key(target),
            emptied ? ", bookmark gone" : "");
   notify("%s", with_name("bookmark.removed", name).c_str());
   if (emptied)
@@ -305,7 +405,9 @@ void named(bool confirmed, const std::string &typed) {
   const Step step = s_step;
   s_step = Step::Idle;
   const std::string title = s_pending;
+  const bool moved = s_pending_moved;
   s_pending.clear();
+  s_pending_moved = false;
   if (!confirmed)
     return;
   std::string name = clean_name(typed);
@@ -324,16 +426,127 @@ void named(bool confirmed, const std::string &typed) {
         name = tr("bookmark.default_name");
       s_name = name;
       s_titles = {title};
+      if (moved) {
+        erase(s_games, title);
+        erase(s_media, title);
+        if (!has(s_moved, title))
+          s_moved.push_back(title);
+      }
       changed_locked();
     }
   }
-  LOG_INFO("[BOOKMARK] %s", step == Step::Rename ? "renamed" : "made");
+  LOG_INFO("[BOOKMARK] %s",
+           step == Step::Rename ? "renamed" : moved ? "made, moved" : "made");
   if (step != Step::Rename)
-    notify("%s", with_name("bookmark.added", name).c_str());
+    notify("%s", with_name(moved ? "bookmark.moved" : "bookmark.copied", name)
+                     .c_str());
   reload_home();
 }
 
+/* ---- the menu the Options entry opens ---------------------------------- */
+
+bool s_menu_up = false; /* UI thread, like the rest of the menu */
+std::string s_menu_title;
+
+constexpr const char *kActionKeys[] = {"copy", "move", "remove"};
+constexpr const char *kActionLabels[] = {"bookmark.menu_copy_tab",
+                                         "bookmark.menu_move_tab",
+                                         "bookmark.menu_remove_tab"};
+
+/* Copy to, Move to and Remove from, each opening the tabs it can go to:
+   copied or moved to where it is in no list of ours (the system's own row
+   for it may be one of them: which one is not known here), removed from
+   where it is. A row with nowhere to go is left out. */
+std::vector<SystemDialogs::MenuEntry> menu_rows(const std::string &title) {
+  bool added[3] = {false, false, false};
+  {
+    std::lock_guard<std::mutex> lock(s_mutex);
+    load_locked();
+    for (const Target target : kTargets)
+      added[static_cast<int>(target)] = has(list_locked(target), title);
+  }
+  std::vector<SystemDialogs::MenuEntry> rows;
+  for (int action = 0; action < 3; ++action) {
+    SystemDialogs::MenuEntry row{tr(kActionLabels[action]), ""};
+    for (const Target target : kTargets) {
+      const bool in = added[static_cast<int>(target)];
+      if (action == 2 ? !in : in)
+        continue;
+      std::string name = TargetName(target);
+      if (name.empty()) /* no bookmark yet: this makes it */
+        name = tr("bookmark.new_title");
+      SystemDialogs::MenuEntry tab{name, ""};
+      tab.id = std::string(kActionKeys[action]) + ":" + Key(target);
+      row.children.push_back(tab);
+    }
+    if (row.children.empty())
+      continue;
+    row.children.front().header = row.title;
+    rows.push_back(row);
+  }
+  return rows;
+}
+
+void open_menu(const std::string &title) {
+  const std::vector<SystemDialogs::MenuEntry> rows = menu_rows(title);
+  std::string failure;
+  SystemDialogs::ClosePopupMenu();
+  s_menu_up = !rows.empty() &&
+              SystemDialogs::ShowPopupMenu(rows, tr("bookmark.menu_tabs"),
+                                           &failure, nullptr,
+                                           /*stay_open=*/true, 0);
+  if (!s_menu_up) {
+    LOG_WARN("[BOOKMARK] menu: %s", failure.c_str());
+    return;
+  }
+  s_menu_title = title;
+  LOG_INFO("[BOOKMARK] menu for %s", title.c_str());
+}
+
+/* A tab chosen in one of the submenus, by its row's id ("copy:games"). */
+void chosen(const std::string &id) {
+  const size_t colon = id.find(':');
+  if (colon == std::string::npos)
+    return;
+  const std::string action = id.substr(0, colon);
+  const std::string key = id.substr(colon + 1);
+  for (const Target target : kTargets) {
+    if (key != Key(target))
+      continue;
+    LOG_INFO("[BOOKMARK] menu: %s %s for %s", action.c_str(), key.c_str(),
+             s_menu_title.c_str());
+    if (action == "remove")
+      remove_title(s_menu_title, target);
+    else if (action == "copy" || action == "move")
+      place(s_menu_title, target, action == "move");
+    return;
+  }
+}
+
+void menu_tick() {
+  std::string id;
+  if (SystemDialogs::PollPopupSubmenu(&id)) {
+    SystemDialogs::ClosePopupMenu();
+    s_menu_up = false;
+    chosen(id);
+    return;
+  }
+  int row = -1;
+  (void)SystemDialogs::PollPopupMenu(&row); /* a submenu row: PUI opens it */
+  if (SystemDialogs::PopupMenuDismissed())
+    s_menu_up = false;
+}
+
 } // namespace
+
+const char *Key(Target target) {
+  switch (target) {
+  case Target::Games: return "games";
+  case Target::Media: return "media";
+  case Target::Bookmark: break;
+  }
+  return "bookmark";
+}
 
 void Install() {
   if (s_registry_get_original)
@@ -364,18 +577,22 @@ bool Allowed(const std::string &title_id) {
          title_id.compare(0, 4, "NPXS") != 0;
 }
 
-bool Contains(const std::string &title_id) {
-  std::lock_guard<std::mutex> lock(s_mutex);
-  load_locked();
-  return std::find(s_titles.begin(), s_titles.end(), title_id) !=
-         s_titles.end();
-}
-
 std::string Name() {
   std::lock_guard<std::mutex> lock(s_mutex);
   load_locked();
   return s_name;
 }
+
+std::string TargetName(Target target) {
+  switch (target) {
+  case Target::Games: return HomeTabs::TabName(HomeTabs::StockTab::Games);
+  case Target::Media: return HomeTabs::TabName(HomeTabs::StockTab::Media);
+  case Target::Bookmark: break;
+  }
+  return Name();
+}
+
+std::string CleanName(const std::string &typed) { return clean_name(typed); }
 
 bool Shown() {
   if (!Enabled())
@@ -395,19 +612,42 @@ std::string Where(const std::string &where) {
   return where + " AND (icon.titleId IN " + ids + " ) ";
 }
 
+void SetHome(bool script_in, bool tab_shown) {
+  s_script_in = script_in;
+  s_tab_shown = tab_shown;
+}
+
+std::string AddedSql(Target row) {
+  if (row == Target::Bookmark || !s_script_in || !Enabled())
+    return {};
+  std::lock_guard<std::mutex> lock(s_mutex);
+  load_locked();
+  const std::vector<std::string> &list = list_locked(row);
+  return list.empty() ? std::string() : sql_list(list);
+}
+
+std::string HiddenSql(Target row) {
+  if (row == Target::Bookmark || !s_script_in || !Enabled())
+    return {};
+  std::lock_guard<std::mutex> lock(s_mutex);
+  load_locked();
+  std::vector<std::string> hidden;
+  for (const std::string &title : s_moved)
+    if (hidden_locked(row, title))
+      hidden.push_back(title);
+  return hidden.empty() ? std::string() : sql_list(hidden);
+}
+
 bool HandleUri(const std::string &uri, const std::string &menu_title) {
-  Request request;
-  if (uri == kAddUri)
-    request.kind = Request::Kind::Add;
-  else if (uri == kRemoveUri)
-    request.kind = Request::Kind::Remove;
-  else
+  if (uri.compare(0, std::strlen(kMenuUri), kMenuUri) != 0)
     return false;
   if (!valid_title(menu_title)) {
     LOG_WARN("[BOOKMARK] no title for '%s' ('%s')", uri.c_str(),
              menu_title.c_str());
     return true;
   }
+  Request request;
+  request.kind = Request::Kind::Menu;
   request.title = menu_title;
   std::lock_guard<std::mutex> lock(s_request_mutex);
   s_request = request;
@@ -429,17 +669,16 @@ void Tick() {
       named(confirmed, typed);
     return;
   }
+  if (s_menu_up)
+    menu_tick();
   Request request;
   {
     std::lock_guard<std::mutex> lock(s_request_mutex);
     std::swap(request, s_request);
   }
   switch (request.kind) {
-  case Request::Kind::Add:
-    add_title(request.title);
-    break;
-  case Request::Kind::Remove:
-    remove_title(request.title);
+  case Request::Kind::Menu:
+    open_menu(request.title);
     break;
   case Request::Kind::Rename: {
     const std::string name = Name();

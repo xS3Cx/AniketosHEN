@@ -791,6 +791,14 @@ std::vector<Option> build_page(Page page) {
         /* percent of a full circle; 30 is about Sony's corner */
         slider_int(tr("vsh.tiles.rounding"), OptionId::ShellTilesCornerRadius,
                    g_settings.shell_tiles_corner_radius, 0, 100, 5),
+        /* Home's tabs in their order: Games and Media under names of the
+           user's, Emulators on or off (home_tabs) */
+        action(tr("vsh.tiles.rename_games"), OptionId::HomeTabRenameGames),
+        action(tr("vsh.tiles.rename_media"), OptionId::HomeTabRenameMedia),
+        action(tr("vsh.tiles.restore_tab_names"),
+               OptionId::HomeTabRestoreNames),
+        toggle(tr("vsh.tiles.emulators_tab"), OptionId::HomeEmulatorsTab,
+               g_settings.home_tab_emulators),
         /* the bookmark tab after Emulators (home_bookmark) */
         toggle(tr("vsh.tiles.bookmark"), OptionId::HomeBookmark,
                g_settings.home_bookmark),

@@ -170,27 +170,22 @@ void createJson_hook(MonoObject* inst, MonoObject* array, MonoString* id, MonoSt
 #endif
 
     /* The bookmark tab on Home: just above "Delete", which every game and
-       app of the user's has and the system's own tiles do not. */
+       app of the user's has and the system's own tiles do not. One entry,
+       with the bookmark's star in front: it opens AniketosHEN's own menu
+       (HomeBookmark) with Copy to, Move to and Remove from, each opening the
+       tabs under the names they have now. Nothing else is added to Sony's
+       menu. */
     if (id_str == "MENU_ID_APPLICATION_DELETE") {
         const std::string title = menu_entry_title(Mono_to_String(actionUrl));
         if (!title.empty())
             g_ui.current_menu_tid = title;
         if (HomeBookmark::Allowed(title)) {
-            const bool in = HomeBookmark::Contains(title);
-            const std::string name = HomeBookmark::Name();
-            /* "Add to Bookmark" until it exists, then its own name */
-            std::string text = toolbox_i18n::tr(
-                in ? "bookmark.menu_remove"
-                   : name.empty() ? "bookmark.menu_add" : "bookmark.menu_add_to");
-            const size_t at = text.find("%s");
-            if (at != std::string::npos)
-                text.replace(at, 2, name);
+            const std::string text = std::string(HomeBookmark::kGlyph) + " " +
+                                     toolbox_i18n::tr("bookmark.menu_tabs");
             createJson(inst, array,
                        mono_string_new(Root_Domain, "MENU_ID_ANIKETOS_BOOKMARK"),
                        mono_string_new(Root_Domain, text.c_str()),
-                       mono_string_new(Root_Domain,
-                                       in ? HomeBookmark::kRemoveUri
-                                          : HomeBookmark::kAddUri),
+                       mono_string_new(Root_Domain, HomeBookmark::kMenuUri),
                        actionId, nullptr, subMenu, enable);
         }
     }

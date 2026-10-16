@@ -170,6 +170,12 @@ void run_script_hook(MonoObject *executor, MonoObject *bundle) {
   const bool control_center =
       app.find("rnps-control-center") != std::string::npos &&
       (AniketosTheme::CustomizationOn() ? g_settings.home_presence_dot : 0) != 0;
+  if (home)
+    shellui_note_home_start();
+  /* the Emulators tab, unless switched off, and the bookmark tab while it
+     holds a game */
+  const bool emulators = home && g_settings.home_tab_emulators;
+  const bool bookmark = home && HomeBookmark::Shown();
   if (!s_disabled && !exists(kOff) &&
       ((home && HomeTabs::Ready()) || control_center)) {
     const std::string starts = std::to_string(s_unconfirmed_starts + 1);
@@ -186,7 +192,8 @@ void run_script_hook(MonoObject *executor, MonoObject *bundle) {
                                 toolbox_i18n::tr("home_tabs.emulators");
     const std::string config =
         std::string("globalThis.__aniketosConfig = {space: ") +
-        (home ? "'emulators'" : "''") + ", caption: " +
+        (home ? "'emulators'" : "''") +
+        ", emulators: " + (emulators ? "true" : "false") + ", caption: " +
         JsString(caption) + ", label: " +
         JsString(toolbox_i18n::tr("home_tabs.emulators")) + ", limit: " +
         std::to_string(HomeTabs::kEmulatorsContentLimit) +
@@ -197,10 +204,9 @@ void run_script_hook(MonoObject *executor, MonoObject *bundle) {
         ", presence: " + JsString(presence_name()) +
         /* the bookmark tab: its caption (empty for none) and its name */
         ", bookmark: " +
-        JsString(home && HomeBookmark::Shown()
-                     ? std::string(HomeBookmark::kGlyph) + " " +
-                           HomeBookmark::Name()
-                     : std::string()) +
+        JsString(bookmark ? std::string(HomeBookmark::kGlyph) + " " +
+                                HomeBookmark::Name()
+                          : std::string()) +
         ", bookmarkLabel: " + JsString(HomeBookmark::Name()) +
         ", bookmarkLimit: " + std::to_string(HomeBookmark::kContentLimit) +
         ", bookmarkWatch: " + (home && HomeBookmark::Enabled() ? "true" : "false") +
@@ -212,6 +218,13 @@ void run_script_hook(MonoObject *executor, MonoObject *bundle) {
       unlink(kUnconfirmed); /* nothing went in, so nothing to confirm */
     LOG_INFO("[HOMEJS] injected into '%s' ok=%d", app.c_str(), ok ? 1 : 0);
     injected = ok;
+  }
+  /* Before the bundle runs and asks for its rows: the emulators, and the
+     games moved to the bookmark, leave the Games row only for a tab of
+     their own. */
+  if (home) {
+    HomeTabs::SetEmulatorsTabShown(injected && emulators);
+    HomeBookmark::SetHome(injected, injected && bookmark);
   }
   /* The Trophies app: View, Unlock and Lock in its options menus. A failure
      there costs that app alone, so only the in-flight marker guards it. */
