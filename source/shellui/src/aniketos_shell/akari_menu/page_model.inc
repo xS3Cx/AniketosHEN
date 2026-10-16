@@ -747,6 +747,9 @@ std::vector<Option> build_page(Page page) {
       options.push_back(strings(tr("vsh.home_presence.dot"),
                                 OptionId::HomePresenceDot, dots[dot], 4));
     }
+    /* the glyph key after Shift on the system keyboard (osk_glyphs) */
+    options.push_back(toggle(tr("vsh.osk_glyph_key"), OptionId::OskGlyphKey,
+                             g_settings.osk_glyph_key));
     break;
   case Page::ShellBackground: {
     scan_background_images();
@@ -785,14 +788,13 @@ std::vector<Option> build_page(Page page) {
     options = {
         toggle(tr("vsh.tiles.circular"), OptionId::ShellTilesCircular,
                g_settings.shell_tiles_circular),
-        /* folders of games in Home's Games row (home_folders) */
-        toggle(tr("vsh.tiles.folders"), OptionId::HomeFolders,
-               g_settings.home_folders),
-        /* every folder, to rename or delete (also with the tiles off) */
-        action(tr("vsh.tiles.manage_folders"), OptionId::HomeFoldersManage),
-        /* the Favorites tab next to Emulators (home_folders) */
-        toggle(tr("vsh.tiles.favorites"), OptionId::HomeFavorites,
-               g_settings.home_favorites),
+        /* percent of a full circle; 30 is about Sony's corner */
+        slider_int(tr("vsh.tiles.rounding"), OptionId::ShellTilesCornerRadius,
+                   g_settings.shell_tiles_corner_radius, 0, 100, 5),
+        /* the bookmark tab after Emulators (home_bookmark) */
+        toggle(tr("vsh.tiles.bookmark"), OptionId::HomeBookmark,
+               g_settings.home_bookmark),
+        action(tr("vsh.tiles.rename_bookmark"), OptionId::HomeBookmarkRename),
     };
     break;
   }

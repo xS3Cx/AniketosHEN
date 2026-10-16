@@ -99,13 +99,3 @@ particle_dot_png_start:
 .global particle_dot_png_end
 .type particle_dot_png_end,@object
 particle_dot_png_end:
-
-/* The tile of a game folder on Home (aniketos_shell/home_folders). */
-.p2align 4
-.global home_folder_png_start
-.type home_folder_png_start,@object
-home_folder_png_start:
-.incbin "@HOME_FOLDER_ASSETS@/folder.png"
-.global home_folder_png_end
-.type home_folder_png_end,@object
-home_folder_png_end:

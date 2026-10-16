@@ -30,15 +30,15 @@ R"JS((function () {
     return true;
   }
 
-  /* Our spaces after Games and Media: Emulators, and Favorites while it
-     holds a game. */
+  /* Our spaces after Games and Media: Emulators, and the user's bookmark
+     while it holds a game. */
   var EXTRA = [];
   if (SPACE)
     EXTRA.push({ id: SPACE, caption: cfg.caption, label: cfg.label,
                  limit: cfg.limit });
-  if (SPACE && cfg.favorites)
-    EXTRA.push({ id: 'favorites', caption: cfg.favorites,
-                 label: cfg.favoritesLabel, limit: cfg.favoritesLimit });
+  if (SPACE && cfg.bookmark)
+    EXTRA.push({ id: 'bookmark', caption: cfg.bookmark,
+                 label: cfg.bookmarkLabel, limit: cfg.bookmarkLimit });
   function extraSpace(name) {
     for (var i = 0; i < EXTRA.length; i++)
       if (EXTRA[i].id === name) return EXTRA[i];
@@ -174,110 +174,40 @@ R"JS((function () {
     if (o.default === view) once('lamps', id);
   }
 
-  /* Game folders in the Games row (home_folders.cpp). The row's titles come
-     from one store of Home's: fetchTitleByUserId(user, limit) gives a list
-     per space, and the Games list gets a tile for each folder after the
-     system's own tiles at its head (the native side's database query has
-     left the folders' titles out of it). Below a folder's tile, as below any
-     tile, Home shows a hub: for a folder, the Game Library with the folder
-     named in its parameters, which shows the folder's titles alone
-     (library_inject_js.inc). Pressing the tile goes down to it, as Down
-     does. The folders are read through Home's registry module, which the
-     native side answers for our key; when they change, the row is fetched
-     again by calling the listeners Home gave the store, which is what Home
-     does itself when its apps change. */
-  var F = { on: !!cfg.folders, state: null, rev: -1, listeners: [],
-            nm: null, asking: false, hub: null,
-            /* the Favorites tab's row is fetched again on changes too */
-            watch: !!cfg.folders || !!cfg.favorites };
-  function folderState() {
+  /* The bookmark tab's row is the native side's query, which a change of
+     the bookmark (a game added from the Options menu, one taken out) does
+     not make Home ask again. Home's store of titles is told to fetch every
+     row again, as Home does itself when its apps change: by calling the
+     listeners Home gave it. When to: the bookmark's revision, read through
+     Home's registry module, which the native side answers for our key. */
+  var F = { watch: !!cfg.bookmarkWatch, rev: -1, listeners: [], nm: null,
+            asking: false };
+  function bookmarkRevision() {
     var nm = F.nm;
-    if (!F.watch || !nm || typeof nm.Get !== 'function')
-      return Promise.resolve(null);
+    if (!nm || typeof nm.Get !== 'function') return Promise.resolve(null);
     var asked;
-    try { asked = nm.Get({ keys: ['aniketos.home_folders'] }); }
+    try { asked = nm.Get({ keys: ['aniketos.home_bookmark'] }); }
     catch (e) { return Promise.resolve(null); }
     return Promise.resolve(asked).then(function (answer) {
       if (typeof answer !== 'string') return null;
       var state = JSON.parse(answer);
-      return state && Array.isArray(state.folders) ? state : null;
+      return state && typeof state.rev === 'number' ? state.rev : null;
     }, function () { return null; });
   }
-  function folderOf(titleId) {
-    var folders = F.state ? F.state.folders : [];
-    for (var i = 0; i < folders.length; i++)
-      if (folders[i].tile === titleId) return folders[i];
-    return null;
-  }
-  function systemTile(item) {
-    return !!item && typeof item.titleId === 'string' &&
-           item.titleId.indexOf('NPXS') === 0;
-  }
-  /* A folder's tile, in the shape of the row's own entries. */
-  function folderTile(folder, template, icon) {
-    var tile = {};
-    for (var key in template) tile[key] = template[key];
-    var info = {};
-    var stock = template.conceptInfo || {};
-    for (var name in stock) info[name] = null;
-    info.iconPathWithTs = icon;
-    tile.conceptInfo = info;
-    tile.bgMatteType = 'None';
-    tile.conceptId = '0';
-    tile.localConceptId = null;
-    tile.deeplinkUri = 'OnionHEN?Folder=' + folder.id;
-    tile.hubAppUri = 'pslibraryhub:main?space=game&aniketosFolder=' +
-                     folder.id;
-    tile.icon0PathWithTs = icon;
-    tile.pic0PathWithTs = null;
-    tile.sndPathWithTs = null;
-    tile.pinnedStatus = null;
-    tile.titleId = folder.tile;
-    tile.titleName = folder.name;
-    return tile;
-  }
-  function applyFolders(lists, limit) {
-    var state = F.state;
-    if (!state || !state.folders.length || !Array.isArray(lists)) return;
-    var at = A.spaceIds ? A.spaceIds.indexOf('game') : 0;
-    var list = lists[at < 0 ? 0 : at];
-    var items = list && list.items;
-    if (!Array.isArray(items)) return;
-    /* an entry of the row's own to copy the shape of */
-    var template = null;
-    for (var i = 0; i < items.length && !template; i++)
-      if (!systemTile(items[i])) template = items[i];
-    template = template || items[0] || { conceptInfo: {} };
-    var max = typeof limit === 'number' && limit > 0 ? limit : 0;
-    var head = 0;
-    while (head < items.length && systemTile(items[head])) head++;
-    var tiles = [];
-    for (var k = 0; k < state.folders.length; k++)
-      tiles.push(folderTile(state.folders[k], template, state.icon));
-    items.splice.apply(items, [head, 0].concat(tiles));
-    /* Home shows `limit` entries: games at the end make way for the
-       folders, the system's tiles at the end (Game Library) stay. */
-    var tail = 0;
-    while (tail < items.length &&
-           systemTile(items[items.length - 1 - tail])) tail++;
-    while (max && items.length > max &&
-           items.length - tail > head + tiles.length)
-      items.splice(items.length - tail - 1, 1);
-  }
-  function refreshRow() {
+  function refreshRows() {
     for (var i = 0; i < F.listeners.length; i++) {
-      try { F.listeners[i](); } catch (e) { log('folders: refresh ' + e); }
+      try { F.listeners[i](); } catch (e) { log('bookmark: refresh ' + e); }
     }
   }
-  /* Changes made on the native side (a game filed, a folder renamed...):
-     the row is fetched again when the folders' revision moves on. */
-  function watchFolders() {
+  function watchBookmark() {
     setInterval(function () {
       if (F.asking || !F.listeners.length) return;
       F.asking = true;
-      folderState().then(function (state) {
+      bookmarkRevision().then(function (rev) {
         F.asking = false;
-        if (state && state.rev !== F.rev) refreshRow();
+        if (rev === null) return;
+        if (F.rev >= 0 && rev !== F.rev) refreshRows();
+        F.rev = rev;
       }, function () { F.asking = false; });
     }, 2000);
   }
@@ -285,36 +215,7 @@ R"JS((function () {
     var store = o && o.default;
     if (!F.watch || A.patched.titles || !store ||
         typeof store.fetchTitleByUserId !== 'function' ||
-        typeof store.updateLastAccessTimeUser !== 'function' ||
         typeof store.addListener !== 'function') return;
-    var fetch = store.fetchTitleByUserId;
-    store.fetchTitleByUserId = function (user, limit) {
-      var self = this, args = arguments;
-      return folderState().then(function (state) {
-        F.state = state;
-        F.rev = state ? state.rev : -1;
-        return fetch.apply(self, args);
-      }, function () {
-        return fetch.apply(self, args);
-      }).then(function (lists) {
-        try { applyFolders(lists, limit); }
-        catch (e) { A.errors++; log('folders: row ' + e); }
-        return lists;
-      });
-    };
-    /* every tile press ends here; a folder's tile has nothing to launch */
-    var touch = store.updateLastAccessTimeUser;
-    store.updateLastAccessTimeUser = function (titleId) {
-      try {
-        if (folderOf(titleId)) {
-          var hub = F.hub;
-          if (hub && typeof hub.onDownKeyDown === 'function')
-            hub.onDownKeyDown();
-          return;
-        }
-      } catch (e) { log('folders: press ' + e); }
-      return touch.apply(this, arguments);
-    };
     var listen = store.addListener;
     store.addListener = function (handler) {
       if (typeof handler === 'function') F.listeners.push(handler);
@@ -328,15 +229,14 @@ R"JS((function () {
         return unlisten.apply(this, arguments);
       };
     once('titles', id);
-    watchFolders();
+    watchBookmark();
   }
-  /* The hub viewer of the row: what Down does (onDownKeyDown), so that a
-     folder's tile, pressed, goes down to its hub too. */
+  /* The hub viewer of the row hears of every tile that gets the focus:
+     its space is the one in front, for L1/R1 (patchSpaceFocus). */
   function patchHubViewer(o, id) {
     var use = o && o.useHubViewer;
     if (A.patched.hubViewer || typeof use !== 'function') return;
     var wrapped = function () {
-      /* the space of the focused tile, for L1/R1 (patchSpaceFocus) */
       var options = arguments[0];
       if (options && typeof options.onChange === 'function') {
         var change = options.onChange;
@@ -353,16 +253,15 @@ R"JS((function () {
           options.onChange = A.change;
         }
       }
-      var viewer = use.apply(this, arguments);
-      if (viewer && typeof viewer === 'object') F.hub = viewer;
-      return viewer;
+      return use.apply(this, arguments);
     };
     try { o.useHubViewer = wrapped; } catch (e) {}
     if (o.useHubViewer === wrapped) once('hubViewer', id);
   }
+
   /* L1 and R1 move between the spaces of the tab bar. Home's own handlers
      know two (R1 from Games to Media, L1 back); with ours they go on through
-     our spaces (Media, Emulators, Favorites) and back, with the same sound
+     our spaces (Media, Emulators, the bookmark) and back, with the same sound
      and the same move. */
   function neighbour(step) {
     var ids = A.spaceIds;
@@ -437,53 +336,12 @@ R"JS((function () {
     } catch (e) {}
   }
 
-  /* Options on a folder's tile: the folder's own menu (rename, delete),
-     opened by the native side, instead of the system's menu for a title.
-     Home makes the focused tile's element with its key handlers; for a
-     folder's tile the Options one is swapped as the element is made. */
-  var kFocusedTile = 'focused-item-';
-  function element(type, props) {
-    if (!props || typeof props !== 'object' ||
-        typeof props.onOptionsKeyDown !== 'function') return;
-    var testID = props.testID;
-    if (typeof testID !== 'string' || testID.indexOf(kFocusedTile) !== 0)
-      return;
-    var folder = folderOf(testID.slice(kFocusedTile.length));
-    if (!folder || props.onOptionsKeyDown.__aniketos) return;
-    var id = folder.id;
-    var options = function () {
-      log(':folder|options|' + id);
-      return true;
-    };
-    options.__aniketos = true;
-    props.onOptionsKeyDown = options;
-  }
-  function wrapElements(o) {
-    if (!F.on) return;
-    ['jsx', 'jsxs', 'createElement'].forEach(function (n) {
-      var make = o[n];
-      if (typeof make !== 'function' || make.__aniketos) return;
-      var wrapped = function (type, props) {
-        try { element(type, props); }
-        catch (e) { log('folders: element ' + e); }
-        return make.apply(this, arguments);
-      };
-      wrapped.__aniketos = true;
-      try { o[n] = wrapped; } catch (e) {}
-    });
-  }
-
   function patchModule(module, id) {
     try {
       var exports = module && module.exports;
       findReact(exports);
       if (exports && exports.default) findReact(exports.default);
       findNative(exports);
-      if (exports && ((typeof exports.jsx === 'function' &&
-                       typeof exports.jsxs === 'function') ||
-                      (typeof exports.createElement === 'function' &&
-                       typeof exports.cloneElement === 'function')))
-        wrapElements(exports);
       patchTitles(exports, id);
       patchHubViewer(exports, id);
       patchSpaceFocus(exports, id);

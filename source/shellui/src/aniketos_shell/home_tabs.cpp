@@ -1,5 +1,5 @@
 #include "aniketos_shell/home_tabs.hpp"
-#include "aniketos_shell/home_folders.hpp"
+#include "aniketos_shell/home_bookmark.hpp"
 
 #include "hooked_funcs.hpp"
 #include "aniketos_shell/system_dialogs.hpp"
@@ -240,12 +240,9 @@ std::string enum_name(MonoObject *boxed) {
      - the Emulators tab's list, which the script in Home marks with a
        content limit of its own (the database has no such space): its filter
        becomes the emulators' title ids;
-     - the Games tab's list: the same titles are left out of it, and so are
-       the titles in folders (HomeFolders).
-   The Favorites tab's list is made like the Emulators one, with a content
-   limit of its own: its filter becomes the favourites' title ids. Another
-   is the Game Library's, shown below a folder's tile: its script marks it
-   with a content limit, and it keeps only the folder's titles.
+     - the Games tab's list: the same titles are left out of it.
+   The bookmark tab's list is made like the Emulators one, with a content
+   limit of its own: its filter becomes the bookmark's title ids.
    Every other list is untouched. */
 MonoString *build_where_hook(MonoObject *accessor, MonoObject *binds) {
   MonoString *where = s_build_where_original
@@ -253,40 +250,28 @@ MonoString *build_where_hook(MonoObject *accessor, MonoObject *binds) {
                           : nullptr;
   if (!where || !accessor)
     return where;
-  MonoObject *limit = field_value(accessor, "contentLimit");
-  const int32_t content_limit =
-      limit ? *static_cast<int32_t *>(mono_object_unbox(limit)) : 0;
-  /* the Game Library below a folder's tile on Home */
-  if (content_limit > HomeFolders::kLibraryContentLimit) {
-    const std::string original =
-        text_of(reinterpret_cast<MonoObject *>(where));
-    const std::string changed =
-        HomeFolders::LibraryWhere(content_limit, original);
-    return changed == original
-               ? where
-               : mono_string_new(mono_domain_get(), changed.c_str());
-  }
   if (enum_name(field_value(accessor, "filterTypeDispLocationSpace")) !=
           "Game" ||
       enum_name(field_value(
           accessor, "filterTypeDispLocationExperienceSwitcher")) != "Display")
     return where;
+  MonoObject *limit = field_value(accessor, "contentLimit");
+  const int32_t content_limit =
+      limit ? *static_cast<int32_t *>(mono_object_unbox(limit)) : 0;
   const bool emulators_list = content_limit == kEmulatorsContentLimit;
   const std::string original = text_of(reinterpret_cast<MonoObject *>(where));
-  /* the Favorites tab's list (HomeFolders), marked as the Emulators one */
-  if (content_limit == HomeFolders::kFavoritesContentLimit)
+  /* the bookmark tab's list (HomeBookmark), marked as the Emulators one */
+  if (content_limit == HomeBookmark::kContentLimit)
     return mono_string_new(mono_domain_get(),
-                           HomeFolders::FavoritesWhere(original).c_str());
+                           HomeBookmark::Where(original).c_str());
   /* No emulators installed: the Emulators list matches nothing. */
   const std::string ids = "(" + (s_filter_sql.empty() ? "''" : s_filter_sql) + ")";
   std::string changed;
   if (!emulators_list) {
-    changed = s_filter_sql.empty()
-                  ? original
-                  : original + " AND (icon.titleId NOT IN " + ids + " ) ";
-    changed = HomeFolders::GamesRowWhere(changed);
-    if (changed == original)
+    /* No emulators installed: Games is left as it is. */
+    if (s_filter_sql.empty())
       return where;
+    changed = original + " AND (icon.titleId NOT IN " + ids + " ) ";
   } else if (original.find('?') == std::string::npos) {
     /* Emulators that are not pinned to Home belong here too, so the
        condition on where a title is displayed is replaced, not added to. */

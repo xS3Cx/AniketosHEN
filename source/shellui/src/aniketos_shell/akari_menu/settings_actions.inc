@@ -154,8 +154,8 @@ bool &toggle_target(OptionId id) {
   case OptionId::ShellTilesCircular: return g_settings.shell_tiles_circular;
   case OptionId::ShellTilesPS5CaseMockup:
     return g_settings.shell_tiles_ps5_case_mockup;
-  case OptionId::HomeFolders: return g_settings.home_folders;
-  case OptionId::HomeFavorites: return g_settings.home_favorites;
+  case OptionId::HomeBookmark: return g_settings.home_bookmark;
+  case OptionId::OskGlyphKey: return g_settings.osk_glyph_key;
   case OptionId::ShellTilesOutlineEnabled:
     return g_settings.shell_tiles_outline_enabled;
   case OptionId::ShellTilesOutlineSyncBackground:
@@ -260,6 +260,8 @@ int &int_target(OptionId id) {
     return g_settings.shell_ui_panels_opacity;
   case OptionId::ShellGlowIntensity:
     return g_settings.shell_background_glow_intensity;
+  case OptionId::ShellTilesCornerRadius:
+    return g_settings.shell_tiles_corner_radius;
   default: return g_settings.vsh_animation;
   }
 }
@@ -632,6 +634,7 @@ void change_option(const Option &option, int direction) {
     set_color(option.id, position);
   } else if (option.type == OptionType::SliderInt) {
     int &target = int_target(option.id);
+    const int previous = target;
     target = std::clamp(target + direction * option.step_i, option.minimum_i,
                         option.maximum_i);
     if (option.id == OptionId::FanThreshold) {
@@ -639,6 +642,16 @@ void change_option(const Option &option, int direction) {
           !AniketosFan::SetTarget(g_settings.fan_threshold))
         notify("notify.fan.adjust_failed");
       request_save();
+    } else if (option.id == OptionId::ShellTilesCornerRadius &&
+               (target != previous || !g_settings.shell_tiles_circular)) {
+      /* Choosing a rounding turns the rounded tiles on. Home takes the
+         shape as it loads; the reload waits for the slider to rest, so
+         holding a direction reloads it once, not at every step, and not
+         at all against either end. */
+      g_settings.shell_tiles_circular = true;
+      shellui_request_home_reload_after(400);
+      LOG_INFO("[HOME-TILES] rounding=%d%%",
+               g_settings.shell_tiles_corner_radius);
     }
   } else if (option.type == OptionType::SliderFloat) {
     float &target = float_target(option.id);
@@ -825,17 +838,16 @@ void activate(const Option &option) {
         notify("notify.fan.adjust_failed");
       request_save();
     }
-    if (option.id == OptionId::HomeFavorites) {
+    if (option.id == OptionId::HomeBookmark) {
       /* Home takes the tab in, or leaves it out, as it starts */
       request_save();
       shellui_request_home_reload();
-      LOG_INFO("[FOLDERS] favourites enabled=%d", target ? 1 : 0);
+      LOG_INFO("[BOOKMARK] enabled=%d", target ? 1 : 0);
     }
-    if (option.id == OptionId::HomeFolders) {
-      /* Home takes the folders in, or leaves them out, as it starts */
+    if (option.id == OptionId::OskGlyphKey) {
+      /* the keyboard takes it in when it is next laid out */
       request_save();
-      shellui_request_home_reload();
-      LOG_INFO("[FOLDERS] enabled=%d", target ? 1 : 0);
+      LOG_INFO("[OSK] glyph key enabled=%d", target ? 1 : 0);
     }
     if (option.id == OptionId::CustomizationEnabled) {
       request_save();
@@ -1059,10 +1071,10 @@ void activate(const Option &option) {
                                   : kReferenceHeight * 0.5f;
       (void)flush_save();
       break;
-    case OptionId::HomeFoldersManage:
-      /* the folders' own native menu, on Home once this one is gone */
+    case OptionId::HomeBookmarkRename:
+      /* the system's prompt, on Home once this menu is gone */
       Hide();
-      HomeFolders::RequestManage();
+      HomeBookmark::RequestRename();
       break;
     case OptionId::RefreshHome:
       // Keep the overlay open until ReloadApp consumes this Cross press. Its

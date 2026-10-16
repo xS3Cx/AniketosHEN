@@ -31,8 +31,6 @@ extern const unsigned char home_menu_internet_on_png_start[];
 extern const unsigned char home_menu_internet_on_png_end[];
 extern const unsigned char home_menu_internet_off_png_start[];
 extern const unsigned char home_menu_internet_off_png_end[];
-extern const unsigned char home_folder_png_start[];
-extern const unsigned char home_folder_png_end[];
 }
 
 namespace ControlCenterEntry {
@@ -397,13 +395,6 @@ const char *AniketosIconPath() {
   static bool tried = false;
   return embedded_image("aniketos_icon.png", aniketos_icon_png_start,
                         aniketos_icon_png_end, path, tried);
-}
-
-const char *HomeFolderIconPath() {
-  static char path[160];
-  static bool tried = false;
-  return embedded_image("home_folder.png", home_folder_png_start,
-                        home_folder_png_end, path, tried);
 }
 
 const char *ColorTrackPath(ColorTrack track) {

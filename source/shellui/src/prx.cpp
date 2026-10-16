@@ -25,7 +25,8 @@ along with this program; see the file COPYING. If not, see
 #include "aniketos_shell/system_dialogs.hpp"
 #include "aniketos_shell/home_menu.hpp"
 #include "aniketos_shell/home_tabs.hpp"
-#include "aniketos_shell/home_folders.hpp"
+#include "aniketos_shell/home_bookmark.hpp"
+#include "aniketos_shell/osk_glyphs.hpp"
 #include "aniketos_shell/screen_rotation.hpp"
 #include "aniketos_shell/home_js.hpp"
 #include <onion/distribution.h>
@@ -712,7 +713,8 @@ bool install_hooks(const ShellImages& img) {
   SystemDialogs::Install(img.pui);
   ControlCenterEntry::Install(img.react_pui);
   HomeTabs::Install(img.pui);
-  HomeFolders::Install();
+  HomeBookmark::Install();
+  OskGlyphs::Install();
   HomeJs::Install(img.react_pui);
 
   (void)install_optional_diag(

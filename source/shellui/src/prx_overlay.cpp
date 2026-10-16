@@ -3,7 +3,8 @@
 
 #include "aniketos_theme/toggle_styles.hpp"
 #include "aniketos_shell/home_tabs.hpp"
-#include "aniketos_shell/home_folders.hpp"
+#include "aniketos_shell/home_bookmark.hpp"
+#include "aniketos_shell/osk_glyphs.hpp"
 #include "aniketos_shell/home_particles.hpp"
 #include "aniketos_shell/home_video.hpp"
 #include "aniketos_shell/trophy_tools.hpp"
@@ -626,7 +627,8 @@ void OnRender_Hook(MonoObject* instance) {
   ControlCenterEntry::Tick();
   MigrationNotice::Tick();
   HomeTabs::Tick();
-  HomeFolders::Tick();
+  HomeBookmark::Tick();
+  OskGlyphs::Tick();
   HomeVideo::Tick();
   HomeParticles::Tick();
   TrophyTools::Tick();

@@ -122,7 +122,12 @@ struct HomeTileShapePatch {
   unsigned char *focus_radius = nullptr;
   unsigned char *icon_diameter = nullptr;
   unsigned char *focus_diameter = nullptr;
-  bool is_circular = false;
+};
+
+/* The bytes the two radius instructions take for one tile shape. */
+struct HomeTileShape {
+  unsigned char icon_radius = 0;
+  unsigned char focus_radius[8]{};
 };
 
 struct HomeTileContentClipPatch {
@@ -309,15 +314,13 @@ static bool locate_home_tile_content_clip_patch(
  * TileItem stores the 106px icon radius and its scaled 168px focus radius in
  * separate instructions. Find that constants module by its unique scale
  * double and verify all surrounding opcode/register bytes before writing.
+ * The radii themselves may hold any value an earlier load wrote, so they are
+ * only checked to fit their tile.
  */
 static bool locate_home_tile_shape_patch(const HbcView &hbc, size_t file_length,
                                          HomeTileShapePatch *out) {
   static constexpr unsigned char kExperienceScale[] = {0x7e, 0x0e, 0xa9, 0x09,
                                                        0xc6, 0x5b, 0xf9, 0x3f};
-  static constexpr unsigned char kStockFocusRadius[] = {0x7e, 0x0e, 0xa9, 0x09,
-                                                        0xc6, 0x5b, 0x39, 0x40};
-  static constexpr unsigned char kCircleFocusRadius[] = {
-      0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x55, 0x40};
   constexpr size_t kIconRadiusDelta = 0x4a;
   constexpr size_t kFocusRadiusDelta = 0x79;
   constexpr size_t kIconDiameterBack = 0x12;
@@ -327,9 +330,8 @@ static bool locate_home_tile_shape_patch(const HbcView &hbc, size_t file_length,
     return false;
   HomeTileShapePatch match{};
   unsigned matches = 0;
-  for (size_t offset = 2;
-       offset + kFocusRadiusDelta + sizeof(kStockFocusRadius) <= file_length;
-       ++offset) {
+  for (size_t offset = kIconDiameterBack;
+       offset + kFocusRadiusDelta + sizeof(double) <= file_length; ++offset) {
     if (memcmp(hbc.data + offset, kExperienceScale, sizeof(kExperienceScale)) !=
             0 ||
         hbc.data[offset - 2] != 0x6e || hbc.data[offset - 1] != 0x04 ||
@@ -340,18 +342,18 @@ static bool locate_home_tile_shape_patch(const HbcView &hbc, size_t file_length,
       continue;
     unsigned char *icon = hbc.data + offset + kIconRadiusDelta;
     unsigned char *focus = hbc.data + offset + kFocusRadiusDelta;
-    const bool stock = *icon == 16 && memcmp(focus, kStockFocusRadius,
-                                             sizeof(kStockFocusRadius)) == 0;
-    const bool circular =
-        *icon == 53 &&
-        memcmp(focus, kCircleFocusRadius, sizeof(kCircleFocusRadius)) == 0;
-    if (!stock && !circular)
+    const unsigned icon_diameter = hbc.data[offset - kIconDiameterBack];
+    const unsigned focus_diameter = hbc.data[offset - kFocusDiameterBack];
+    double focus_radius = 0.0;
+    memcpy(&focus_radius, focus, sizeof(focus_radius));
+    if (icon_diameter == 0 || focus_diameter == 0 ||
+        *icon > icon_diameter / 2 || !(focus_radius >= 0.0) ||
+        focus_radius > focus_diameter / 2.0)
       continue;
     match.icon_radius = icon;
     match.focus_radius = focus;
     match.icon_diameter = hbc.data + offset - kIconDiameterBack;
     match.focus_diameter = hbc.data + offset - kFocusDiameterBack;
-    match.is_circular = circular;
     ++matches;
   }
   if (matches != 1) {
@@ -362,21 +364,40 @@ static bool locate_home_tile_shape_patch(const HbcView &hbc, size_t file_length,
   return true;
 }
 
-static void apply_home_tile_shape_patch(const HomeTileShapePatch &patch,
-                                        bool circular) {
+/* The radii for a rounding of `percent` of a full circle, or Sony's 16px
+   corners for a negative one. The focus radius follows the icon radius by
+   the module's own focus/icon scale, which is how Sony derives it. */
+static HomeTileShape home_tile_shape_for(const HomeTileShapePatch &patch,
+                                         int percent) {
   static constexpr unsigned char kStockFocusRadius[] = {0x7e, 0x0e, 0xa9, 0x09,
                                                         0xc6, 0x5b, 0x39, 0x40};
-  const unsigned char icon_circle_radius =
-      static_cast<unsigned char>(*patch.icon_diameter / 2);
-  const double focus_circle_radius =
-      static_cast<double>(*patch.focus_diameter) / 2.0;
-  *patch.icon_radius = circular ? icon_circle_radius : 16;
-  if (circular) {
-    memcpy(patch.focus_radius, &focus_circle_radius,
-           sizeof(focus_circle_radius));
-  } else {
-    memcpy(patch.focus_radius, kStockFocusRadius, sizeof(kStockFocusRadius));
+  HomeTileShape shape{};
+  if (percent < 0) {
+    shape.icon_radius = 16;
+    memcpy(shape.focus_radius, kStockFocusRadius, sizeof(kStockFocusRadius));
+    return shape;
   }
+  const unsigned icon_diameter = *patch.icon_diameter;
+  const double focus_diameter = *patch.focus_diameter;
+  shape.icon_radius = static_cast<unsigned char>(
+      std::lround(std::min(percent, 100) * (icon_diameter / 2) / 100.0));
+  const double focus_radius =
+      shape.icon_radius * (focus_diameter / static_cast<double>(icon_diameter));
+  memcpy(shape.focus_radius, &focus_radius, sizeof(focus_radius));
+  return shape;
+}
+
+static bool home_tile_shape_is(const HomeTileShapePatch &patch,
+                               const HomeTileShape &shape) {
+  return *patch.icon_radius == shape.icon_radius &&
+         memcmp(patch.focus_radius, shape.focus_radius,
+                sizeof(shape.focus_radius)) == 0;
+}
+
+static void apply_home_tile_shape_patch(const HomeTileShapePatch &patch,
+                                        const HomeTileShape &shape) {
+  *patch.icon_radius = shape.icon_radius;
+  memcpy(patch.focus_radius, shape.focus_radius, sizeof(shape.focus_radius));
 }
 
 static void apply_home_tile_content_clip_patch(

@@ -3,7 +3,8 @@
 
 #include "hooked_funcs.hpp"
 #include "homeui_top_nav_patch.hpp"
-#include "aniketos_shell/home_folders.hpp"
+#include "aniketos_shell/content_info.hpp"
+#include "aniketos_shell/home_bookmark.hpp"
 #include "aniketos_shell/home_menu.hpp"
 #include "aniketos_shell/home_tabs.hpp"
 #include "aniketos_shell/trophy_tools.hpp"
@@ -102,9 +103,6 @@ void console_log_hook(MonoString *message, int level, void *a, void *b) {
     /* a choice in the Trophies app's options menu */
     if (text.compare(0, 16, "ANIKETOS:trophy|") == 0)
       TrophyTools::HandleScriptMessage(text.substr(16));
-    /* Options on a folder's tile */
-    if (text.compare(0, 16, "ANIKETOS:folder|") == 0)
-      HomeFolders::HandleScriptMessage(text.substr(16));
   }
   if (s_console_log_original)
     s_console_log_original(message, level, a, b);
@@ -145,10 +143,6 @@ bool eval(MonoObject *executor, const char *source, const char *url) {
 
 const char kInjectedScript[] =
 #include "home_inject_js.inc"
-    ;
-
-const char kLibraryScript[] =
-#include "library_inject_js.inc"
     ;
 
 const char *presence_name() {
@@ -201,18 +195,15 @@ void run_script_hook(MonoObject *executor, MonoObject *bundle) {
         ", icon: " + JsString(home ? AniketosIconPath() : "") +
         /* the presence dot to show on avatars while not online */
         ", presence: " + JsString(presence_name()) +
-        /* game folders in the Games row */
-        ", folders: " + (home && HomeFolders::Enabled() ? "true" : "false") +
-        /* the Favorites tab: its caption, empty for none */
-        ", favorites: " +
-        JsString(home && HomeFolders::FavoritesShown()
-                     ? std::string(HomeFolders::kFavoritesGlyph) + " " +
-                           toolbox_i18n::tr("home_tabs.favorites")
+        /* the bookmark tab: its caption (empty for none) and its name */
+        ", bookmark: " +
+        JsString(home && HomeBookmark::Shown()
+                     ? std::string(HomeBookmark::kGlyph) + " " +
+                           HomeBookmark::Name()
                      : std::string()) +
-        ", favoritesLabel: " + JsString(toolbox_i18n::tr("home_tabs.favorites")) +
-        ", favoritesLimit: " +
-        std::to_string(HomeFolders::kFavoritesContentLimit) +
-
+        ", bookmarkLabel: " + JsString(HomeBookmark::Name()) +
+        ", bookmarkLimit: " + std::to_string(HomeBookmark::kContentLimit) +
+        ", bookmarkWatch: " + (home && HomeBookmark::Enabled() ? "true" : "false") +
         "};";
     const bool ok = eval(executor, config.c_str(), "aniketos-config.js") &&
                     eval(executor, kInjectedScript, "aniketos-home.js");
@@ -236,22 +227,17 @@ void run_script_hook(MonoObject *executor, MonoObject *bundle) {
     unlink(kPending);
     LOG_INFO("[HOMEJS] injected into '%s' ok=%d", app.c_str(), ok ? 1 : 0);
   }
-  /* The Game Library: below a game folder's tile on Home, the folder's
-     titles alone. Like the Trophies app, guarded by the in-flight marker. */
-  if (!s_disabled && !exists(kOff) && HomeFolders::Enabled() &&
-      app.find("rnps-library") != std::string::npos) {
+  /* The Information screen of a game or app: AniketosHEN's rows under the
+     system's. Guarded like the Trophies app. */
+  if (!s_disabled && !exists(kOff) && g_settings.onionhen_game_opts &&
+      app.find("rnps-content-information") != std::string::npos) {
     const int fd = open(kPending, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd >= 0)
       close(fd);
-    const std::string config =
-        "globalThis.__aniketosLibrary = {marker: " +
-        std::to_string(HomeFolders::kLibraryContentLimit) +
-        ", emptyTitle: " + JsString(toolbox_i18n::tr("folders.empty_title")) +
-        ", emptyText: " + JsString(toolbox_i18n::tr("folders.empty_text")) +
-        "};";
+    const std::string config = ContentInfo::ScriptConfig();
     const bool ok =
-        eval(executor, config.c_str(), "aniketos-library-config.js") &&
-        eval(executor, kLibraryScript, "aniketos-library.js");
+        eval(executor, config.c_str(), "aniketos-info-config.js") &&
+        eval(executor, ContentInfo::InjectedScript(), "aniketos-info.js");
     unlink(kPending);
     LOG_INFO("[HOMEJS] injected into '%s' ok=%d", app.c_str(), ok ? 1 : 0);
   }

@@ -173,6 +173,9 @@ void settings_commit(bool reload_main = false, bool reload_util = false);
  * onion_ready files (those are daemon/process handshake only).
  */
 void shellui_request_home_reload(void);
+/* The same reload delay_ms after the last request, so a slider stepped
+ * repeatedly reloads Home once it rests. */
+void shellui_request_home_reload_after(int delay_ms);
 /** Drain the one-shot Home reload; call only from UI thread after hooks ready. */
 void shellui_poll_home_reload(void);
 /* The presence dot (home_js) is read by Home and Control Center when they

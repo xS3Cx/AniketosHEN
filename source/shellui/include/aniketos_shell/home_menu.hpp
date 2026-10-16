@@ -28,8 +28,6 @@ void Tick();
  * embedded in this module into our own data folder (never into a system
  * directory). Empty when it could not be written. */
 const char *AniketosIconPath();
-/* The tile of a game folder on Home, written next to it. */
-const char *HomeFolderIconPath();
 /* The globe shown beside the Internet switch: white while the connection is
  * enabled, red and struck through while it is off. */
 const char *InternetIconPath(bool enabled);

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <algorithm>
+
 #include <onion/settings.hpp>
 
 extern onion::Settings g_settings;
@@ -12,5 +14,15 @@ namespace AniketosTheme {
  * own setting were off; the settings themselves are kept for when it is
  * turned back on. The HEN button and the Emulators tab are not part of it. */
 inline bool CustomizationOn() { return g_settings.shell_customization_enabled; }
+
+/* How round the Home game tiles are, as a percentage of a full circle, or
+ * -1 when they keep Sony's shape: the rounded-tiles switch off, or the PS5
+ * case mockup on, which draws on the stock rectangular surface. */
+inline int TileRoundingPercent() {
+  if (!CustomizationOn() || !g_settings.shell_tiles_circular ||
+      g_settings.shell_tiles_ps5_case_mockup)
+    return -1;
+  return std::clamp(g_settings.shell_tiles_corner_radius, 0, 100);
+}
 
 } // namespace AniketosTheme

@@ -66,6 +66,8 @@ ONION_SHELL_SETTING_INT(shell_clock_time_g, 10)
 ONION_SHELL_SETTING_INT(shell_clock_time_r, 255)
 ONION_SHELL_SETTING_INT(shell_clock_weekday_style, 1)
 ONION_SHELL_SETTING_BOOL(shell_tiles_circular, true)
+/* rounding of the custom tile shape, percent of a full circle */
+ONION_SHELL_SETTING_INT(shell_tiles_corner_radius, 100)
 ONION_SHELL_SETTING_INT(shell_tiles_outline_animation, 0)
 ONION_SHELL_SETTING_INT(shell_tiles_outline_animation_speed, 100)
 ONION_SHELL_SETTING_INT(shell_tiles_outline_b, 20)
@@ -137,12 +139,12 @@ ONION_SHELL_SETTING_INT(home_particles_count, 110)
 /* The presence dot forced onto avatars in Home while not online: 0 as the
  * system has it, 1 online, 2 busy, 3 appearing offline (shellui: home_js). */
 ONION_SHELL_SETTING_INT(home_presence_dot, 0)
-/* Folders of games on Home's Games row, filled from a game's Options menu
- * (shellui: aniketos_shell/home_folders). */
-ONION_SHELL_SETTING_BOOL(home_folders, true)
-/* A Favorites tab on Home next to Emulators, filled from a game's Options
- * menu; shown while it holds a game (shellui: aniketos_shell/home_folders). */
-ONION_SHELL_SETTING_BOOL(home_favorites, true)
+/* A bookmark tab on Home after Emulators, named by the user and filled
+ * from a game's Options menu (shellui: aniketos_shell/home_bookmark). */
+ONION_SHELL_SETTING_BOOL(home_bookmark, true)
+/* A key after Shift on the system keyboard that turns the letter keys into
+ * pages of the console's glyphs (shellui: aniketos_shell/osk_glyphs). */
+ONION_SHELL_SETTING_BOOL(osk_glyph_key, true)
 /* The look of the system's on/off switches: 0 the system's own, 1 and up
  * the styles of shellui's aniketos_theme/toggle_styles. */
 ONION_SHELL_SETTING_INT(shell_toggle_style, 0)

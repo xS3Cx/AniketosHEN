@@ -8,7 +8,7 @@
 
 #include <onion/distribution.h>
 #include "aniketos_shell/akari_menu.hpp"
-#include "aniketos_shell/home_folders.hpp"
+#include "aniketos_shell/home_bookmark.hpp"
 #include "aniketos_shell/home_menu.hpp"
 
 #include "external_symbols.hpp"
@@ -258,13 +258,14 @@ enum class OptionId {
   HomeParticlesEnabled,
   HomeParticlesCount,
   HomePresenceDot,
-  HomeFolders,
-  HomeFoldersManage,
-  HomeFavorites,
+  HomeBookmark,
+  HomeBookmarkRename,
+  OskGlyphKey,
   ShellToggleStyle,
   ShellBackgroundReloadImage,
   ShellBackgroundParticles,
   ShellTilesCircular,
+  ShellTilesCornerRadius,
   ShellTilesPS5CaseMockup,
   ShellTilesOutlineEnabled,
   ShellTilesOutlineSyncBackground,

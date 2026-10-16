@@ -31,7 +31,9 @@ along with this program; see the file COPYING. If not, see
 #include <sys/stat.h>
 #include <unistd.h>
 #include <onion/distribution.h>
+#include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <stddef.h>
 #include <stdint.h>
 #include <string>
@@ -1302,26 +1304,31 @@ void patch_homeui_top_nav(unsigned char *buffer, int *size_ptr,
     any_change = any_change || !helper_already_applied;
   }
 
-  /* Circular tiles. The case-mockup frame draws on the stock rectangular
-     surface, so the two are never combined. */
-  const bool circle_tiles = (AniketosTheme::CustomizationOn() && g_settings.shell_tiles_circular) &&
-                            !g_settings.shell_tiles_ps5_case_mockup;
+  /* Rounded tiles: the user's rounding, up to a full circle, with the
+     artwork clipped to it. The case-mockup frame draws on the stock
+     rectangular surface, so the two are never combined. */
+  const int tile_rounding = AniketosTheme::TileRoundingPercent();
+  const bool custom_tiles = tile_rounding >= 0;
   HomeTileShapePatch tile_shape{};
   const bool tile_shape_ready =
       locate_home_tile_shape_patch(hbc, hbc_file_length, &tile_shape);
-  if (tile_shape_ready)
-    any_change = any_change || tile_shape.is_circular != circle_tiles;
+  HomeTileShape wanted_shape{};
+  if (tile_shape_ready) {
+    wanted_shape = home_tile_shape_for(tile_shape, tile_rounding);
+    any_change = any_change || !home_tile_shape_is(tile_shape, wanted_shape);
+  }
   HomeTileContentClipPatch tile_content_clip{};
   const bool tile_content_clip_ready = locate_home_tile_content_clip_patch(
       hbc, hbc_file_length, &tile_content_clip);
   if (tile_content_clip_ready)
     any_change = any_change ||
-                 tile_content_clip.tail_clipped != circle_tiles ||
-                 tile_content_clip.image_style_shared != circle_tiles;
-  LOG_INFO("home_tiles: circular=%d shape_site=%d (now %s) clip_site=%d",
-           circle_tiles ? 1 : 0, tile_shape_ready ? 1 : 0,
-           tile_shape_ready ? (tile_shape.is_circular ? "circle" : "stock")
-                            : "n/a",
+                 tile_content_clip.tail_clipped != custom_tiles ||
+                 tile_content_clip.image_style_shared != custom_tiles;
+  LOG_INFO("home_tiles: rounding=%d shape_site=%d (radius now %d, wanted %d) "
+           "clip_site=%d",
+           tile_rounding, tile_shape_ready ? 1 : 0,
+           tile_shape_ready ? static_cast<int>(*tile_shape.icon_radius) : -1,
+           tile_shape_ready ? static_cast<int>(wanted_shape.icon_radius) : -1,
            tile_content_clip_ready ? 1 : 0);
 
   if (!any_change) {
@@ -1340,16 +1347,17 @@ void patch_homeui_top_nav(unsigned char *buffer, int *size_ptr,
   if (bytes.requires_image_source_object) {
     apply_patch(hbc, kImageSourceHelperPatch);
   }
-  if (tile_shape_ready && tile_shape.is_circular != circle_tiles) {
-    apply_home_tile_shape_patch(tile_shape, circle_tiles);
-    LOG_INFO("home_tiles: shape=%s applied", circle_tiles ? "circle" : "stock");
+  if (tile_shape_ready && !home_tile_shape_is(tile_shape, wanted_shape)) {
+    apply_home_tile_shape_patch(tile_shape, wanted_shape);
+    LOG_INFO("home_tiles: shape radius=%u applied",
+             static_cast<unsigned>(wanted_shape.icon_radius));
   }
   if (tile_content_clip_ready &&
-      (tile_content_clip.tail_clipped != circle_tiles ||
-       tile_content_clip.image_style_shared != circle_tiles)) {
-    apply_home_tile_content_clip_patch(tile_content_clip, circle_tiles);
+      (tile_content_clip.tail_clipped != custom_tiles ||
+       tile_content_clip.image_style_shared != custom_tiles)) {
+    apply_home_tile_content_clip_patch(tile_content_clip, custom_tiles);
     LOG_INFO("home_tiles: content mask=%s applied",
-             circle_tiles ? "circle" : "stock");
+             custom_tiles ? "rounded" : "stock");
   }
   update_hbc_footer_sha1(hbc, hbc_file_length);
 

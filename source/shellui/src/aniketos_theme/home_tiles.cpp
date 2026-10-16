@@ -743,8 +743,8 @@ bool draw_arc(MonoObject *parent, const std::string &text, float diameter,
 }
 
 void render_arc_badge(MonoObject *react_layer) {
-  if (!react_layer || !(AniketosTheme::CustomizationOn() && g_settings.shell_tiles_circular) ||
-      g_settings.shell_tiles_ps5_case_mockup ||
+  // The arcs follow a full circle; any other rounding keeps Sony's labels.
+  if (!react_layer || AniketosTheme::TileRoundingPercent() != 100 ||
       s_arc_rendered.find(react_layer) != s_arc_rendered.end())
     return;
   ArcBadge resolved_badge;
@@ -896,14 +896,17 @@ void sync_render_param_hook(MonoObject *instance) {
   }
 }
 
+/* The tile focus outline's corner, matching the shape the HomeUI patch
+   gives the tile (homeui_home_tiles.inc): the 106px icon's whole-pixel
+   radius scaled to the 168px focus frame. */
 void apply_radius(MonoObject *settings) {
   if (!settings || !s_set_rounded_radius)
     return;
-  const NullableFloat radius{1, {0, 0, 0},
-                             ((AniketosTheme::CustomizationOn() && g_settings.shell_tiles_circular) &&
-                              !g_settings.shell_tiles_ps5_case_mockup)
-                                 ? 84.0f
-                                 : 25.35849f};
+  constexpr float kFocusScale = 168.0f / 106.0f;
+  const int rounding = AniketosTheme::TileRoundingPercent();
+  const float icon_radius =
+      rounding < 0 ? 16.0f : std::round(rounding * 53 / 100.0f);
+  const NullableFloat radius{1, {0, 0, 0}, icon_radius * kFocusScale};
   s_set_rounded_radius(settings, radius);
 }
 

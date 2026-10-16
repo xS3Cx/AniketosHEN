@@ -6,7 +6,7 @@
 #include "external_symbols.hpp"
 #include "toolbox_i18n.hpp"
 #include "aniketos_shell/trophy_tools.hpp"
-#include "aniketos_shell/home_folders.hpp"
+#include "aniketos_shell/home_bookmark.hpp"
 #include <onion/platform.h>
 #include <onion/system_tmp.h>
 #include <string>
@@ -169,41 +169,29 @@ void createJson_hook(MonoObject* inst, MonoObject* array, MonoString* id, MonoSt
                Mono_to_String(messageId).c_str());
 #endif
 
-    /* Favorites and game folders on Home: just above "Delete", which every
-       game and app of the user's has and the system's own tiles do not. */
+    /* The bookmark tab on Home: just above "Delete", which every game and
+       app of the user's has and the system's own tiles do not. */
     if (id_str == "MENU_ID_APPLICATION_DELETE") {
         const std::string title = menu_entry_title(Mono_to_String(actionUrl));
         if (!title.empty())
             g_ui.current_menu_tid = title;
-        if (HomeFolders::FavoriteAllowed(title)) {
-            const bool favorite = HomeFolders::IsFavorite(title);
+        if (HomeBookmark::Allowed(title)) {
+            const bool in = HomeBookmark::Contains(title);
+            const std::string name = HomeBookmark::Name();
+            /* "Add to Bookmark" until it exists, then its own name */
+            std::string text = toolbox_i18n::tr(
+                in ? "bookmark.menu_remove"
+                   : name.empty() ? "bookmark.menu_add" : "bookmark.menu_add_to");
+            const size_t at = text.find("%s");
+            if (at != std::string::npos)
+                text.replace(at, 2, name);
             createJson(inst, array,
+                       mono_string_new(Root_Domain, "MENU_ID_ANIKETOS_BOOKMARK"),
+                       mono_string_new(Root_Domain, text.c_str()),
                        mono_string_new(Root_Domain,
-                                       "MENU_ID_ANIKETOS_FAVORITE"),
-                       mono_string_new(Root_Domain,
-                                       toolbox_i18n::tr(favorite
-                                           ? "favorites.menu_remove"
-                                           : "favorites.menu_add")),
-                       mono_string_new(Root_Domain,
-                                       favorite ? HomeFolders::kFavoriteRemoveUri
-                                                : HomeFolders::kFavoriteAddUri),
+                                       in ? HomeBookmark::kRemoveUri
+                                          : HomeBookmark::kAddUri),
                        actionId, nullptr, subMenu, enable);
-        }
-        if (HomeFolders::Fileable(title)) {
-            createJson(inst, array,
-                       mono_string_new(Root_Domain, "MENU_ID_ANIKETOS_FOLDER_ADD"),
-                       mono_string_new(Root_Domain,
-                                       toolbox_i18n::tr("folders.menu_add")),
-                       mono_string_new(Root_Domain, HomeFolders::kAddUri),
-                       actionId, nullptr, subMenu, enable);
-            if (HomeFolders::InFolder(title))
-                createJson(inst, array,
-                           mono_string_new(Root_Domain,
-                                           "MENU_ID_ANIKETOS_FOLDER_REMOVE"),
-                           mono_string_new(Root_Domain,
-                                           toolbox_i18n::tr("folders.menu_remove")),
-                           mono_string_new(Root_Domain, HomeFolders::kRemoveUri),
-                           actionId, nullptr, subMenu, enable);
         }
     }
 

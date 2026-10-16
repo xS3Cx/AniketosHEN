@@ -394,6 +394,12 @@ void ReloadRNPSApp(const char* title_id){
     }
 }
 
+static int64_t steady_ms() {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+             std::chrono::steady_clock::now().time_since_epoch())
+      .count();
+}
+
 void shellui_request_home_reload(void) {
   if (g_home_reload_pending.exchange(true, std::memory_order_acq_rel)) {
     return;
@@ -401,7 +407,20 @@ void shellui_request_home_reload(void) {
   LOG_DEBUG("queued NPXS40002 home reload for next UI tick");
 }
 
+/* Milliseconds on the steady clock at which a delayed Home reload is due;
+   0 when none is. */
+static std::atomic<int64_t> g_home_reload_due{0};
+
+void shellui_request_home_reload_after(int delay_ms) {
+  g_home_reload_due.store(steady_ms() + delay_ms, std::memory_order_release);
+}
+
 void shellui_poll_home_reload(void) {
+  int64_t due = g_home_reload_due.load(std::memory_order_acquire);
+  if (due != 0 && steady_ms() >= due &&
+      g_home_reload_due.compare_exchange_strong(due, 0,
+                                                std::memory_order_acq_rel))
+    g_home_reload_pending.store(true, std::memory_order_release);
   if (!g_home_reload_pending.exchange(false, std::memory_order_acq_rel)) {
     return;
   }
@@ -412,12 +431,6 @@ void shellui_poll_home_reload(void) {
 /* Milliseconds on the steady clock at which the presence-dot reload is due;
    0 when none is. */
 static std::atomic<int64_t> g_presence_reload_due{0};
-
-static int64_t steady_ms() {
-  return std::chrono::duration_cast<std::chrono::milliseconds>(
-             std::chrono::steady_clock::now().time_since_epoch())
-      .count();
-}
 
 static std::atomic<bool> g_presence_reload_home{false};
 

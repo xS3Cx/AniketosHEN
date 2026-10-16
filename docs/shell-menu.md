@@ -91,50 +91,101 @@ behind the Home screen.
   switched on again in the menu. A file named `no_home_video` in
   `/data/AniketosHEN` disables the feature regardless of settings.
 
-## Game folders
+## Game tile shape
 
-Games and apps on Home's Games row can be grouped into folders.
+*Appearance → System customize → Game tiles → Rounded game tiles* replaces
+Sony's rounded squares on Home, and *Tile rounding %* sets how round they
+are: 0 is square, about 30 is Sony's own corner, 100 (the default) a full
+circle. Home reloads with the new shape shortly after the slider stops, so
+holding a direction reloads it once; moving the slider also turns the
+rounded tiles on.
 
-- **Using them:** a game's Options menu has *Add to Folder* (and *Remove
-  from Folder* for a game in one). It opens a native menu of the folders,
-  with *New Folder…* (the system keyboard asks for the name) and *Manage
-  Folders* (rename, delete). A folder is a tile in the row after the system's
-  own tiles; the games in it leave the row. Options on a folder's tile
-  renames or deletes it. Down on a folder's tile, or pressing it, shows the
-  folder's games below it as the Game Library's native grid; they launch
-  and have their Options menu as usual, and Circle goes back up. Deleting a
-  folder only puts its games back in the row.
-- **Settings:** *Appearance → System customize → Game tiles → Game folders*
-  (`home_folders` in `[shell_menu]`, on by default) and *Manage game
-  folders*, which lists every folder to rename or delete, also while the
-  folders are switched off. The folders themselves are kept in
-  `/data/AniketosHEN/home_folders.json`.
-- **How it works:** `home_folders.cpp` adds the Options entries
-  (`hook_launch.cpp`) and shows the menus and prompt (`system_dialogs.cpp`).
-  The query hook of `home_tabs.cpp` leaves the folders' titles out of the
-  Games row. The script in Home (`home_inject_js.inc`) adds the folder tiles
-  to the row's data and reads the folders through Home's registry module,
-  whose `Get` is hooked for one key. A folder tile's hub is the Game Library
-  with the folder in its parameters; the script put into that library
-  (`library_inject_js.inc`) marks its lists for the query hook, which keeps
-  only the folder's titles, and leaves out its tabs. Everything is found by
-  name at run time; the system's own app database is only read, never
-  written.
+- **Settings:** `shell_tiles_circular` (on/off) and
+  `shell_tiles_corner_radius` (percent) in `[shell_menu]`. The PS5 case
+  mockup, or the customization switch off, keeps the stock shape.
+- **How it works:** `homeui_home_tiles.inc` edits two constants in HomeUI's
+  Hermes bytecode as the bundle loads: the 106px icon's corner radius and
+  the 168px focus frame's, scaled by Sony's own factor, and clips the
+  artwork to that corner. The focus outline drawn by `home_tiles.cpp` takes
+  the same radius.
+
+## Bookmark tab
+
+A game's Options menu has *Add to Bookmark*. The first time, the system
+keyboard asks for a name: the bookmark becomes a tab of its own after
+Emulators, captioned with a star and that name, holding a row of the games
+added to it (they stay in the Games row too). After that the entry reads
+*Add to <name>*, and *Remove from <name>* for a game already in it. One
+bookmark for now; removing its last game removes it. L1 and R1 move through
+all the tabs (Games, Media, Emulators, the bookmark).
+
+- **Settings:** *Appearance → System customize → Game tiles → Bookmark tab*
+  (`home_bookmark` in `[shell_menu]`, on by default) and *Rename bookmark*.
+  The bookmark is kept in `/data/AniketosHEN/home_bookmark.json`.
+- **How it works:** `home_bookmark.cpp` adds the Options entries
+  (`hook_launch.cpp`) and asks for the name (`system_dialogs.cpp`). The tab
+  is made the same way as Emulators: the script in Home
+  (`home_inject_js.inc`) adds the space, and the query hook of
+  `home_tabs.cpp` gives its list the bookmark's title ids. Home is reloaded
+  when the tab comes, goes or is renamed; while it is there, its row is
+  fetched again when it changes (the script follows a revision read through
+  Home's registry module). The system's own app database is only read.
 - **Safety:** with the setting off, or `no_home_js` in `/data/AniketosHEN`,
-  Home and the Game Library stay as the system has them.
+  Home stays as the system has it.
 
-## Favorites tab
+## More on the Information screen
 
-A game's Options menu has *Add to Favorites* (*Remove from Favorites* once
-it is one). The favourites are a tab of their own after Emulators, captioned
-with a heart, holding a row of those games; they stay in the Games row too.
-The tab is there while it holds a game: Home refreshes once when the first
-game is added and when the last one is removed. L1 and R1 move through all
-the tabs (Games, Media, Emulators, Favorites). *Appearance → System
-customize → Game tiles → Favorites tab* (`home_favorites`) switches it off.
-The list is kept with the folders in `/data/AniketosHEN/home_folders.json`;
-the tab is made the same way as Emulators (`home_inject_js.inc` adds the
-space, `home_tabs.cpp` gives its query the favourites' title ids).
+A game's or app's *Options → Information* lists, under the system's rows,
+rows of AniketosHEN's own, each label starting with a star: Title ID,
+Content ID, region (from the Content ID), platform, master version (PS4),
+required system software, SDK version (PS5), installation path, the folder a
+dumped game is mounted from (its `mount.lnk`), metadata path, install time
+and last use. A row whose value the system does not have is left out. Times
+are the console's local time.
+
+- **Settings:** it follows *AniketosHEN game options* (`onionhen_game_opts`),
+  like the entries in the Options menu.
+- **How it works:** the screen is its own React Native app
+  (`rnps-content-information`, NPXS40017), started anew for every title with
+  `pscontentinfo:info?titleId=...`. `home_js.cpp` evaluates
+  `content_info_inject_js.inc` before its bundle, with the labels and the
+  `/user/app/*/mount.lnk` targets from `content_info.cpp`. The script reads
+  the title from the URL the app was opened with (`LinkingPS.initialURL`),
+  the values from the app database through the module the screen itself
+  uses (`AppInfoOperation.getAppInfo`, keys of `appinfo.db`), and appends
+  its rows to the list the screen draws (`infoList`), made from the
+  screen's own first row. Nothing is written.
+- **Safety:** `no_home_js` in `/data/AniketosHEN` leaves the screen as the
+  system has it.
+
+## Glyph key on the system keyboard
+
+The system keyboard gets a key with the PlayStation logo right after Shift,
+which gives up a third of its width for it. Pressing it puts the console's
+own glyphs (the private-use characters of the system font: buttons, logos,
+icons) on the letter keys, one page at a time, and its label shows the page
+(`1/8`). Pressing it on the last page, or Shift, @#: or the accent key, brings
+the letters back. A glyph key types its character like any letter.
+
+- **Settings:** *Appearance → System customize → Glyph key on keyboard*
+  (`osk_glyph_key` in `[shell_menu]`, on by default). It is taken in the
+  next time a keyboard opens.
+- **How it works:** `osk_glyphs.cpp` hooks the keyboard's own classes in
+  `Sce.Vsh.ShellUI.Ime` by name. The key is one more entry in the function
+  area's layout list (`FunctionAreaPanel.AddBasedOnLanguageArea`) and one
+  more model in its button map, bound by the system like the others
+  (`FunctionKeyAreaPresenter.SetBindings`); the system never passes that
+  model a press, so the confirm button on the key is taken in PUI's
+  `Widget.OnKeyEvent`. A page is put on the keys the
+  language has just filled (`MainKeyAreaModel.UpdateKeycodeInfo`): each key
+  becomes a copy of the letter there with the glyph as its label and text and
+  no key code. The glyph list is `osk_glyph_table.inc`.
+- **Safety:** a file `no_osk_glyphs` in `/data/AniketosHEN` leaves the keyboard
+  as the system has it. If ShellUI stops within seconds of the key being laid
+  out for the first time in a run, the key is left out for the next run.
+- **Known limit:** the system's IME engine keeps the glyphs while the text is
+  being typed (preedit) but drops them when it confirms the text, so they do
+  not reach the field yet.
 
 ## Performance
 

@@ -5,7 +5,7 @@
 #include "controller_tools.hpp"
 #include "aniketos_shell/shell_manager.hpp"
 #include "aniketos_shell/trophy_tools.hpp"
-#include "aniketos_shell/home_folders.hpp"
+#include "aniketos_shell/home_bookmark.hpp"
 #include <onion/distribution.h>
 #include "hooked_funcs.hpp"
 #include "debug_settings_route_runtime.hpp"
@@ -96,7 +96,7 @@ bool handle_uri_boot_common(MonoString* uri, int opt, MonoString* titleIdForBoot
     if (!shellui_hooks_are_ready())
       return boot_orig ? boot_orig(uri, opt, titleIdForBootAction) : false;
 
-    if (HomeFolders::HandleUri(Mono_to_String(uri), g_ui.current_menu_tid))
+    if (HomeBookmark::HandleUri(Mono_to_String(uri), g_ui.current_menu_tid))
       return true;
     if (Mono_to_String(uri) == TrophyTools::kUnlockAllUri) {
       TrophyTools::RequestUnlockAll(g_ui.current_menu_tid);
@@ -136,7 +136,7 @@ bool handle_uri_boot_common(MonoString* uri, int opt, MonoString* titleIdForBoot
   #if SHELL_DEBUG==1
     LOG_DEBUG("uri_boot_hook_2: %s, opt: %i", original_uri.c_str(), opt);
   #endif
-    if (HomeFolders::HandleUri(original_uri, g_ui.current_menu_tid))
+    if (HomeBookmark::HandleUri(original_uri, g_ui.current_menu_tid))
       return true;
     if (original_uri == TrophyTools::kUnlockAllUri) {
       TrophyTools::RequestUnlockAll(g_ui.current_menu_tid);
