@@ -1,11 +1,17 @@
-/* Circular home tiles: Hermes-bytecode edits applied to the HomeUI bundle
- * together with the top-nav patch.
+/* Rounded Home tiles: Hermes-bytecode edits applied to the HomeUI bundle
+ * next to the top-nav patch, on any firmware whose HomeUI is Hermes bytecode.
  *
- * Both edits are located by instruction structure and string-table ids, never
- * by function number or file offset, and each is applied only when exactly
- * one site matches; otherwise the tiles keep Sony's rounded-square shape.
- * Included by homeui_top_nav_patch.cpp (same translation unit: it shares
- * HbcView and the bounds helpers). */
+ * Nothing here belongs to one firmware. Both sites are found by the export
+ * and style names their instructions use (looked up in the bundle's own
+ * string table), by the registers those instructions pass between them and
+ * by values that must agree with each other; the opcodes are learned from
+ * the matched instructions themselves. No file offset, function number,
+ * register number or bytecode version's opcode numbering is assumed, so a
+ * rebuilt HomeUI is still found (13.x added a style to the tile stylesheet,
+ * which moved every register). Each edit is applied only when exactly one
+ * site matches; otherwise the tiles keep Sony's shape. Included by
+ * homeui_top_nav_patch.cpp (same translation unit: it shares HbcView and the
+ * bounds helpers). */
 
 static uint16_t read_u16le(const unsigned char *p) {
   return static_cast<uint16_t>(p[0]) |
@@ -23,14 +29,18 @@ static size_t align_up(size_t value, size_t alignment) {
   return (value + alignment - 1) & ~(alignment - 1);
 }
 
-/*
- * Resolve Hermes string IDs from the bytecode's own string table. IDs are
- * deliberately not copied from one firmware: HomeUI rebundles can reorder the
- * table while retaining the same component structure.
- */
-static bool find_hbc_string_id(const HbcView &hbc, const char *wanted,
-                               uint16_t *out) {
-  if (!wanted || !out || hbc.size < 128)
+/* The bundle's string table: string id i is entry i. */
+struct HbcStringTable {
+  const unsigned char *entries = nullptr;
+  const unsigned char *overflow = nullptr;
+  const unsigned char *storage = nullptr;
+  uint32_t count = 0;
+  uint32_t overflow_count = 0;
+  uint32_t storage_size = 0;
+};
+
+static bool read_hbc_string_table(const HbcView &hbc, HbcStringTable *out) {
+  if (!out || hbc.size < 128)
     return false;
   const uint32_t version = read_u32le(hbc.data + kHbcVersionOffset);
   if (version < 56 || version >= 97)
@@ -42,12 +52,10 @@ static bool find_hbc_string_id(const HbcView &hbc, const char *wanted,
   const uint32_t string_count = read_u32le(hbc.data + 52);
   const uint32_t overflow_count = read_u32le(hbc.data + 56);
   const uint32_t string_storage_size = read_u32le(hbc.data + 60);
-  if (string_count > UINT16_MAX)
-    return false;
 
-  // Packed BytecodeFileHeader, followed by 32-byte alignment. All supported
-  // PS5 HomeUI profiles currently use v89; the layout below also covers the
-  // earlier public Hermes layouts from v56 through v96.
+  // Packed BytecodeFileHeader, followed by 32-byte alignment. Every PS5
+  // HomeUI seen so far is v89; the layout below also covers the earlier
+  // public Hermes layouts from v56 through v96.
   size_t header_size = 64;
   if (version >= 87)
     header_size += 8; // bigint count and storage size
@@ -77,39 +85,46 @@ static bool find_hbc_string_id(const HbcView &hbc, const char *wanted,
   if (cursor == SIZE_MAX || !advance(identifier_count, 4))
     return false;
   cursor = align_up(cursor, 4);
-  if (cursor == SIZE_MAX || !range_contains(hbc.size, cursor,
-                                             static_cast<size_t>(string_count) * 4))
+  out->entries = hbc.data + cursor;
+  if (cursor == SIZE_MAX || !advance(string_count, 4))
     return false;
-  const unsigned char *small_table = hbc.data + cursor;
-  cursor += static_cast<size_t>(string_count) * 4;
   cursor = align_up(cursor, 4);
-  if (cursor == SIZE_MAX || !range_contains(hbc.size, cursor,
-                                             static_cast<size_t>(overflow_count) * 8))
+  out->overflow = hbc.data + cursor;
+  if (cursor == SIZE_MAX || !advance(overflow_count, 8))
     return false;
-  const unsigned char *overflow_table = hbc.data + cursor;
-  cursor += static_cast<size_t>(overflow_count) * 8;
   cursor = align_up(cursor, 4);
   if (cursor == SIZE_MAX ||
       !range_contains(hbc.size, cursor, string_storage_size))
     return false;
-  const unsigned char *storage = hbc.data + cursor;
-  const size_t wanted_len = strlen(wanted);
+  out->storage = hbc.data + cursor;
+  out->count = string_count;
+  out->overflow_count = overflow_count;
+  out->storage_size = string_storage_size;
+  return true;
+}
 
-  for (uint32_t id = 0; id < string_count; ++id) {
-    const uint32_t entry = read_u32le(small_table + id * 4);
-    const bool utf16 = (entry & 1u) != 0;
+/* The id of an ASCII string. Only ids a 16-bit operand can hold are looked
+   at: the instructions matched below never use wider ones. */
+static bool hbc_string_id(const HbcStringTable &table, const char *wanted,
+                          uint16_t *out) {
+  const size_t wanted_len = strlen(wanted);
+  const uint32_t count = std::min<uint32_t>(table.count, UINT16_MAX + 1u);
+  for (uint32_t id = 0; id < count; ++id) {
+    const uint32_t entry = read_u32le(table.entries + id * 4);
+    if (entry & 1u)
+      continue; // UTF-16
     uint32_t offset = (entry >> 1) & 0x7fffffu;
     uint32_t length = entry >> 24;
     if (length == 0xffu) {
-      if (offset >= overflow_count)
+      if (offset >= table.overflow_count)
         continue;
-      offset = read_u32le(overflow_table + offset * 8);
-      length = read_u32le(overflow_table + ((entry >> 1) & 0x7fffffu) * 8 + 4);
+      length = read_u32le(table.overflow + offset * 8 + 4);
+      offset = read_u32le(table.overflow + offset * 8);
     }
-    if (utf16 || length != wanted_len || offset > string_storage_size ||
-        length > string_storage_size - offset)
+    if (length != wanted_len || offset > table.storage_size ||
+        length > table.storage_size - offset)
       continue;
-    if (memcmp(storage + offset, wanted, wanted_len) == 0) {
+    if (memcmp(table.storage + offset, wanted, wanted_len) == 0) {
       *out = static_cast<uint16_t>(id);
       return true;
     }
@@ -117,11 +132,203 @@ static bool find_hbc_string_id(const HbcView &hbc, const char *wanted,
   return false;
 }
 
+/* The names both sites are found by, as string ids of this bundle. */
+struct HomeTileNames {
+  /* TileItem's constants module exports */
+  uint16_t experience_size = 0;
+  uint16_t scaled_exp_size = 0;
+  uint16_t experience_scale = 0;
+  uint16_t border_radius_export = 0;
+  /* style properties and stylesheet keys */
+  uint16_t border_radius = 0;
+  uint16_t focus_container = 0;
+  uint16_t width = 0;
+  uint16_t height = 0;
+  uint16_t position = 0;
+  uint16_t overflow = 0;
+  uint16_t image_wrapper = 0;
+  uint16_t image = 0;
+  uint16_t telemetry_container = 0;
+  /* style values */
+  uint16_t relative = 0;
+  uint16_t hidden = 0;
+};
+
+/* Whether the bundle is HomeUI's (only it names its own title id and the
+   tile constants), and the ids of every name below. */
+static bool resolve_home_tile_names(const HbcView &hbc, HomeTileNames *names) {
+  HbcStringTable table{};
+  uint16_t title = 0;
+  if (!read_hbc_string_table(hbc, &table) ||
+      !hbc_string_id(table, "NPXS40002", &title) ||
+      !hbc_string_id(table, "EXPERIENCE_SCALE", &names->experience_scale))
+    return false;
+  const struct {
+    const char *text;
+    uint16_t *id;
+  } wanted[] = {
+      {"EXPERIENCE_SIZE", &names->experience_size},
+      {"SCALED_EXP_SIZE", &names->scaled_exp_size},
+      {"BORDER_RADIUS", &names->border_radius_export},
+      {"borderRadius", &names->border_radius},
+      {"focusContainer", &names->focus_container},
+      {"width", &names->width},
+      {"height", &names->height},
+      {"position", &names->position},
+      {"overflow", &names->overflow},
+      {"imageWrapper", &names->image_wrapper},
+      {"image", &names->image},
+      {"telemetryContainer", &names->telemetry_container},
+      {"relative", &names->relative},
+      {"hidden", &names->hidden},
+  };
+  for (const auto &name : wanted) {
+    if (!hbc_string_id(table, name.text, name.id)) {
+      LOG_WARN("home_tiles: HomeUI has no string '%s'; tiles keep their shape",
+               name.text);
+      return false;
+    }
+  }
+  return true;
+}
+
+/* An opcode learned from the first instruction of its kind a site matched;
+   every later instruction of that kind in the site must carry the same one. */
+struct LearnedOpcode {
+  int value = -1;
+  bool take(unsigned char op) {
+    if (value < 0)
+      value = op;
+    return value == op;
+  }
+  bool is(unsigned char op) const { return value >= 0 && value == op; }
+};
+
+/* Instructions that name a property come in a u8-id ("Short") and a u16-id
+   form. Hermes always emits the narrowest form that holds the id, and each
+   form has its own opcode. */
+struct LearnedNamedOpcode {
+  LearnedOpcode narrow;
+  LearnedOpcode wide;
+  LearnedOpcode &form(uint16_t id) { return id <= UINT8_MAX ? narrow : wide; }
+};
+
+static size_t id_width(uint16_t id) { return id <= UINT8_MAX ? 1 : 2; }
+
+static uint16_t read_id(const unsigned char *p, size_t width) {
+  return width == 1 ? p[0] : read_u16le(p);
+}
+
+static bool room(const unsigned char *p, const unsigned char *end, size_t n) {
+  return p <= end && static_cast<size_t>(end - p) >= n;
+}
+
+/* Each matcher below returns the instruction's length, or 0 when the bytes
+   at `p` are not that instruction. An opcode is learned only on a match. */
+
+/* NewObject dst */
+static size_t new_object_at(const unsigned char *p, const unsigned char *end,
+                            LearnedOpcode &op, unsigned char *dst) {
+  LearnedOpcode learned = op;
+  if (!room(p, end, 2) || !learned.take(p[0]))
+    return 0;
+  op = learned;
+  *dst = p[1];
+  return 2;
+}
+
+/* GetById(Short) dst, object, cache, id */
+static size_t get_by_id_at(const unsigned char *p, const unsigned char *end,
+                           uint16_t id, LearnedNamedOpcode &op,
+                           unsigned char *dst, unsigned char *object) {
+  const size_t width = id_width(id);
+  LearnedOpcode learned = op.form(id);
+  if (!room(p, end, 4 + width) || read_id(p + 4, width) != id ||
+      !learned.take(p[0]))
+    return 0;
+  op.form(id) = learned;
+  *dst = p[1];
+  *object = p[2];
+  return 4 + width;
+}
+
+/* PutNewOwnById(Short) object, value, id */
+static size_t new_own_at(const unsigned char *p, const unsigned char *end,
+                         uint16_t id, LearnedNamedOpcode &op,
+                         unsigned char *object, unsigned char *value) {
+  const size_t width = id_width(id);
+  LearnedOpcode learned = op.form(id);
+  if (!room(p, end, 3 + width) || read_id(p + 3, width) != id ||
+      !learned.take(p[0]))
+    return 0;
+  op.form(id) = learned;
+  *object = p[1];
+  *value = p[2];
+  return 3 + width;
+}
+
+/* Any PutNewOwnById(Short) on `object`, in a form already learned. */
+static size_t any_new_own_at(const unsigned char *p, const unsigned char *end,
+                             const LearnedNamedOpcode &op, unsigned char object,
+                             unsigned char *value) {
+  if (!room(p, end, 1))
+    return 0;
+  const size_t width = op.narrow.is(p[0]) ? 1 : op.wide.is(p[0]) ? 2 : 0;
+  if (!width || !room(p, end, 3 + width) || p[1] != object)
+    return 0;
+  *value = p[2];
+  return 3 + width;
+}
+
+/* LoadConstString dst, id */
+static size_t load_string_at(const unsigned char *p, const unsigned char *end,
+                             uint16_t id, LearnedOpcode &op,
+                             unsigned char *dst) {
+  LearnedOpcode learned = op;
+  if (!room(p, end, 4) || read_u16le(p + 2) != id || !learned.take(p[0]))
+    return 0;
+  op = learned;
+  *dst = p[1];
+  return 4;
+}
+
+/* One export of TileItem's constants module, `exports.ID = <constant>`:
+   LoadConstUInt8|LoadConstDouble rV, constant; PutById rExports, rV, cache,
+   ID. Returns the constant's address, or null. */
+static unsigned char *export_at(unsigned char *p, const unsigned char *end,
+                                uint16_t id, size_t constant_size,
+                                LearnedOpcode &load, LearnedOpcode &put,
+                                int &exports) {
+  const size_t store = 2 + constant_size;
+  LearnedOpcode learned_load = load;
+  LearnedOpcode learned_put = put;
+  if (!room(p, end, store + 6) || read_u16le(p + store + 4) != id ||
+      p[store + 2] != p[1] || (exports >= 0 && p[store + 1] != exports) ||
+      !learned_load.take(p[0]) || !learned_put.take(p[store]) ||
+      learned_load.value == learned_put.value)
+    return nullptr;
+  load = learned_load;
+  put = learned_put;
+  exports = p[store + 1];
+  return p + 2;
+}
+
+static double read_double(const unsigned char *p) {
+  double value = 0.0;
+  memcpy(&value, p, sizeof(value));
+  return value;
+}
+
+/* How far from EXPERIENCE_SIZE's export the rest of TileItem's constants
+   module, and the tile stylesheet's keys from its image style, may lie. */
+constexpr size_t kTileConstantsWindow = 0x400;
+constexpr size_t kTileStylesWindow = 0x100;
+
 struct HomeTileShapePatch {
-  unsigned char *icon_radius = nullptr;
-  unsigned char *focus_radius = nullptr;
-  unsigned char *icon_diameter = nullptr;
-  unsigned char *focus_diameter = nullptr;
+  unsigned char *icon_radius = nullptr;  /* BORDER_RADIUS's u8 */
+  unsigned char *focus_radius = nullptr; /* the focus frame's double */
+  unsigned icon_diameter = 0;            /* EXPERIENCE_SIZE */
+  unsigned focus_diameter = 0;           /* SCALED_EXP_SIZE */
 };
 
 /* The bytes the two radius instructions take for one tile shape. */
@@ -130,231 +337,123 @@ struct HomeTileShape {
   unsigned char focus_radius[8]{};
 };
 
-struct HomeTileContentClipPatch {
-  unsigned char *tail = nullptr;
-  unsigned char *image_width_owner = nullptr;
-  unsigned char *image_height_owner = nullptr;
-  uint16_t hidden_id = 0;
-  uint16_t overflow_id = 0;
-  uint16_t relative_id = 0;
-  uint16_t position_id = 0;
-  uint16_t image_wrapper_id = 0;
-  uint16_t image_id = 0;
-  uint16_t title_id = 0;
-  uint16_t telemetry_container_id = 0;
-  unsigned char op_new_object = 0;
-  unsigned char op_load_string = 0;
-  unsigned char op_put_short = 0;
-  unsigned char op_put_long = 0;
-  unsigned char op_load_undefined = 0;
-  bool tail_clipped = false;
-  bool image_style_shared = false;
-};
-
-constexpr size_t kTileStyleTailSize = 31;
-
-static void emit_tile_style_tail(unsigned char *out,
-                                 const HomeTileContentClipPatch &patch,
-                                 bool clipped) {
-  // Opcodes are copied from the structurally matched function itself. This
-  // keeps the rewrite independent of numeric opcode changes between Hermes
-  // bytecode generations.
-  size_t at = 0;
-  auto byte = [&](unsigned char value) { out[at++] = value; };
-  auto word = [&](uint16_t value) {
-    write_u16le(out + at, value);
-    at += 2;
-  };
-  if (clipped) {
-    // imageWrapper = {borderRadius: BORDER_RADIUS, overflow: 'hidden'}.
-    // The wrapper is the common ancestor of artwork, animated mat, Title ID
-    // and version, so every internal visual uses the exact same native mask.
-    byte(patch.op_load_string);
-    byte(5);
-    word(patch.hidden_id);
-    byte(patch.op_put_long);
-    byte(8);
-    byte(5);
-    word(patch.overflow_id);
-    byte(patch.op_new_object);
-    byte(1);
-    byte(patch.op_put_long);
-    byte(1);
-    byte(8);
-    word(patch.image_wrapper_id);
-    byte(patch.op_put_long);
-    byte(1);
-    // image and imageWrapper deliberately reference the same object. That
-    // object contains width, height, the native BORDER_RADIUS and overflow,
-    // so the inner Animated.View that paints matStyle receives the mask
-    // directly instead of relying on parent clipping (ignored by PS5 PUI).
-    byte(8);
-    word(patch.image_id);
-    byte(patch.op_put_short);
-    byte(1);
-    byte(6);
-    byte(static_cast<unsigned char>(patch.title_id));
-    // The removed telemetryContainer style was only position:'relative';
-    // relative is React Native's default. Fill its six bytes with harmless
-    // LoadConstUndefined instructions so bytecode offsets stay immutable.
-    for (int i = 0; i < 3; ++i) {
-      byte(patch.op_load_undefined);
-      byte(0);
-    }
-  } else {
-    byte(patch.op_new_object);
-    byte(5);
-    byte(patch.op_load_string);
-    byte(1);
-    word(patch.relative_id);
-    byte(patch.op_put_short);
-    byte(5);
-    byte(1);
-    byte(static_cast<unsigned char>(patch.position_id));
-    byte(patch.op_new_object);
-    byte(1);
-    byte(patch.op_put_long);
-    byte(1);
-    byte(8);
-    word(patch.image_wrapper_id);
-    byte(patch.op_put_long);
-    byte(1);
-    byte(7);
-    word(patch.image_id);
-    byte(patch.op_put_short);
-    byte(1);
-    byte(6);
-    byte(static_cast<unsigned char>(patch.title_id));
-    byte(patch.op_put_long);
-    byte(1);
-    byte(5);
-    word(patch.telemetry_container_id);
-  }
-}
-
 /*
- * Locate the HomeUI tile stylesheet by instruction structure, not a function
- * number or file offset. The matched module creates imageWrapper from the
- * shared BORDER_RADIUS and image from the same EXPERIENCE_SIZE on both axes.
+ * TileItem's constants module exports the icon size (EXPERIENCE_SIZE, 106 px)
+ * and its focused size (SCALED_EXP_SIZE, 168 px), their ratio
+ * (EXPERIENCE_SCALE) and the icon's corner (BORDER_RADIUS, 16 px); the same
+ * function builds the focus frame's style, whose borderRadius is that corner
+ * scaled (25.36 px) and which goes into the stylesheet as focusContainer.
+ * The site is the one set of those instructions where the ratio equals the
+ * two sizes' and the focus corner equals the scaled icon corner. The corners
+ * may hold any value an earlier load wrote, so they are only checked to fit.
  */
-static bool locate_home_tile_content_clip_patch(
-    const HbcView &hbc, size_t file_length, HomeTileContentClipPatch *out) {
-  if (!out || file_length > hbc.size)
+static bool match_tile_constants(unsigned char *p, unsigned char *begin,
+                                 unsigned char *end, const HomeTileNames &n,
+                                 HomeTileShapePatch *out) {
+  LearnedOpcode load_u8, load_double, put_by_id;
+  int exports = -1;
+  unsigned char *icon_size =
+      export_at(p, end, n.experience_size, 1, load_u8, put_by_id, exports);
+  if (!icon_size || *icon_size == 0)
     return false;
-
-  HomeTileContentClipPatch candidate{};
-  if (!find_hbc_string_id(hbc, "hidden", &candidate.hidden_id) ||
-      !find_hbc_string_id(hbc, "overflow", &candidate.overflow_id) ||
-      !find_hbc_string_id(hbc, "relative", &candidate.relative_id) ||
-      !find_hbc_string_id(hbc, "position", &candidate.position_id) ||
-      !find_hbc_string_id(hbc, "imageWrapper", &candidate.image_wrapper_id) ||
-      !find_hbc_string_id(hbc, "image", &candidate.image_id) ||
-      !find_hbc_string_id(hbc, "titleId", &candidate.title_id) ||
-      !find_hbc_string_id(hbc, "telemetryContainer",
-                          &candidate.telemetry_container_id) ||
-      candidate.position_id > UINT8_MAX || candidate.title_id > UINT8_MAX) {
-    LOG_WARN("home_tiles: Hermes clip strings unresolved; skip content mask");
-    return false;
-  }
-
-  unsigned matches = 0;
-  for (size_t p = 101; p + 93 < file_length; ++p) {
-    const unsigned char *b = hbc.data + p;
-    // GetById r6,r5; NewObject r8; PutNewOwnById r8,r6;
-    // two equal EXPERIENCE_SIZE lookups; image width/height; title style;
-    // telemetryContainer tail followed by StyleSheet.create.
-    if (b[1] != 6 || b[2] != 5 || b[6] != 3 || b[7] != 8 ||
-        b[9] != 8 || b[10] != 6 || b[14] != 6 || b[15] != 5 ||
-        b[20] != 5 || b[21] != 5 ||
-        read_u16le(b + 17) != read_u16le(b + 23) || b[25] != 3 ||
-        b[26] != 7 || (b[28] != 7 && b[28] != 8) || b[29] != 6 ||
-        (b[32] != 7 && b[32] != 8) || b[33] != 5 || b[28] != b[32])
-      continue;
-
-    unsigned char stock[kTileStyleTailSize]{};
-    unsigned char clipped[kTileStyleTailSize]{};
-    unsigned char legacy_clipped[kTileStyleTailSize]{};
-    candidate.tail = hbc.data + p + 62;
-    candidate.image_width_owner = hbc.data + p + 28;
-    candidate.image_height_owner = hbc.data + p + 32;
-    candidate.op_new_object = b[6];
-    candidate.op_put_long = b[8];
-    candidate.op_put_short = b[27];
-    candidate.op_load_undefined = b[-39];
-    // Stock starts with NewObject,patched starts with LoadConstString.
-    candidate.op_load_string = candidate.tail[0] == candidate.op_new_object
-                                   ? candidate.tail[2]
-                                   : candidate.tail[0];
-    emit_tile_style_tail(stock, candidate, false);
-    emit_tile_style_tail(clipped, candidate, true);
-    memcpy(legacy_clipped, clipped, sizeof(legacy_clipped));
-    legacy_clipped[18] = 7; // previous parent-only clipping implementation
-    if (memcmp(candidate.tail, stock, sizeof(stock)) == 0) {
-      candidate.tail_clipped = false;
-    } else if (memcmp(candidate.tail, clipped, sizeof(clipped)) == 0 ||
-               memcmp(candidate.tail, legacy_clipped,
-                      sizeof(legacy_clipped)) == 0) {
-      candidate.tail_clipped = true;
-    } else {
-      continue;
+  unsigned char *lo = p - begin > static_cast<ptrdiff_t>(kTileConstantsWindow)
+                          ? p - kTileConstantsWindow
+                          : begin;
+  unsigned char *hi = end - p > static_cast<ptrdiff_t>(kTileConstantsWindow)
+                          ? p + kTileConstantsWindow
+                          : end;
+  /* The u8 exports reuse the anchor's opcodes: nothing new is learned. */
+  auto unique_u8 = [&](uint16_t id) -> unsigned char * {
+    unsigned char *found = nullptr;
+    for (unsigned char *q = lo; q < hi; ++q) {
+      unsigned char *constant =
+          export_at(q, end, id, 1, load_u8, put_by_id, exports);
+      if (!constant)
+        continue;
+      if (found)
+        return nullptr;
+      found = constant;
     }
-    candidate.image_style_shared = b[28] == 8;
-    ++matches;
-  }
-  if (matches != 1) {
-    LOG_WARN("home_tiles: Tile content-clip signature matches=%u; skip",
-             matches);
+    return found;
+  };
+  unsigned char *focus_size = unique_u8(n.scaled_exp_size);
+  unsigned char *icon_radius = unique_u8(n.border_radius_export);
+  if (!focus_size || *focus_size == 0 || !icon_radius ||
+      *icon_radius > *icon_size / 2)
     return false;
+  const double scale = static_cast<double>(*focus_size) / *icon_size;
+
+  unsigned char *scale_constant = nullptr;
+  for (unsigned char *q = lo; q < hi; ++q) {
+    LearnedOpcode load = load_double;
+    unsigned char *constant =
+        export_at(q, end, n.experience_scale, 8, load, put_by_id, exports);
+    if (!constant || std::fabs(read_double(constant) - scale) > 1e-9)
+      continue;
+    if (scale_constant)
+      return false;
+    scale_constant = constant;
+    load_double = load;
   }
-  *out = candidate;
+  if (!scale_constant)
+    return false;
+
+  /* The focus frame: LoadConstDouble rF, corner; PutNewOwnById rS, rF,
+     borderRadius; ... PutNewOwnById rStyles, rS, focusContainer. */
+  unsigned char *focus_radius = nullptr;
+  for (unsigned char *q = lo; q < hi; ++q) {
+    if (!room(q, end, 10) || !load_double.is(q[0]))
+      continue;
+    LearnedNamedOpcode new_own;
+    unsigned char style = 0, value = 0, styles = 0;
+    const size_t put =
+        new_own_at(q + 10, end, n.border_radius, new_own, &style, &value);
+    if (!put || value != q[1])
+      continue;
+    bool keyed = false;
+    for (unsigned char *k = q + 10 + put;
+         !keyed && k < q + 10 + put + kTileStylesWindow && k < end; ++k) {
+      LearnedNamedOpcode learned = new_own;
+      keyed = new_own_at(k, end, n.focus_container, learned, &styles,
+                         &value) &&
+              value == style;
+    }
+    const double radius = read_double(q + 2);
+    if (!keyed || !(radius >= 0.0) || radius > *focus_size / 2.0 ||
+        std::fabs(radius - *icon_radius * scale) > 0.5)
+      continue;
+    if (focus_radius)
+      return false;
+    focus_radius = q + 2;
+  }
+  if (!focus_radius)
+    return false;
+
+  out->icon_radius = icon_radius;
+  out->focus_radius = focus_radius;
+  out->icon_diameter = *icon_size;
+  out->focus_diameter = *focus_size;
   return true;
 }
 
-/*
- * TileItem stores the 106px icon radius and its scaled 168px focus radius in
- * separate instructions. Find that constants module by its unique scale
- * double and verify all surrounding opcode/register bytes before writing.
- * The radii themselves may hold any value an earlier load wrote, so they are
- * only checked to fit their tile.
- */
 static bool locate_home_tile_shape_patch(const HbcView &hbc, size_t file_length,
+                                         const HomeTileNames &names,
                                          HomeTileShapePatch *out) {
-  static constexpr unsigned char kExperienceScale[] = {0x7e, 0x0e, 0xa9, 0x09,
-                                                       0xc6, 0x5b, 0xf9, 0x3f};
-  constexpr size_t kIconRadiusDelta = 0x4a;
-  constexpr size_t kFocusRadiusDelta = 0x79;
-  constexpr size_t kIconDiameterBack = 0x12;
-  constexpr size_t kFocusDiameterBack = 0x09;
-
   if (!out || file_length > hbc.size)
     return false;
+  unsigned char *const begin = hbc.data;
+  unsigned char *const end = hbc.data + file_length;
   HomeTileShapePatch match{};
   unsigned matches = 0;
-  for (size_t offset = kIconDiameterBack;
-       offset + kFocusRadiusDelta + sizeof(double) <= file_length; ++offset) {
-    if (memcmp(hbc.data + offset, kExperienceScale, sizeof(kExperienceScale)) !=
-            0 ||
-        hbc.data[offset - 2] != 0x6e || hbc.data[offset - 1] != 0x04 ||
-        hbc.data[offset + kIconRadiusDelta - 2] != 0x6c ||
-        hbc.data[offset + kIconRadiusDelta - 1] != 0x04 ||
-        hbc.data[offset + kFocusRadiusDelta - 2] != 0x6e ||
-        hbc.data[offset + kFocusRadiusDelta - 1] != 0x01)
+  for (unsigned char *p = begin; p + 9 <= end; ++p) {
+    /* cheap first test: EXPERIENCE_SIZE as a PutById's id */
+    if (read_u16le(p + 7) != names.experience_size)
       continue;
-    unsigned char *icon = hbc.data + offset + kIconRadiusDelta;
-    unsigned char *focus = hbc.data + offset + kFocusRadiusDelta;
-    const unsigned icon_diameter = hbc.data[offset - kIconDiameterBack];
-    const unsigned focus_diameter = hbc.data[offset - kFocusDiameterBack];
-    double focus_radius = 0.0;
-    memcpy(&focus_radius, focus, sizeof(focus_radius));
-    if (icon_diameter == 0 || focus_diameter == 0 ||
-        *icon > icon_diameter / 2 || !(focus_radius >= 0.0) ||
-        focus_radius > focus_diameter / 2.0)
-      continue;
-    match.icon_radius = icon;
-    match.focus_radius = focus;
-    match.icon_diameter = hbc.data + offset - kIconDiameterBack;
-    match.focus_diameter = hbc.data + offset - kFocusDiameterBack;
-    ++matches;
+    HomeTileShapePatch site{};
+    if (match_tile_constants(p, begin, end, names, &site)) {
+      match = site;
+      ++matches;
+    }
   }
   if (matches != 1) {
     LOG_WARN("home_tiles: TileItem radius signature matches=%u; skip", matches);
@@ -364,21 +463,15 @@ static bool locate_home_tile_shape_patch(const HbcView &hbc, size_t file_length,
   return true;
 }
 
-/* The radii for a rounding of `percent` of a full circle, or Sony's 16px
-   corners for a negative one. The focus radius follows the icon radius by
-   the module's own focus/icon scale, which is how Sony derives it. */
+/* The radii for a rounding of `percent` (0..100) of a full circle. The focus
+   radius follows the icon radius by the module's own focus/icon scale, which
+   is how Sony derives it. Sony's shape needs no edit: every load hands over
+   a freshly decrypted bundle. */
 static HomeTileShape home_tile_shape_for(const HomeTileShapePatch &patch,
                                          int percent) {
-  static constexpr unsigned char kStockFocusRadius[] = {0x7e, 0x0e, 0xa9, 0x09,
-                                                        0xc6, 0x5b, 0x39, 0x40};
   HomeTileShape shape{};
-  if (percent < 0) {
-    shape.icon_radius = 16;
-    memcpy(shape.focus_radius, kStockFocusRadius, sizeof(kStockFocusRadius));
-    return shape;
-  }
-  const unsigned icon_diameter = *patch.icon_diameter;
-  const double focus_diameter = *patch.focus_diameter;
+  const unsigned icon_diameter = patch.icon_diameter;
+  const double focus_diameter = patch.focus_diameter;
   shape.icon_radius = static_cast<unsigned char>(
       std::lround(std::min(percent, 100) * (icon_diameter / 2) / 100.0));
   const double focus_radius =
@@ -400,11 +493,222 @@ static void apply_home_tile_shape_patch(const HomeTileShapePatch &patch,
   memcpy(patch.focus_radius, shape.focus_radius, sizeof(shape.focus_radius));
 }
 
+/* The longest stretch of stylesheet keys the clip edit rewrites. */
+constexpr size_t kTileStylesMax = 96;
+
+struct HomeTileContentClipPatch {
+  unsigned char *width_owner = nullptr;  /* image style's width put */
+  unsigned char *height_owner = nullptr; /* image style's height put */
+  unsigned char *styles = nullptr; /* telemetryContainer style .. last key */
+  size_t styles_size = 0;
+  unsigned char wrapper = 0; /* imageWrapper style's register */
+  unsigned char clipped[kTileStylesMax]{};
+};
+
+/*
+ * The tile stylesheet: imageWrapper = {borderRadius: BORDER_RADIUS}, image =
+ * {width: EXPERIENCE_SIZE, height: EXPERIENCE_SIZE}, a few text styles, and
+ * telemetryContainer = {position: 'relative'}, then the object of keys
+ * handed to StyleSheet.create. The edit makes imageWrapper and image one
+ * object holding width, height, the corner and overflow: 'hidden', so the
+ * inner Animated.View that paints the artwork gets the mask itself (PS5 PUI
+ * ignores a parent's clipping), and drops telemetryContainer (only
+ * position: 'relative', React Native's default) to make room. The bytecode
+ * keeps its length: the rest is filled with NewObject into the freed
+ * register. Only Sony's original layout is matched; a reload always hands
+ * over a freshly decrypted bundle.
+ */
+static bool match_tile_styles(unsigned char *p, unsigned char *end,
+                              const HomeTileNames &n,
+                              HomeTileContentClipPatch *out) {
+  LearnedOpcode new_object, load_string;
+  LearnedNamedOpcode get_by_id, new_own;
+  unsigned char radius = 0, constants = 0, wrapper = 0, width = 0, height = 0;
+  unsigned char image = 0, object = 0, value = 0;
+  size_t len = 0;
+
+  /* imageWrapper: {borderRadius: TileItem.BORDER_RADIUS} */
+  if (!(len = get_by_id_at(p, end, n.border_radius_export, get_by_id, &radius,
+                           &constants)))
+    return false;
+  p += len;
+  if (!(len = new_object_at(p, end, new_object, &wrapper)))
+    return false;
+  p += len;
+  if (!(len = new_own_at(p, end, n.border_radius, new_own, &object, &value)) ||
+      object != wrapper || value != radius)
+    return false;
+  p += len;
+  /* image: {width: EXPERIENCE_SIZE, height: EXPERIENCE_SIZE} */
+  if (!(len = get_by_id_at(p, end, n.experience_size, get_by_id, &width,
+                           &object)) ||
+      object != constants)
+    return false;
+  p += len;
+  if (!(len = get_by_id_at(p, end, n.experience_size, get_by_id, &height,
+                           &object)) ||
+      object != constants)
+    return false;
+  p += len;
+  if (!(len = new_object_at(p, end, new_object, &image)) || image == wrapper)
+    return false;
+  p += len;
+  unsigned char *width_owner = p + 1;
+  if (!(len = new_own_at(p, end, n.width, new_own, &object, &value)) ||
+      object != image || value != width)
+    return false;
+  p += len;
+  unsigned char *height_owner = p + 1;
+  if (!(len = new_own_at(p, end, n.height, new_own, &object, &value)) ||
+      object != image || value != height)
+    return false;
+  p += len;
+
+  /* telemetryContainer: {position: 'relative'}, then the keys object. */
+  for (unsigned char *t = p; t < p + kTileStylesWindow && t < end; ++t) {
+    LearnedOpcode objects = new_object;
+    LearnedOpcode strings = load_string;
+    LearnedNamedOpcode puts = new_own;
+    unsigned char telemetry = 0, text = 0, keys = 0;
+    unsigned char *q = t;
+    if (!(len = new_object_at(q, end, objects, &telemetry)))
+      continue;
+    q += len;
+    if (!(len = load_string_at(q, end, n.relative, strings, &text)))
+      continue;
+    q += len;
+    if (!(len = new_own_at(q, end, n.position, puts, &object, &value)) ||
+        object != telemetry || value != text)
+      continue;
+    q += len;
+    if (!(len = new_object_at(q, end, objects, &keys)))
+      continue;
+    q += len;
+
+    /* The keys: each one PutNewOwnById keys, style, name. Gather them,
+       minus telemetryContainer, with image pointing at imageWrapper's
+       style. */
+    unsigned char kept[kTileStylesMax];
+    size_t kept_size = 0;
+    bool has_wrapper = false, has_image = false, has_telemetry = false;
+    while (q < end) {
+      uint16_t key = 0;
+      if ((len = new_own_at(q, end, n.image_wrapper, puts, &object, &value)))
+        key = n.image_wrapper;
+      else if ((len = new_own_at(q, end, n.image, puts, &object, &value)))
+        key = n.image;
+      else if ((len = new_own_at(q, end, n.telemetry_container, puts, &object,
+                                 &value)))
+        key = n.telemetry_container;
+      else if (!(len = any_new_own_at(q, end, puts, keys, &value)))
+        break;
+      else
+        object = keys;
+      if (object != keys || kept_size + len > sizeof(kept))
+        break;
+      if (key == n.telemetry_container) {
+        if (value != telemetry || has_telemetry)
+          break;
+        has_telemetry = true;
+      } else {
+        if (value == telemetry)
+          break;
+        memcpy(kept + kept_size, q, len);
+        if (key == n.image_wrapper) {
+          if (value != wrapper || has_wrapper)
+            break;
+          has_wrapper = true;
+        } else if (key == n.image) {
+          if (value != image || has_image)
+            break;
+          has_image = true;
+          kept[kept_size + 2] = wrapper;
+        }
+        kept_size += len;
+      }
+      q += len;
+    }
+    if (!has_wrapper || !has_image || !has_telemetry)
+      continue;
+
+    /* The rewrite: overflow: 'hidden' on imageWrapper's style (through the
+       freed telemetry register), the keys object and its keys, then
+       filler. Either put form of overflow may be needed to make the filler
+       a whole number of NewObjects. */
+    const size_t styles_size = static_cast<size_t>(q - t);
+    if (styles_size > kTileStylesMax)
+      continue;
+    for (const size_t width_of_id : {size_t{2}, size_t{1}}) {
+      const LearnedOpcode &put = width_of_id == 1 ? puts.narrow : puts.wide;
+      if (put.value < 0 || (width_of_id == 1 && n.overflow > UINT8_MAX))
+        continue;
+      const size_t used = 4 + 3 + width_of_id + 2 + kept_size;
+      if (used > styles_size || (styles_size - used) % 2 != 0)
+        continue;
+      unsigned char *w = out->clipped;
+      *w++ = static_cast<unsigned char>(strings.value);
+      *w++ = telemetry;
+      write_u16le(w, n.hidden);
+      w += 2;
+      *w++ = static_cast<unsigned char>(put.value);
+      *w++ = wrapper;
+      *w++ = telemetry;
+      if (width_of_id == 1) {
+        *w++ = static_cast<unsigned char>(n.overflow);
+      } else {
+        write_u16le(w, n.overflow);
+        w += 2;
+      }
+      *w++ = static_cast<unsigned char>(objects.value);
+      *w++ = keys;
+      memcpy(w, kept, kept_size);
+      w += kept_size;
+      while (w < out->clipped + styles_size) {
+        *w++ = static_cast<unsigned char>(objects.value);
+        *w++ = telemetry;
+      }
+      out->width_owner = width_owner;
+      out->height_owner = height_owner;
+      out->styles = t;
+      out->styles_size = styles_size;
+      out->wrapper = wrapper;
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool locate_home_tile_content_clip_patch(
+    const HbcView &hbc, size_t file_length, const HomeTileNames &names,
+    HomeTileContentClipPatch *out) {
+  if (!out || file_length > hbc.size)
+    return false;
+  unsigned char *const end = hbc.data + file_length;
+  const size_t width = id_width(names.border_radius_export);
+  HomeTileContentClipPatch match{};
+  unsigned matches = 0;
+  for (unsigned char *p = hbc.data; p + 4 + width <= end; ++p) {
+    /* cheap first test: BORDER_RADIUS as a GetById's id */
+    if (read_id(p + 4, width) != names.border_radius_export)
+      continue;
+    HomeTileContentClipPatch site{};
+    if (match_tile_styles(p, end, names, &site)) {
+      match = site;
+      ++matches;
+    }
+  }
+  if (matches != 1) {
+    LOG_WARN("home_tiles: Tile content-clip signature matches=%u; skip",
+             matches);
+    return false;
+  }
+  *out = match;
+  return true;
+}
+
 static void apply_home_tile_content_clip_patch(
-    const HomeTileContentClipPatch &patch, bool clipped) {
-  unsigned char replacement[kTileStyleTailSize]{};
-  emit_tile_style_tail(replacement, patch, clipped);
-  *patch.image_width_owner = clipped ? 8 : 7;
-  *patch.image_height_owner = clipped ? 8 : 7;
-  memcpy(patch.tail, replacement, sizeof(replacement));
+    const HomeTileContentClipPatch &patch) {
+  *patch.width_owner = patch.wrapper;
+  *patch.height_owner = patch.wrapper;
+  memcpy(patch.styles, patch.clipped, patch.styles_size);
 }

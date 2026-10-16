@@ -44,6 +44,12 @@ const char *AniketosIconPath(); /* aniketos_shell/control_center_entry.cpp */
 /* Set when a Home bundle was given the top-bar icon by the patch below. */
 static std::atomic<bool> g_top_nav_patched{false};
 
+/* What the last Home bundle's tiles ended up with: the rounding (percent of
+   a full circle, -1 for Sony's shape; -2 until a Home bundle was seen) and
+   the focus frame's corner in thousandths of a pixel (-1 until then). */
+static std::atomic<int> g_tile_rounding{-2};
+static std::atomic<int> g_tile_focus_radius_milli{-1};
+
 extern onion::Settings g_settings;
 
 namespace {
@@ -901,6 +907,17 @@ static void update_hbc_footer_sha1(HbcView &hbc, size_t file_length) {
 
 #include "homeui_home_tiles.inc"
 
+/* Sony's focus-frame corner: the 16 px icon corner scaled to the 168 px
+   focused tile. */
+constexpr double kSonyTileFocusRadius = 16.0 * 168.0 / 106.0;
+
+static void publish_home_tiles(int rounding, double focus_radius) {
+  g_tile_focus_radius_milli.store(
+      static_cast<int>(std::lround(focus_radius * 1000.0)),
+      std::memory_order_relaxed);
+  g_tile_rounding.store(rounding, std::memory_order_relaxed);
+}
+
 /*
  * Focused top-nav buttons use invertedIconSource. Named system icons (Search,
  * Settings) resolve both states from iconId; a custom file URI only fills the
@@ -1042,6 +1059,125 @@ static bool patch_source_homeui_top_nav(const SourceBundleView &bundle,
   return true;
 }
 
+/*
+ * Root cause of ShellUI SIGSEGV on game close (SceRnJs-rnps-home):
+ *
+ * Earlier builds rewrote the Fps *function body* (131-byte showFps debug
+ * component) into a useInteractivePress button and put Fps in the top-nav
+ * array. Fps remounts on BIG_APP → home focus restore and crashed the RN JS
+ * executor.
+ *
+ * Safe design (keeps the toolbox top-nav entry):
+ *
+ *   top-nav order: [Search, ApplicationErrorEventTrigger, Settings, Profile]
+ *   host function: ApplicationErrorEventTrigger (already a 77-byte button)
+ *   body:          full 77-byte useInteractivePress OnionHEN button
+ *   Fps:           restore/leave stock showFps implementation
+ *   focus icon:    SetIconSource hook mirrors onionhen.png → invertedIcon
+ *
+ * Object table still retargets:
+ *   iconId string → /system_ex/vsh_asset/onionhen.png
+ *   title id      → empty
+ *   Trigger AppError string slot → OnionHEN?NavUI=1 (hook_boot → toolbox)
+ *
+ * Accept prior in-memory shapes (Fps-in-array + Fps body rewrite, factory
+ * alias) and repair them toward this layout.
+ *
+ * With apply false, checks that every patch site holds a known shape and
+ * reports in *any_change whether one still differs from the target; with
+ * apply true, writes the target.
+ */
+static bool top_nav_byte_patches(const HbcView &hbc,
+                                 const HomeUiPatchProfile &profile, bool apply,
+                                 bool *any_change) {
+  const HomeUiPatchBytes &bytes = profile.bytes;
+  const unsigned char *legacy_button_body =
+      bytes.has_legacy_button_body ? bytes.legacy_onion_hen_button_body
+                                   : nullptr;
+  const unsigned char *onion_hen_button_body =
+      bytes.requires_image_source_object ? kImageSourceOnionHenButtonBody
+                                         : bytes.onion_hen_button_body;
+
+  const BytePatch kPatches[] = {
+      /*
+       * Order: stock / prior Fps-slot strategy / aliased → AppError slot.
+       * replacement is ApplicationErrorEventTrigger between Search & Settings.
+       */
+      {"home icon order", profile.offsets.home_icon_order,
+       bytes.old_icon_order, bytes.legacy_fps_slot_icon_order,
+       bytes.legacy_aliased_icon_order, bytes.app_error_icon_order,
+       kIconOrderSize},
+      {"legacy Fps factory repair", profile.offsets.fps_factory,
+       bytes.legacy_aliased_fps_factory, nullptr, nullptr,
+       bytes.original_fps_factory, kFpsFactorySize},
+      {"download_error string repair", profile.offsets.download_error_string,
+       kLegacyTopNavPressUri, nullptr, nullptr, kStockDownloadErrorString,
+       sizeof(kStockDownloadErrorString)},
+      {"custom icon value", profile.offsets.custom_icon_value,
+       bytes.old_custom_icon_value, nullptr, nullptr,
+       bytes.new_custom_icon_value, kObjectTableValueSize},
+      {"custom icon uri", profile.offsets.custom_icon_uri, kOldCustomIconUri,
+       nullptr, nullptr, kNewCustomIconUri, sizeof(kOldCustomIconUri)},
+      {"top-nav link uri", profile.offsets.top_nav_link_uri,
+       kOldTopNavLinkUri, kLegacyBlankTopNavLinkUri,
+       kLegacyPaddedTopNavLinkUri,
+       kNewTopNavLinkUri, sizeof(kOldTopNavLinkUri)},
+      {"custom title value", profile.offsets.custom_title_value,
+       bytes.old_custom_title_value, nullptr, nullptr, kNewCustomTitleValue,
+       kObjectTableValueSize},
+      /*
+       * Repair prior Fps-body hijack back to stock showFps (prefix only).
+       * expected = onion body still sitting on Fps; replacement = stock Fps.
+       */
+      {"Fps body repair", profile.offsets.fps_body,
+       bytes.onion_hen_button_body, legacy_button_body,
+       nullptr, bytes.old_fps_body_prefix, kButtonBodySize},
+      /*
+       * Host OnionHEN on ApplicationErrorEventTrigger (exact 77-byte replace).
+       */
+      {"AppError OnionHEN body", profile.offsets.app_error_body,
+       bytes.stock_app_error_body, bytes.onion_hen_button_body,
+       legacy_button_body, onion_hen_button_body,
+       kButtonBodySize},
+  };
+
+  const BytePatch kImageSourceHelperPatch = {
+      "AppError ImageSource props helper",
+      profile.offsets.app_error_props_helper_body,
+      kStockAppErrorOnPressBody,
+      nullptr,
+      nullptr,
+      kImageSourceIconPropsHelperBody,
+      kAppErrorHelperBodySize,
+  };
+
+  if (apply) {
+    for (const BytePatch &patch : kPatches)
+      apply_patch(hbc, patch);
+    if (bytes.requires_image_source_object)
+      apply_patch(hbc, kImageSourceHelperPatch);
+    return true;
+  }
+
+  bool change = false;
+  for (const BytePatch &patch : kPatches) {
+    bool already_applied = false;
+    if (!validate_patch(hbc, patch, &already_applied))
+      return false;
+    change = change || !already_applied;
+  }
+  if (bytes.requires_image_source_object) {
+    bool helper_already_applied = false;
+    if (profile.offsets.app_error_props_helper_body == 0 ||
+        !validate_patch(hbc, kImageSourceHelperPatch,
+                        &helper_already_applied))
+      return false;
+    change = change || !helper_already_applied;
+  }
+  *any_change = change;
+  return true;
+}
+
 } // namespace
 
 #endif /* SHELLUI_HOMEUI_TOP_NAV_PATCH == 1 */
@@ -1166,7 +1302,11 @@ void patch_homeui_top_nav(unsigned char *buffer, int *size_ptr,
 
   const HomeUiPatchProfile *profile =
       find_homeui_patch_profile(hbc, hbc_file_length, hbc_version);
-  if (!profile) {
+  /* The tiles need no profile: their sites are found by structure, so a
+     HomeUI no profile describes (13.x and later) is rounded as well. */
+  HomeTileNames tile_names{};
+  const bool homeui = resolve_home_tile_names(hbc, &tile_names);
+  if (!profile && !homeui) {
 #if SHELL_DEBUG == 1
     if (looks_like_profiled_homeui(hbc)) {
       if (!g_logged_unsupported_homeui_skip.exchange(
@@ -1191,182 +1331,93 @@ void patch_homeui_top_nav(unsigned char *buffer, int *size_ptr,
   }
 
 #if SHELL_DEBUG == 1
-  LOG_DEBUG("homeui_top_nav_patch: matched profile '%s' hbc_base=0x%llx "
-              "version=%u hbc_file_length=0x%llx size=%d capacity=%d",
-              profile->name,
-              (unsigned long long)hbc.base_offset,
-              hbc_version, (unsigned long long)hbc_file_length, *size_ptr,
-              buffer_capacity);
+  if (profile)
+    LOG_DEBUG("homeui_top_nav_patch: matched profile '%s' hbc_base=0x%llx "
+                "version=%u hbc_file_length=0x%llx size=%d capacity=%d",
+                profile->name,
+                (unsigned long long)hbc.base_offset,
+                hbc_version, (unsigned long long)hbc_file_length, *size_ptr,
+                buffer_capacity);
 #endif
+  if (!profile)
+    LOG_INFO("homeui_top_nav_patch: HomeUI without a profile (version=%u "
+             "file_length=0x%llx): tiles only, top-bar icon left to home_js",
+             hbc_version, (unsigned long long)hbc_file_length);
 
-  /*
-   * Root cause of ShellUI SIGSEGV on game close (SceRnJs-rnps-home):
-   *
-   * Earlier builds rewrote the Fps *function body* (131-byte showFps debug
-   * component) into a useInteractivePress button and put Fps in the top-nav
-   * array. Fps remounts on BIG_APP → home focus restore and crashed the RN JS
-   * executor.
-   *
-   * Safe design (keeps the toolbox top-nav entry):
-   *
-   *   top-nav order: [Search, ApplicationErrorEventTrigger, Settings, Profile]
-   *   host function: ApplicationErrorEventTrigger (already a 77-byte button)
-   *   body:          full 77-byte useInteractivePress OnionHEN button
-   *   Fps:           restore/leave stock showFps implementation
-   *   focus icon:    SetIconSource hook mirrors onionhen.png → invertedIcon
-   *
-   * Object table still retargets:
-   *   iconId string → /system_ex/vsh_asset/onionhen.png
-   *   title id      → empty
-   *   Trigger AppError string slot → OnionHEN?NavUI=1 (hook_boot → toolbox)
-   *
-   * Accept prior in-memory shapes (Fps-in-array + Fps body rewrite, factory
-   * alias) and repair them toward this layout.
-   */
-
-  const HomeUiPatchBytes &bytes = profile->bytes;
-  const unsigned char *legacy_button_body =
-      bytes.has_legacy_button_body ? bytes.legacy_onion_hen_button_body
-                                   : nullptr;
-  const unsigned char *onion_hen_button_body =
-      bytes.requires_image_source_object ? kImageSourceOnionHenButtonBody
-                                         : bytes.onion_hen_button_body;
-
-  const BytePatch kPatches[] = {
-      /*
-       * Order: stock / prior Fps-slot strategy / aliased → AppError slot.
-       * replacement is ApplicationErrorEventTrigger between Search & Settings.
-       */
-      {"home icon order", profile->offsets.home_icon_order,
-       bytes.old_icon_order, bytes.legacy_fps_slot_icon_order,
-       bytes.legacy_aliased_icon_order, bytes.app_error_icon_order,
-       kIconOrderSize},
-      {"legacy Fps factory repair", profile->offsets.fps_factory,
-       bytes.legacy_aliased_fps_factory, nullptr, nullptr,
-       bytes.original_fps_factory, kFpsFactorySize},
-      {"download_error string repair", profile->offsets.download_error_string,
-       kLegacyTopNavPressUri, nullptr, nullptr, kStockDownloadErrorString,
-       sizeof(kStockDownloadErrorString)},
-      {"custom icon value", profile->offsets.custom_icon_value,
-       bytes.old_custom_icon_value, nullptr, nullptr,
-       bytes.new_custom_icon_value, kObjectTableValueSize},
-      {"custom icon uri", profile->offsets.custom_icon_uri, kOldCustomIconUri,
-       nullptr, nullptr, kNewCustomIconUri, sizeof(kOldCustomIconUri)},
-      {"top-nav link uri", profile->offsets.top_nav_link_uri,
-       kOldTopNavLinkUri, kLegacyBlankTopNavLinkUri,
-       kLegacyPaddedTopNavLinkUri,
-       kNewTopNavLinkUri, sizeof(kOldTopNavLinkUri)},
-      {"custom title value", profile->offsets.custom_title_value,
-       bytes.old_custom_title_value, nullptr, nullptr, kNewCustomTitleValue,
-       kObjectTableValueSize},
-      /*
-       * Repair prior Fps-body hijack back to stock showFps (prefix only).
-       * expected = onion body still sitting on Fps; replacement = stock Fps.
-       */
-      {"Fps body repair", profile->offsets.fps_body,
-       bytes.onion_hen_button_body, legacy_button_body,
-       nullptr, bytes.old_fps_body_prefix, kButtonBodySize},
-      /*
-       * Host OnionHEN on ApplicationErrorEventTrigger (exact 77-byte replace).
-       */
-      {"AppError OnionHEN body", profile->offsets.app_error_body,
-       bytes.stock_app_error_body, bytes.onion_hen_button_body,
-       legacy_button_body, onion_hen_button_body,
-       kButtonBodySize},
-  };
-
-  const BytePatch kImageSourceHelperPatch = {
-      "AppError ImageSource props helper",
-      profile->offsets.app_error_props_helper_body,
-      kStockAppErrorOnPressBody,
-      nullptr,
-      nullptr,
-      kImageSourceIconPropsHelperBody,
-      kAppErrorHelperBodySize,
-  };
-
-  bool any_change = false;
-  for (size_t i = 0; i < sizeof(kPatches) / sizeof(kPatches[0]); ++i) {
-    bool already_applied = false;
-    if (!validate_patch(hbc, kPatches[i], &already_applied)) {
-      return;
-    }
-    any_change = any_change || !already_applied;
-  }
-
-  if (bytes.requires_image_source_object) {
-    bool helper_already_applied = false;
-    if (profile->offsets.app_error_props_helper_body == 0 ||
-        !validate_patch(hbc, kImageSourceHelperPatch,
-                        &helper_already_applied)) {
-      return;
-    }
-    any_change = any_change || !helper_already_applied;
-  }
+  /* The top-bar icon, on a profiled HomeUI whose patch sites all hold a
+     known shape; otherwise home_js adds it. */
+  bool top_nav_change = false;
+  const bool top_nav_ready =
+      profile && top_nav_byte_patches(hbc, *profile, false, &top_nav_change);
 
   /* Rounded tiles: the user's rounding, up to a full circle, with the
      artwork clipped to it. The case-mockup frame draws on the stock
-     rectangular surface, so the two are never combined. */
+     rectangular surface, so the two are never combined. A rounded frame
+     around square artwork would look broken, so the tiles change only when
+     both sites are found. */
   const int tile_rounding = AniketosTheme::TileRoundingPercent();
-  const bool custom_tiles = tile_rounding >= 0;
   HomeTileShapePatch tile_shape{};
+  HomeTileContentClipPatch tile_clip{};
   const bool tile_shape_ready =
-      locate_home_tile_shape_patch(hbc, hbc_file_length, &tile_shape);
+      homeui && locate_home_tile_shape_patch(hbc, hbc_file_length, tile_names,
+                                             &tile_shape);
+  const bool tile_clip_ready =
+      homeui && locate_home_tile_content_clip_patch(hbc, hbc_file_length,
+                                                    tile_names, &tile_clip);
+  const bool round_tiles =
+      tile_rounding >= 0 && tile_shape_ready && tile_clip_ready;
   HomeTileShape wanted_shape{};
-  if (tile_shape_ready) {
+  if (round_tiles)
     wanted_shape = home_tile_shape_for(tile_shape, tile_rounding);
-    any_change = any_change || !home_tile_shape_is(tile_shape, wanted_shape);
+  /* The clip site only matches Sony's layout, so finding it means the edit
+     is still to be made, even for a rounding whose corner equals Sony's. */
+  const bool tile_change = round_tiles;
+  if (homeui) {
+    LOG_INFO("home_tiles: rounding=%d shape_site=%d (radius now %d, wanted "
+             "%d) clip_site=%d",
+             tile_rounding, tile_shape_ready ? 1 : 0,
+             tile_shape_ready ? static_cast<int>(*tile_shape.icon_radius) : -1,
+             round_tiles ? static_cast<int>(wanted_shape.icon_radius) : -1,
+             tile_clip_ready ? 1 : 0);
+    /* The focus outline and the arc labels (aniketos_theme/home_tiles.cpp)
+       follow the tiles this bundle ends up with. */
+    publish_home_tiles(round_tiles ? tile_rounding : -1,
+                       round_tiles        ? read_double(wanted_shape.focus_radius)
+                       : tile_shape_ready ? read_double(tile_shape.focus_radius)
+                                          : kSonyTileFocusRadius);
   }
-  HomeTileContentClipPatch tile_content_clip{};
-  const bool tile_content_clip_ready = locate_home_tile_content_clip_patch(
-      hbc, hbc_file_length, &tile_content_clip);
-  if (tile_content_clip_ready)
-    any_change = any_change ||
-                 tile_content_clip.tail_clipped != custom_tiles ||
-                 tile_content_clip.image_style_shared != custom_tiles;
-  LOG_INFO("home_tiles: rounding=%d shape_site=%d (radius now %d, wanted %d) "
-           "clip_site=%d",
-           tile_rounding, tile_shape_ready ? 1 : 0,
-           tile_shape_ready ? static_cast<int>(*tile_shape.icon_radius) : -1,
-           tile_shape_ready ? static_cast<int>(wanted_shape.icon_radius) : -1,
-           tile_content_clip_ready ? 1 : 0);
 
-  if (!any_change) {
-    g_top_nav_patched.store(true, std::memory_order_relaxed);
+  if (!top_nav_change && !tile_change) {
+    if (top_nav_ready)
+      g_top_nav_patched.store(true, std::memory_order_relaxed);
 #if SHELL_DEBUG == 1
     LOG_WARN("homeui_top_nav_patch: already applied profile='%s' "
                 "(hbc_base=0x%llx)",
-                profile->name, (unsigned long long)hbc.base_offset);
+                profile ? profile->name : "none",
+                (unsigned long long)hbc.base_offset);
 #endif
     return;
   }
 
-  for (size_t i = 0; i < sizeof(kPatches) / sizeof(kPatches[0]); ++i) {
-    apply_patch(hbc, kPatches[i]);
-  }
-  if (bytes.requires_image_source_object) {
-    apply_patch(hbc, kImageSourceHelperPatch);
-  }
-  if (tile_shape_ready && !home_tile_shape_is(tile_shape, wanted_shape)) {
-    apply_home_tile_shape_patch(tile_shape, wanted_shape);
-    LOG_INFO("home_tiles: shape radius=%u applied",
+  if (top_nav_change)
+    top_nav_byte_patches(hbc, *profile, true, nullptr);
+  if (tile_change) {
+    if (!home_tile_shape_is(tile_shape, wanted_shape))
+      apply_home_tile_shape_patch(tile_shape, wanted_shape);
+    apply_home_tile_content_clip_patch(tile_clip);
+    LOG_INFO("home_tiles: shape radius=%u and content mask applied",
              static_cast<unsigned>(wanted_shape.icon_radius));
-  }
-  if (tile_content_clip_ready &&
-      (tile_content_clip.tail_clipped != custom_tiles ||
-       tile_content_clip.image_style_shared != custom_tiles)) {
-    apply_home_tile_content_clip_patch(tile_content_clip, custom_tiles);
-    LOG_INFO("home_tiles: content mask=%s applied",
-             custom_tiles ? "rounded" : "stock");
   }
   update_hbc_footer_sha1(hbc, hbc_file_length);
 
-  g_top_nav_patched.store(true, std::memory_order_relaxed);
+  if (top_nav_ready)
+    g_top_nav_patched.store(true, std::memory_order_relaxed);
 #if SHELL_DEBUG == 1
-  LOG_DEBUG("homeui_top_nav_patch: activated OnionHEN top-nav slot "
-              "profile='%s' "
-              "(hbc_base=0x%llx)",
-              profile->name, (unsigned long long)hbc.base_offset);
+  if (top_nav_change)
+    LOG_DEBUG("homeui_top_nav_patch: activated OnionHEN top-nav slot "
+                "profile='%s' "
+                "(hbc_base=0x%llx)",
+                profile->name, (unsigned long long)hbc.base_offset);
 #endif
 #else
   (void)buffer;
@@ -1377,4 +1428,13 @@ void patch_homeui_top_nav(unsigned char *buffer, int *size_ptr,
 
 bool homeui_top_nav_patched() {
   return g_top_nav_patched.load(std::memory_order_relaxed);
+}
+
+int homeui_tile_rounding() {
+  return g_tile_rounding.load(std::memory_order_relaxed);
+}
+
+float homeui_tile_focus_radius() {
+  const int milli = g_tile_focus_radius_milli.load(std::memory_order_relaxed);
+  return milli < 0 ? -1.0f : static_cast<float>(milli) / 1000.0f;
 }

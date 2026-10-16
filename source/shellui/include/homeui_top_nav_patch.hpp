@@ -36,6 +36,14 @@ struct MonoImage;
  * home_js.cpp puts into Home adds the icon instead. */
 bool homeui_top_nav_patched();
 
+/* What the last Home bundle's tiles ended up with, so the focus outline and
+ * the arc labels match them: the rounding the patch gave them (percent of a
+ * full circle; -1 when they kept Sony's shape, -2 before a Home bundle was
+ * seen), and the focus frame's corner in pixels (negative before a Home
+ * bundle was seen). */
+int homeui_tile_rounding();
+float homeui_tile_focus_radius();
+
 void patch_homeui_top_nav(unsigned char *buffer, int *size_ptr,
                           int buffer_capacity);
 void install_homeui_top_nav_hooks(MonoImage *react_pui);

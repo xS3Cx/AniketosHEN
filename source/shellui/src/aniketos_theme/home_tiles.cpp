@@ -7,6 +7,7 @@
 
 #include "external_symbols.hpp"
 #include "hooked_funcs.hpp"
+#include "homeui_top_nav_patch.hpp"
 #include "aniketos_theme/animation.hpp"
 #include "aniketos_theme/color.hpp"
 #include "aniketos_theme/global_theme.hpp"
@@ -744,7 +745,9 @@ bool draw_arc(MonoObject *parent, const std::string &text, float diameter,
 
 void render_arc_badge(MonoObject *react_layer) {
   // The arcs follow a full circle; any other rounding keeps Sony's labels.
+  // What the patch gave the tiles counts, not just the setting.
   if (!react_layer || AniketosTheme::TileRoundingPercent() != 100 ||
+      homeui_tile_rounding() != 100 ||
       s_arc_rendered.find(react_layer) != s_arc_rendered.end())
     return;
   ArcBadge resolved_badge;
@@ -896,17 +899,23 @@ void sync_render_param_hook(MonoObject *instance) {
   }
 }
 
-/* The tile focus outline's corner, matching the shape the HomeUI patch
-   gives the tile (homeui_home_tiles.inc): the 106px icon's whole-pixel
-   radius scaled to the 168px focus frame. */
+/* The tile focus outline's corner: the focus frame the HomeUI patch left
+   the tiles with (homeui_home_tiles.inc), so the outline also stays Sony's
+   when a HomeUI could not be rounded. Before a Home bundle was seen, the
+   setting's: the 106px icon's whole-pixel radius scaled to the 168px focus
+   frame. */
 void apply_radius(MonoObject *settings) {
   if (!settings || !s_set_rounded_radius)
     return;
-  constexpr float kFocusScale = 168.0f / 106.0f;
-  const int rounding = AniketosTheme::TileRoundingPercent();
-  const float icon_radius =
-      rounding < 0 ? 16.0f : std::round(rounding * 53 / 100.0f);
-  const NullableFloat radius{1, {0, 0, 0}, icon_radius * kFocusScale};
+  float focus_radius = homeui_tile_focus_radius();
+  if (focus_radius < 0.0f) {
+    constexpr float kFocusScale = 168.0f / 106.0f;
+    const int rounding = AniketosTheme::TileRoundingPercent();
+    const float icon_radius =
+        rounding < 0 ? 16.0f : std::round(rounding * 53 / 100.0f);
+    focus_radius = icon_radius * kFocusScale;
+  }
+  const NullableFloat radius{1, {0, 0, 0}, focus_radius};
   s_set_rounded_radius(settings, radius);
 }
 
