@@ -58,10 +58,11 @@ file(GLOB_RECURSE ShellMenuSrc CONFIGURE_DEPENDS
 set(ANIKETOS_ICON_PNG "${D_CWD}/../bootstrapper/assets/aniketoshen_sicon.png")
 set(HOME_MENU_ASSETS "${D_CWD}/assets/home_menu")
 set(PARTICLE_ASSETS "${D_CWD}/assets/particles")
+set(HOME_BACKGROUND_ASSETS "${D_CWD}/assets/home_background")
 set(ANIKETOS_ICON_ASSEMBLY "${I18N_GENERATED_DIR}/aniketos_icon_asset.s")
 configure_file("${D_SRC}/aniketos_icon_asset.s.in" "${ANIKETOS_ICON_ASSEMBLY}" @ONLY)
 set_source_files_properties("${ANIKETOS_ICON_ASSEMBLY}" PROPERTIES
-	OBJECT_DEPENDS "${ANIKETOS_ICON_PNG};${HOME_MENU_ASSETS}/internet_on.png;${HOME_MENU_ASSETS}/internet_off.png;${HOME_MENU_ASSETS}/color_track.png;${HOME_MENU_ASSETS}/color_track_gray.png;${HOME_MENU_ASSETS}/color_track_solid.png;${HOME_MENU_ASSETS}/color_track_fade.png;${PARTICLE_ASSETS}/triangle.png;${PARTICLE_ASSETS}/circle.png;${PARTICLE_ASSETS}/cross.png;${PARTICLE_ASSETS}/square.png;${PARTICLE_ASSETS}/dot.png")
+	OBJECT_DEPENDS "${ANIKETOS_ICON_PNG};${HOME_MENU_ASSETS}/internet_on.png;${HOME_MENU_ASSETS}/internet_off.png;${HOME_MENU_ASSETS}/color_track.png;${HOME_MENU_ASSETS}/color_track_gray.png;${HOME_MENU_ASSETS}/color_track_solid.png;${HOME_MENU_ASSETS}/color_track_fade.png;${PARTICLE_ASSETS}/triangle.png;${PARTICLE_ASSETS}/circle.png;${PARTICLE_ASSETS}/cross.png;${PARTICLE_ASSETS}/square.png;${PARTICLE_ASSETS}/dot.png;${HOME_BACKGROUND_ASSETS}/vignette.png;${HOME_BACKGROUND_ASSETS}/edges.png")
 
 file(GLOB SrcFiles CONFIGURE_DEPENDS ${D_SRC}/*.c ${D_SRC}/*.cpp ${D_SRC}/../include/*.h ${D_SRC}/../include/*.hpp ${D_SRC}/*.s ${ONIONHEN_THIRD_PARTY_DIR}/cjson/*.cpp ${ONIONHEN_THIRD_PARTY_DIR}/cjson/*.hpp)
 

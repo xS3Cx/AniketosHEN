@@ -99,3 +99,19 @@ particle_dot_png_start:
 .global particle_dot_png_end
 .type particle_dot_png_end,@object
 particle_dot_png_end:
+.p2align 4
+.global home_background_vignette_png_start
+.type home_background_vignette_png_start,@object
+home_background_vignette_png_start:
+.incbin "@HOME_BACKGROUND_ASSETS@/vignette.png"
+.global home_background_vignette_png_end
+.type home_background_vignette_png_end,@object
+home_background_vignette_png_end:
+.p2align 4
+.global home_background_edges_png_start
+.type home_background_edges_png_start,@object
+home_background_edges_png_start:
+.incbin "@HOME_BACKGROUND_ASSETS@/edges.png"
+.global home_background_edges_png_end
+.type home_background_edges_png_end,@object
+home_background_edges_png_end:

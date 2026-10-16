@@ -78,8 +78,21 @@ behind the Home screen.
   folder is created on first start.
 - **Settings:** on/off, which video, and whether its sound is played (off by
   default; with sound on, the console ducks its own music as for any video).
-  They are stored as `home_video_enabled`, `home_video_path` and
-  `home_video_sound` in `[shell_menu]`.
+  *Video volume %* sets how loud it plays (the player's own scale, 0 to 100,
+  the one React Native's video view uses); 0 counts as sound off, and turning
+  the volume up turns the sound on. They are stored as
+  `home_video_enabled`, `home_video_path`, `home_video_sound` and
+  `home_video_volume` in `[shell_menu]`.
+- **Effects:** five sliders, 0 (off) to 100, lay full-screen layers over the
+  video or picture, under the particles and the rest of Home, and apply as
+  they move: *Background blur %* (a PUI `BackgroundBlurEffect` on a clear
+  panel, which blurs what lies beneath it), *Background dimming %* (black,
+  up to 85 %), *Background haze %* (black too, up to 50 %; both panels
+  are kept out of the system-panel theme, which would tint them), *Vignette %*
+  and *Darken top and bottom %* (black gradients embedded in the module,
+  stretched over the screen). A layer exists only while its slider is above
+  0. Stored as `home_bg_blur`, `home_bg_dim`, `home_bg_haze`,
+  `home_bg_vignette` and `home_bg_edges`.
 - **How it works:** the console's own `Sce.Vsh.Video.VideoPlayer` and PUI
   `VideoView` are created by name and placed under Home's React tree, so the
   video fades and moves with Home. The player core cannot open files from the

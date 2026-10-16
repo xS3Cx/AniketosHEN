@@ -30,6 +30,11 @@ void Remove(const Runtime &runtime, MonoObject *object);
 /* True for a widget created through CreatePanel/CreateLabel here. The theme
  * hooks on PUI's own widgets use it to leave ours alone. */
 bool IsOwn(MonoObject *object);
+/* Count a widget made elsewhere as ours, so the theme keeps its colours
+ * (the effect layers over the Home video, for instance), and stop counting
+ * it once it is gone. */
+void Adopt(MonoObject *object);
+void Disown(MonoObject *object);
 void SetColor(MonoClass *klass, MonoObject *object, const char *property,
               Color color);
 bool AppendChild(const Runtime &runtime, MonoObject *parent,

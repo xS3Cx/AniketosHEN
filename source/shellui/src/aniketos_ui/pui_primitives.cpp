@@ -153,6 +153,16 @@ void RemoveNamed(const Runtime &runtime, MonoObject *root, const char *name) {
 
 bool IsOwn(MonoObject *object) { return object && s_own.count(object) != 0; }
 
+void Adopt(MonoObject *object) {
+  if (object)
+    s_own.insert(object);
+}
+
+void Disown(MonoObject *object) {
+  if (object)
+    s_own.erase(object);
+}
+
 void Remove(const Runtime &, MonoObject *object) {
   /* Works for UI2 and UI3 widgets alike: take the method from the object. */
   if (!object || !mono_object_get_class || !mono_class_get_parent ||

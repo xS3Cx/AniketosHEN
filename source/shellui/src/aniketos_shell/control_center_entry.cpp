@@ -31,6 +31,10 @@ extern const unsigned char home_menu_internet_on_png_start[];
 extern const unsigned char home_menu_internet_on_png_end[];
 extern const unsigned char home_menu_internet_off_png_start[];
 extern const unsigned char home_menu_internet_off_png_end[];
+extern const unsigned char home_background_vignette_png_start[];
+extern const unsigned char home_background_vignette_png_end[];
+extern const unsigned char home_background_edges_png_start[];
+extern const unsigned char home_background_edges_png_end[];
 }
 
 namespace ControlCenterEntry {
@@ -416,6 +420,19 @@ const char *ColorTrackPath(ColorTrack track) {
     return embedded_image("color_track.png", color_track_png_start,
                           color_track_png_end, paths[0], tried[0]);
   }
+}
+
+const char *HomeEffectImagePath(HomeEffectImage image) {
+  static char paths[2][160];
+  static bool tried[2] = {};
+  return image == HomeEffectImage::Vignette
+             ? embedded_image("home_vignette.png",
+                              home_background_vignette_png_start,
+                              home_background_vignette_png_end, paths[0],
+                              tried[0])
+             : embedded_image("home_edges.png", home_background_edges_png_start,
+                              home_background_edges_png_end, paths[1],
+                              tried[1]);
 }
 
 const char *InternetIconPath(bool enabled) {

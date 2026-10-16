@@ -232,6 +232,12 @@ int &int_target(OptionId id) {
   case OptionId::ShellTilesOutlineAnimationSpeed:
     return g_settings.shell_tiles_outline_animation_speed;
   case OptionId::HomeParticlesCount: return g_settings.home_particles_count;
+  case OptionId::HomeVideoVolume: return g_settings.home_video_volume;
+  case OptionId::HomeBackgroundBlur: return g_settings.home_bg_blur;
+  case OptionId::HomeBackgroundDim: return g_settings.home_bg_dim;
+  case OptionId::HomeBackgroundHaze: return g_settings.home_bg_haze;
+  case OptionId::HomeBackgroundVignette: return g_settings.home_bg_vignette;
+  case OptionId::HomeBackgroundEdges: return g_settings.home_bg_edges;
   case OptionId::HomePresenceDot: return g_settings.home_presence_dot;
   case OptionId::ShellToggleStyle: return g_settings.shell_toggle_style;
   case OptionId::ShellClockHourFormat:
@@ -652,6 +658,9 @@ void change_option(const Option &option, int direction) {
       shellui_request_home_reload_after(400);
       LOG_INFO("[HOME-TILES] rounding=%d%%",
                g_settings.shell_tiles_corner_radius);
+    } else if (option.id == OptionId::HomeVideoVolume && target > previous) {
+      /* Turning the volume up turns the video's sound on. */
+      g_settings.home_video_sound = true;
     }
   } else if (option.type == OptionType::SliderFloat) {
     float &target = float_target(option.id);

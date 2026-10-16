@@ -1,5 +1,7 @@
 #include "aniketos_shell/home_video.hpp"
+#include "aniketos_shell/home_menu.hpp"
 #include "aniketos_theme/customization.hpp"
+#include "aniketos_ui/pui_primitives.hpp"
 
 #include "external_symbols.hpp"
 #include "hooked_funcs.hpp"
@@ -437,6 +439,7 @@ int s_hidden_checks = 0;
 int32_t s_last_status = -1;
 std::string s_current;      /* the file being played */
 bool s_sound_applied = false;
+int s_volume_applied = -1;
 std::vector<std::string> s_videos;
 bool s_videos_scanned = false;
 int s_scanned_frame = 0;
@@ -567,13 +570,27 @@ void set_option(MonoObject *options, MonoClass *player_class,
 }
 
 /* Silent by default, and then the system music keeps playing over it; with
-   sound on, the console ducks its music as it does for any other video. */
+   sound on, the console ducks its music as it does for any other video. A
+   volume of 0 counts as sound off, so the music is not ducked for nothing.
+   The player's volume runs to 100: React Native's video view drives the same
+   player with a volume of 0 to 1, 1 by default, and the player reads back 0
+   until something sets it. */
 void apply_sound(MonoObject *player, bool sound) {
-  bool muted = !sound;
+  int32_t volume = std::clamp(g_settings.home_video_volume, 0, 100);
+  bool muted = !sound || volume == 0;
   void *arguments[1] = {&muted};
   call(player, "SetIsMuted", 1, arguments);
   call(player, "SetBGMSuppressionDisabled", 1, arguments);
+  if (!muted) {
+    void *volume_arguments[1] = {&volume};
+    MonoObject *reported = nullptr;
+    if (call(player, "SetVolume", 1, volume_arguments) &&
+        call(player, "GetVolume", 0, nullptr, &reported) && reported)
+      LOG_INFO("[HOMEVIDEO] volume %d, player reports %d", volume,
+               *static_cast<int32_t *>(mono_object_unbox(reported)));
+  }
   s_sound_applied = sound;
+  s_volume_applied = volume;
 }
 
 bool build(MonoObject *root) {
@@ -732,7 +749,8 @@ void watch(MonoObject *root) {
       object_property(root, "get_FirstChild") != view)
     put_first(root, view);
 
-  if (s_sound_applied != g_settings.home_video_sound)
+  if (s_sound_applied != g_settings.home_video_sound ||
+      s_volume_applied != std::clamp(g_settings.home_video_volume, 0, 100))
     apply_sound(player, g_settings.home_video_sound);
 
   const int32_t status = player_status(player);
@@ -915,30 +933,43 @@ void drop_image() {
   s_image_current.clear();
 }
 
-bool build_image(MonoObject *root, const std::string &path) {
+/* A PUI picture of the file at `path`, or null. */
+MonoObject *image_asset(const char *path) {
   MonoImage *pui = getDLLimage("Sce.PlayStation.PUI.dll");
-  MonoClass *box_class =
-      pui ? mono_class_from_name(pui, "Sce.PlayStation.PUI.UI3", "ImageBox")
-          : nullptr;
   MonoClass *asset_class =
       pui ? mono_class_from_name(pui, "Sce.PlayStation.PUI", "ImageAsset")
           : nullptr;
   MonoMethod *asset_ctor =
       asset_class ? overload_of(asset_class, ".ctor", 1, "String") : nullptr;
-  MonoObject *box = make(box_class);
   MonoObject *asset =
       asset_ctor ? mono_object_new(mono_domain_get(), asset_class) : nullptr;
-  if (!box || !asset) {
-    LOG_ERROR("[HOMEIMAGE] classes box=%d asset=%d ctor=%d", box ? 1 : 0,
+  if (!asset) {
+    LOG_ERROR("[HOMEIMAGE] no ImageAsset class=%d ctor=%d",
               asset_class ? 1 : 0, asset_ctor ? 1 : 0);
+    return nullptr;
+  }
+  void *asset_arguments[1] = {mono_string_new(mono_domain_get(), path)};
+  if (!invoke(asset, asset_ctor, asset_arguments)) {
+    LOG_ERROR("[HOMEIMAGE] '%s' could not be opened", path);
+    return nullptr;
+  }
+  return asset;
+}
+
+bool build_image(MonoObject *root, const std::string &path) {
+  MonoImage *pui = getDLLimage("Sce.PlayStation.PUI.dll");
+  MonoClass *box_class =
+      pui ? mono_class_from_name(pui, "Sce.PlayStation.PUI.UI3", "ImageBox")
+          : nullptr;
+  MonoObject *box = make(box_class);
+  if (!box) {
+    LOG_ERROR("[HOMEIMAGE] no ImageBox class");
     return false;
   }
   s_image_widget = mono_gchandle_new(box, /*pinned=*/1);
-  void *asset_arguments[1] = {mono_string_new(mono_domain_get(), path.c_str())};
-  if (!invoke(asset, asset_ctor, asset_arguments)) {
-    LOG_ERROR("[HOMEIMAGE] '%s' could not be opened", path.c_str());
+  MonoObject *asset = image_asset(path.c_str());
+  if (!asset)
     return false;
-  }
   float width = 1920.0f;
   float height = 1080.0f;
   float_property(root, "get_Width", &width);
@@ -1006,6 +1037,211 @@ void tick_image(bool video_shown) {
     put_first(root, widget);
 }
 
+
+/* ---- effects over the video or picture --------------------------------
+ * Full-screen layers right above the video or picture and under the rest of
+ * Home (the particles, then Home's React tree): blur, a PUI
+ * BackgroundBlurEffect on a clear panel, which blurs whatever lies beneath
+ * it; dimming and haze, black panels (the panels are counted as ours, or the
+ * system-panel theme would paint them its colour); a vignette and shading at
+ * the top and bottom, embedded black gradients stretched over the screen.
+ * Each follows its Shell Menu slider live, from 0 (no layer at all) to 100. */
+enum Effect { kBlur, kDim, kHaze, kVignette, kEdges, kEffectCount };
+constexpr const char *kEffectNames[kEffectCount] = {"blur", "dim", "haze",
+                                                    "vignette", "edges"};
+/* What each gets at 100. */
+constexpr float kBlurRadius = 40.0f;
+constexpr float kDimOpacity = 0.85f;
+constexpr float kHazeOpacity = 0.5f;
+
+struct UIColor {
+  float r, g, b, a;
+  int32_t color_space;
+};
+static_assert(sizeof(UIColor) == 20);
+
+struct EffectLayer {
+  uint32_t widget = 0; /* strong handle */
+  int applied = -1;    /* the strength on screen */
+  int failed = -1;     /* a strength the layer could not be made at */
+};
+EffectLayer s_effect_layers[kEffectCount];
+
+int effect_strength(int effect) {
+  int strength = 0;
+  switch (effect) {
+  case kBlur: strength = g_settings.home_bg_blur; break;
+  case kDim: strength = g_settings.home_bg_dim; break;
+  case kHaze: strength = g_settings.home_bg_haze; break;
+  case kVignette: strength = g_settings.home_bg_vignette; break;
+  case kEdges: strength = g_settings.home_bg_edges; break;
+  default: break;
+  }
+  return std::clamp(strength, 0, 100);
+}
+
+void drop_effect(int effect) {
+  EffectLayer &layer = s_effect_layers[effect];
+  MonoObject *widget = target(layer.widget);
+  if (widget && !ShellClock::IsWidgetDisposed(widget)) {
+    if (effect == kBlur) {
+      /* the blur holds offscreen textures; they go with it */
+      MonoObject *blur = object_property(widget, "get_PostEffect");
+      void *none[1] = {nullptr};
+      call(widget, "set_PostEffect", 1, none);
+      if (blur)
+        call(blur, "Dispose", 0);
+    }
+    call(widget, "RemoveFromParent", 0);
+    call(widget, "Dispose", 0);
+  }
+  AniketosUI::Pui::Disown(widget);
+  release(layer.widget);
+  layer.applied = -1;
+}
+
+MonoObject *build_effect(MonoObject *root, int effect) {
+  MonoImage *pui = getDLLimage("Sce.PlayStation.PUI.dll");
+  const bool picture = effect == kVignette || effect == kEdges;
+  MonoClass *klass =
+      pui ? mono_class_from_name(pui, "Sce.PlayStation.PUI.UI3",
+                                 picture ? "ImageBox" : "Panel")
+          : nullptr;
+  MonoObject *widget = make(klass);
+  if (!widget)
+    return nullptr;
+  s_effect_layers[effect].widget = mono_gchandle_new(widget, /*pinned=*/1);
+  float width = 1920.0f;
+  float height = 1080.0f;
+  float_property(root, "get_Width", &width);
+  float_property(root, "get_Height", &height);
+  void *width_arguments[1] = {&width};
+  void *height_arguments[1] = {&height};
+  char name[48];
+  std::snprintf(name, sizeof(name), "id_aniketos_home_%s",
+                kEffectNames[effect]);
+  void *name_arguments[1] = {mono_string_new(mono_domain_get(), name)};
+  call(widget, "set_Width", 1, width_arguments);
+  call(widget, "set_Height", 1, height_arguments);
+  call(widget, "set_Name", 1, name_arguments);
+  bool no = false;
+  void *focus_arguments[1] = {&no};
+  if (method_of(klass, "set_Focusable", 1))
+    call(widget, "set_Focusable", 1, focus_arguments);
+
+  if (picture) {
+    const char *path = HomeEffectImagePath(effect == kVignette
+                                               ? HomeEffectImage::Vignette
+                                               : HomeEffectImage::Edges);
+    MonoObject *asset = path && path[0] ? image_asset(path) : nullptr;
+    void *image_arguments[1] = {asset};
+    if (!asset || !call(widget, "set_Image", 1, image_arguments))
+      return nullptr;
+    /* stretched over the whole screen, whatever its shape */
+    int32_t stretch = 0;
+    if (enum_value(mono_class_from_name(pui, "Sce.PlayStation.PUI.UI3",
+                                        "ImageScaleType"),
+                   "Stretch", &stretch)) {
+      void *scale_arguments[1] = {&stretch};
+      call(widget, "set_ImageScaleType", 1, scale_arguments);
+    }
+    return widget;
+  }
+
+  AniketosUI::Pui::Adopt(widget);
+  UIColor color{0.0f, 0.0f, 0.0f, effect == kBlur ? 0.0f : 1.0f, 0};
+  void *color_arguments[1] = {&color};
+  if (!call(widget, "set_BackgroundColor", 1, color_arguments))
+    return nullptr;
+  if (effect == kBlur) {
+    MonoObject *blur = make(mono_class_from_name(
+        pui, "Sce.PlayStation.PUI.UI3", "BackgroundBlurEffect"));
+    void *blur_arguments[1] = {blur};
+    if (!blur || !call(widget, "set_PostEffect", 1, blur_arguments))
+      return nullptr;
+  }
+  return widget;
+}
+
+void apply_effect(MonoObject *widget, int effect, int strength) {
+  const float amount = strength / 100.0f;
+  if (effect == kBlur) {
+    float radius = amount * kBlurRadius;
+    void *radius_arguments[1] = {&radius};
+    call(object_property(widget, "get_PostEffect"), "set_Radius", 1,
+         radius_arguments);
+    return;
+  }
+  float opacity = amount * (effect == kDim    ? kDimOpacity
+                            : effect == kHaze ? kHazeOpacity
+                                              : 1.0f);
+  void *opacity_arguments[1] = {&opacity};
+  call(widget, "set_Opacity", 1, opacity_arguments);
+}
+
+/* `widget` right above `below` in Home's root. */
+void place_above(MonoObject *root, MonoObject *below, MonoObject *widget) {
+  if (object_property(widget, "get_Parent") == root &&
+      object_property(below, "get_NextSibling") == widget)
+    return;
+  if (object_property(widget, "get_Parent"))
+    call(widget, "RemoveFromParent", 0);
+  MonoObject *next = object_property(below, "get_NextSibling");
+  if (!next) {
+    call(root, "AppendChild", 1, reinterpret_cast<void **>(&widget));
+    return;
+  }
+  void *arguments[2] = {widget, next};
+  call(root, "InsertChildBelow", 2, arguments);
+}
+
+/* Twice a second: a layer for each effect turned up, in order right above
+   `base`, the video or the picture; none without one. */
+void tick_effects(MonoObject *base) {
+  MonoObject *root = ShellClock::GetHomeRoot();
+  const bool shown = base && root && !ShellClock::IsWidgetDisposed(root) &&
+                     !ShellClock::IsWidgetDisposed(base) &&
+                     object_property(base, "get_Parent") == root;
+  MonoObject *below = base;
+  for (int effect = 0; effect < kEffectCount; ++effect) {
+    EffectLayer &layer = s_effect_layers[effect];
+    const int strength = shown ? effect_strength(effect) : 0;
+    MonoObject *widget = target(layer.widget);
+    if (widget && ShellClock::IsWidgetDisposed(widget)) {
+      /* went with Home's scene */
+      AniketosUI::Pui::Disown(widget);
+      release(layer.widget);
+      layer.applied = -1;
+      widget = nullptr;
+    }
+    if (strength == 0) {
+      if (layer.widget)
+        drop_effect(effect);
+      layer.failed = -1;
+      continue;
+    }
+    if (strength == layer.failed)
+      continue;
+    if (!widget) {
+      widget = build_effect(root, effect);
+      if (!widget) {
+        LOG_ERROR("[HOMEFX] the %s layer could not be made",
+                  kEffectNames[effect]);
+        drop_effect(effect);
+        layer.failed = strength;
+        continue;
+      }
+    }
+    if (layer.applied != strength) {
+      apply_effect(widget, effect, strength);
+      LOG_INFO("[HOMEFX] %s %d%%", kEffectNames[effect], strength);
+      layer.applied = strength;
+    }
+    place_above(root, below, widget);
+    below = widget;
+  }
+}
+
 } // namespace
 
 std::string FileName(const std::string &path) {
@@ -1047,23 +1283,22 @@ std::string Status() {
   MonoObject *player = target(s_player);
   std::snprintf(text, sizeof(text),
                 "state=%d port=%d requests=%d connections=%d failures=%d "
-                "status=%d hidden=%d enabled=%d sound=%d videos=%zu "
-                "file='%s'",
+                "status=%d hidden=%d enabled=%d sound=%d volume=%d "
+                "videos=%zu file='%s'",
                 static_cast<int>(s_state), s_port.load(), s_requests.load(),
                 s_connections.load(), s_failures,
                 player ? player_status(player) : -1,
                 s_state == State::Hidden ? 1 : 0,
                 (AniketosTheme::CustomizationOn() && g_settings.home_video_enabled) ? 1 : 0,
-                g_settings.home_video_sound ? 1 : 0, s_videos.size(),
+                g_settings.home_video_sound ? 1 : 0,
+                g_settings.home_video_volume, s_videos.size(),
                 s_current.c_str());
   return text;
 }
 
-void Tick() {
-  ++s_frame;
-  /* twice a second is plenty for everything below */
-  if (s_frame % 30 != 0)
-    return;
+namespace {
+
+void tick_playback() {
   if (!s_videos_scanned)
     scan(); /* also makes the folder, so there is a place to put files */
 
@@ -1134,6 +1369,18 @@ void Tick() {
   default:
     break;
   }
+}
+
+} // namespace
+
+void Tick() {
+  ++s_frame;
+  /* twice a second is plenty for everything below */
+  if (s_frame % 30 != 0)
+    return;
+  tick_playback();
+  MonoObject *base = s_state == State::Playing ? target(s_view) : nullptr;
+  tick_effects(base ? base : target(s_image_widget));
 }
 
 } // namespace HomeVideo

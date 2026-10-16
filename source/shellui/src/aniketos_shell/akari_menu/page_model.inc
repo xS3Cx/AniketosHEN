@@ -858,6 +858,9 @@ std::vector<Option> build_page(Page page) {
     options.push_back(toggle(tr("vsh.home_video.sound"),
                              OptionId::HomeVideoSound,
                              g_settings.home_video_sound));
+    options.push_back(slider_int(tr("vsh.home_video.volume"),
+                                 OptionId::HomeVideoVolume,
+                                 g_settings.home_video_volume, 0, 100, 5));
     options.push_back(
         action(tr("vsh.home_video.refresh"), OptionId::HomeVideoRefresh));
     /* where to put files, as seen over FTP or on a USB drive */
@@ -885,6 +888,22 @@ std::vector<Option> build_page(Page page) {
         action(tr("vsh.bg.refresh_list"), OptionId::HomeImageRefresh));
     options.push_back(value(tr("vsh.home_image.folder"),
                             ONION_DIST_DATA_ROOT "/ShellUI/background"));
+    /* layers over the video or picture, applied as the sliders move */
+    options.push_back(slider_int(tr("vsh.home_bg.blur"),
+                                 OptionId::HomeBackgroundBlur,
+                                 g_settings.home_bg_blur, 0, 100, 5));
+    options.push_back(slider_int(tr("vsh.home_bg.dim"),
+                                 OptionId::HomeBackgroundDim,
+                                 g_settings.home_bg_dim, 0, 100, 5));
+    options.push_back(slider_int(tr("vsh.home_bg.haze"),
+                                 OptionId::HomeBackgroundHaze,
+                                 g_settings.home_bg_haze, 0, 100, 5));
+    options.push_back(slider_int(tr("vsh.home_bg.vignette"),
+                                 OptionId::HomeBackgroundVignette,
+                                 g_settings.home_bg_vignette, 0, 100, 5));
+    options.push_back(slider_int(tr("vsh.home_bg.edges"),
+                                 OptionId::HomeBackgroundEdges,
+                                 g_settings.home_bg_edges, 0, 100, 5));
     /* particles over the wallpaper or video */
     options.push_back(toggle(tr("vsh.home_particles.enable"),
                              OptionId::HomeParticlesEnabled,

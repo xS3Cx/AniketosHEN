@@ -130,9 +130,20 @@ ONION_SHELL_SETTING_BOOL(home_osd_fan, true)
 ONION_SHELL_SETTING_BOOL(home_video_enabled, false)
 ONION_SHELL_SETTING_STRING(home_video_path, "")
 ONION_SHELL_SETTING_BOOL(home_video_sound, false)
+/* How loud the video is with its sound on: percent of the player's own
+ * level, 0 counting as sound off. */
+ONION_SHELL_SETTING_INT(home_video_volume, 100)
 /* A still image in the same place, shown when no video is. */
 ONION_SHELL_SETTING_BOOL(home_image_enabled, false)
 ONION_SHELL_SETTING_STRING(home_image_path, "")
+/* Layers over the video or picture, each 0 (none) to 100 (shellui:
+ * aniketos_shell/home_video): blur, dimming, haze, vignette and shading of
+ * the top and bottom. */
+ONION_SHELL_SETTING_INT(home_bg_blur, 0)
+ONION_SHELL_SETTING_INT(home_bg_dim, 0)
+ONION_SHELL_SETTING_INT(home_bg_haze, 0)
+ONION_SHELL_SETTING_INT(home_bg_vignette, 0)
+ONION_SHELL_SETTING_INT(home_bg_edges, 0)
 /* Drifting particles behind Home (shellui: aniketos_shell/home_particles). */
 ONION_SHELL_SETTING_BOOL(home_particles_enabled, false)
 ONION_SHELL_SETTING_INT(home_particles_count, 110)

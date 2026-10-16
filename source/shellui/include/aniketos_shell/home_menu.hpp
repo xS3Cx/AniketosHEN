@@ -35,3 +35,7 @@ const char *InternetIconPath(bool enabled);
    white, plain white (tinted to the colour) and white fading out. */
 enum class ColorTrack { Hues, Gray, Solid, Fade };
 const char *ColorTrackPath(ColorTrack track);
+/* The black gradients laid over the Home video or picture (home_video): a
+   vignette, and shading at the top and bottom. */
+enum class HomeEffectImage { Vignette, Edges };
+const char *HomeEffectImagePath(HomeEffectImage image);
