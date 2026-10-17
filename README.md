@@ -43,11 +43,11 @@
 </p>
 
 <p align="center">
-  <img src="assets/screenshot_01.png" alt="AniketosHEN home-screen entry"/>
+  <img src="assets/screenshot_01.png" alt="AniketosHEN on the Home screen: Emulators and Bookmark tabs and the stats overlay"/>
 </p>
 
 <p align="center">
-  <img src="assets/screenshot_02.png" alt="AniketosHEN in-game monitor bar"/>
+  <img src="assets/screenshot_02.png" alt="The HEN button menu: HEN Toolbox, Install packages, Payloads, Internet connection, Unload HEN"/>
 </p>
 
 <p align="center">
