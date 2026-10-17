@@ -188,8 +188,14 @@ void run_script_hook(MonoObject *executor, MonoObject *bundle) {
         LOG_WARN("[HOMEJS] could not record the start count");
       close(fd);
     }
-    const std::string caption = std::string(HomeTabs::kEmulatorsGlyph) + " " +
-                                toolbox_i18n::tr("home_tabs.emulators");
+    const std::string caption = HomeTabs::Caption(
+        HomeTabs::kEmulatorsGlyph, toolbox_i18n::tr("home_tabs.emulators"));
+    /* Games and Media as the bar shows them, for React to lay it out by */
+    std::string games_name, games_glyph, media_name, media_glyph;
+    HomeTabs::ScriptCaption(HomeTabs::StockTab::Games, &games_name,
+                            &games_glyph);
+    HomeTabs::ScriptCaption(HomeTabs::StockTab::Media, &media_name,
+                            &media_glyph);
     const std::string config =
         std::string("globalThis.__aniketosConfig = {space: ") +
         (home ? "'emulators'" : "''") +
@@ -204,12 +210,15 @@ void run_script_hook(MonoObject *executor, MonoObject *bundle) {
         ", presence: " + JsString(presence_name()) +
         /* the bookmark tab: its caption (empty for none) and its name */
         ", bookmark: " +
-        JsString(bookmark ? std::string(HomeBookmark::kGlyph) + " " +
-                                HomeBookmark::Name()
+        JsString(bookmark ? HomeTabs::Caption(HomeBookmark::kGlyph,
+                                              HomeBookmark::Name())
                           : std::string()) +
         ", bookmarkLabel: " + JsString(HomeBookmark::Name()) +
         ", bookmarkLimit: " + std::to_string(HomeBookmark::kContentLimit) +
         ", bookmarkWatch: " + (home && HomeBookmark::Enabled() ? "true" : "false") +
+        ", stockCaptions: {game: [" + JsString(games_name) + ", " +
+        JsString(games_glyph) + "], media: [" + JsString(media_name) + ", " +
+        JsString(media_glyph) + "]}" +
         "};";
     const bool ok = eval(executor, config.c_str(), "aniketos-config.js") &&
                     eval(executor, kInjectedScript, "aniketos-home.js");

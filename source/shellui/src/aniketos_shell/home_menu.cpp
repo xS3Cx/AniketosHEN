@@ -3,6 +3,8 @@
 #include "external_symbols.hpp"
 #include "hooked_funcs.hpp"
 #include "ipc.hpp"
+#include "shellui_payload_state.hpp"
+#include "shellui_payloads.hpp"
 #include "aniketos_shell/system_dialogs.hpp"
 #include "toolbox_i18n.hpp"
 
@@ -29,7 +31,7 @@ namespace HomeMenu {
 namespace {
 
 /* What a row of the menu is. */
-enum class Row { Toolbox, Packages, Internet, Unload };
+enum class Row { Toolbox, Packages, Payloads, Internet, Unload };
 struct RowInfo {
   Row kind;
   int index;
@@ -56,6 +58,14 @@ constexpr const char *kPackageIcon =
 constexpr size_t kMaxPackages = 40; /* in one place */
 constexpr const char *kDriveIcon =
     ONION_DIST_USER_DATA_ROOT "/assets/icon_xml_hardrive.png";
+/* "Payloads" is a submenu row too: every payload of the payloads folders,
+   read when the menu opens, with whether it runs; choosing one starts or
+   stops it. A payload row's id is kPayloadId and its number in
+   s_payloads. */
+std::vector<PayloadEntry> s_payloads;
+constexpr const char *kPayloadId = "payload:";
+constexpr const char *kPayloadIcon =
+    ONION_DIST_USER_DATA_ROOT "/assets/icon_xml_plugins.png";
 
 const char *tr(const char *key) { return toolbox_i18n::tr(key); }
 
@@ -363,6 +373,28 @@ std::vector<SystemDialogs::MenuEntry> build_rows() {
     packages.children.front().header = tr("home_menu.packages.title");
   entries.push_back(packages);
   s_rows.push_back({Row::Packages, 0});
+  SystemDialogs::MenuEntry payloads{tr("home_menu.payloads"), kPayloadIcon};
+  for (size_t number = 0; number < s_payloads.size(); ++number) {
+    const PayloadEntry &payload = s_payloads[number];
+    const bool running = shellui_payload_is_running(payload.tid.c_str());
+    SystemDialogs::MenuEntry row{
+        payload.name + "  ·  " +
+            tr(running ? "payload.status.running" : "payload.status.stopped"),
+        kPayloadIcon};
+    row.id = kPayloadId + std::to_string(number);
+    payloads.children.push_back(row);
+  }
+  if (payloads.children.empty()) {
+    char none[200];
+    std::snprintf(none, sizeof(none), tr("home_menu.payloads.none"),
+                  "/data/" ONION_DIST_DIR_NAME "/payloads");
+    SystemDialogs::MenuEntry empty{none, ""};
+    empty.enabled = false;
+    payloads.children.push_back(empty);
+  }
+  payloads.children.front().header = tr("home_menu.payloads.title");
+  entries.push_back(payloads);
+  s_rows.push_back({Row::Payloads, 0});
   s_internet_row = static_cast<int>(entries.size());
   entries.push_back({tr("home_menu.internet"), InternetIconPath(s_switch_value),
                      /*is_switch=*/s_switch_shown, s_switch_value});
@@ -399,8 +431,9 @@ void Tick() {
     s_switch_shown = internet_known;
     s_switch_value = internet;
     find_packages();
-    LOG_INFO("[HOMEMENU] %zu places, %zu packages", s_place_list.size(),
-             s_packages.size());
+    s_payloads = shellui_scan_payloads();
+    LOG_INFO("[HOMEMENU] %zu places, %zu packages, %zu payloads",
+             s_place_list.size(), s_packages.size(), s_payloads.size());
     SystemDialogs::ClosePopupMenu();
     s_menu_up = false;
     show_rows(scene, 0);
@@ -429,9 +462,24 @@ void Tick() {
   if (s_menu_up && SystemDialogs::PopupMenuDismissed())
     s_menu_up = false;
 
-  /* A package chosen in a place's submenu: the row's id is its number. */
+  /* A package chosen in a place's submenu: the row's id is its number. A
+     payload: kPayloadId and its number. */
   std::string chosen;
-  if (s_menu_up && SystemDialogs::PollPopupSubmenu(&chosen)) {
+  const size_t payload_id = std::strlen(kPayloadId);
+  if (s_menu_up && SystemDialogs::PollPopupSubmenu(&chosen) &&
+      chosen.compare(0, payload_id, kPayloadId) == 0) {
+    const int number = std::atoi(chosen.c_str() + payload_id);
+    if (number >= 0 && static_cast<size_t>(number) < s_payloads.size()) {
+      const PayloadEntry payload = s_payloads[static_cast<size_t>(number)];
+      SystemDialogs::ClosePopupMenu();
+      s_menu_up = false;
+      const bool stopped = shellui_payload_stop(payload);
+      if (!stopped)
+        shellui_payload_start(payload);
+      LOG_INFO("[HOMEMENU] payload '%s' %s", payload.name.c_str(),
+               stopped ? "stopped" : "started");
+    }
+  } else if (s_menu_up && !chosen.empty()) {
     const int number = std::atoi(chosen.c_str());
     if (!chosen.empty() && number >= 0 &&
         static_cast<size_t>(number) < s_packages.size()) {
@@ -463,7 +511,8 @@ void Tick() {
       shellui_open_toolbox();
       break;
     case Row::Packages:
-      break; /* a submenu row: PUI opens the places beside the menu */
+    case Row::Payloads:
+      break; /* submenu rows: PUI opens their rows beside the menu */
     case Row::Internet:
       break; /* a switch: followed above */
     case Row::Unload: {

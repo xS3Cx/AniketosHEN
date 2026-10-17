@@ -1362,8 +1362,11 @@ MonoString *DecorateSpaceSwitcherLabel(MonoObject *label, MonoString *text) {
       symbol == kGamesSymbol ? HomeTabs::StockTab::Games
                              : HomeTabs::StockTab::Media,
       original);
+  /* tab icons switched off: the system's caption as it is */
+  if (named.empty() && !HomeTabs::IconsShown())
+    return text;
   MonoString *replacement = managed_string(
-      named.empty() ? std::string(symbol) + " " + original : named);
+      named.empty() ? HomeTabs::Caption(symbol, original) : named);
   if (!replacement)
     return text;
   LOG_INFO("[HOME-SPACES:NATIVE] decorated match='%s' symbol=U+%04X "
@@ -1375,7 +1378,8 @@ MonoString *DecorateSpaceSwitcherLabel(MonoObject *label, MonoString *text) {
 }
 
 bool IsSpaceSwitcherTabLabel(const std::string &text) {
-  return localized_space_tab(text) >= 0;
+  /* without the icons there is nothing to fit or put back on the label */
+  return HomeTabs::IconsShown() && localized_space_tab(text) >= 0;
 }
 
 bool IsSpaceSwitcherMediaTabLabel(const std::string &text) {

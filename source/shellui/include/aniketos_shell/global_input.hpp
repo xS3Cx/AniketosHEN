@@ -19,6 +19,8 @@ bool ConsumeGameButtonPress(uint32_t button);
 // Safe to sample from ShellUI's UI thread; returns zero while not capturing.
 void ReadLeftStick(float &x, float &y);
 void SetMenuCapturing(bool capturing);
+/** True while the menu has the controller, and after it lets go until every
+ * button held then is up: ShellUI is to see none of them. */
 bool IsMenuCapturing();
 
 // Borrowed libScePad handle owned by the passive reader thread. Callers must

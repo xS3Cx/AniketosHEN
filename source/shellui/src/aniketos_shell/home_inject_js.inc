@@ -71,8 +71,49 @@ R"JS((function () {
     } catch (e) { log('accessor not writable: ' + e); }
   }
 
+  /* Games and Media under the captions the native text hook gives them (the
+     user's name, the glyph in front): React lays the bar out for the text a
+     tab shows, so the tabs are where they belong from the first frame
+     instead of being moved after each of React's layouts. */
+  function captionStockTabs(text, id) {
+    var stock = cfg.stockCaptions;
+    if (!SPACE || !stock || !text || typeof text !== 'object') return;
+    for (var key in stock) {
+      var name = stock[key][0], glyph = stock[key][1];
+      if (!name && !glyph) continue;
+      /* Home keeps a getter there that gives a text element the system
+         translates (RCTVirtualTextObject, msgid_games / msgid_media). The
+         user's name replaces it; the glyph goes in front of it, the
+         translation left to the system as before. */
+      var d = Object.getOwnPropertyDescriptor(text, key);
+      if (!d || d.__aniketos) continue;
+      var original = d.get ? d.get : (function (v) {
+        return function () { return v; };
+      })(d.value);
+      if (!d.configurable) {
+        log('caption of ' + key + ' is fixed; left as it is');
+        continue;
+      }
+      try {
+        var getter = (function (get, name, glyph) {
+          return function () {
+            return name ? name : [glyph + ' ', get.call(this)];
+          };
+        })(original, name, glyph);
+        getter.__aniketos = true;
+        Object.defineProperty(text, key, {
+          configurable: true, enumerable: d.enumerable, get: getter
+        });
+        once('stockCaption.' + key, id);
+      } catch (e) { log('caption of ' + key + ' not replaced: ' + e); }
+    }
+  }
+
   function patchObject(o, id) {
-    if (!EXTRA.length || !o || (typeof o !== 'object' && typeof o !== 'function'))
+    if (!o || (typeof o !== 'object' && typeof o !== 'function'))
+      return;
+    captionStockTabs(o.textBySpaceId, id);
+    if (!EXTRA.length)
       return;
     var ids = o.spaceIds;
     if (Array.isArray(ids) && ids.indexOf('game') >= 0) A.spaceIds = ids;

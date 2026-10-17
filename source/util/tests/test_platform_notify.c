@@ -271,6 +271,33 @@ static int test_notify_rich_localizes_both_text_fields(void) {
   return 0;
 }
 
+static int g_rich_logged = -1;
+
+static int32_t capture_rich_logged(int32_t user_id, bool is_logged,
+                                   const char *payload) {
+  (void)payload;
+  TEST_ASSERT_TRUE(user_id == 0xFE);
+  g_rich_logged = is_logged ? 1 : 0;
+  return 0;
+}
+
+static int test_notify_rich_toast_is_not_logged(void) {
+  onion_notify_set_rich_send(capture_rich_logged);
+  g_rich_logged = -1;
+  onion_notify_rich_toast("notify.brand", "notify.boot.starting", "/icon.png",
+                          "download", "46");
+  TEST_ASSERT_TRUE(g_rich_logged == 0);
+  g_rich_logged = -1;
+  onion_notify_try_rich_toast("{\"rawData\":{}}", "notify.boot.welcome");
+  TEST_ASSERT_TRUE(g_rich_logged == 0);
+  g_rich_logged = -1;
+  onion_notify_rich("notify.brand", "notify.boot.starting", "/icon.png",
+                    "download", "47");
+  TEST_ASSERT_TRUE(g_rich_logged == 1);
+  onion_notify_set_rich_send(NULL);
+  return 0;
+}
+
 static int g_plain_fallback_calls;
 static char g_plain_fallback_message[1024];
 static int g_rich_fail_calls;
@@ -386,6 +413,8 @@ int test_platform_notify_suite(void) {
       onion_test_run("notify_rich_formats_payload", test_notify_rich_formats_payload);
   failures += onion_test_run("notify_rich_localizes_both_text_fields",
                              test_notify_rich_localizes_both_text_fields);
+  failures += onion_test_run("notify_rich_toast_is_not_logged",
+                             test_notify_rich_toast_is_not_logged);
   failures += onion_test_run("notify_rich_falls_back_when_send_fails",
                              test_notify_rich_falls_back_when_send_fails);
   failures += onion_test_run("notify_rich_falls_back_when_unregistered",

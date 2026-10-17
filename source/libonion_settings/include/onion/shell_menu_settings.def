@@ -156,12 +156,18 @@ ONION_SHELL_SETTING_INT(home_presence_dot, 0)
 ONION_SHELL_SETTING_STRING(home_tab_games_name, "")
 ONION_SHELL_SETTING_STRING(home_tab_media_name, "")
 ONION_SHELL_SETTING_BOOL(home_tab_emulators, true)
+/* The glyph in front of each tab's caption (Games, Media, Emulators, the
+ * bookmark); a name of the user's that starts with a glyph has that one. */
+ONION_SHELL_SETTING_BOOL(home_tab_icons, true)
 /* A bookmark tab on Home after Emulators, named by the user and filled
  * from a game's Options menu (shellui: aniketos_shell/home_bookmark). */
 ONION_SHELL_SETTING_BOOL(home_bookmark, true)
 /* A key after Shift on the system keyboard that turns the letter keys into
  * pages of the console's glyphs (shellui: aniketos_shell/osk_glyphs). */
 ONION_SHELL_SETTING_BOOL(osk_glyph_key, true)
+/* The system keyboard's own emoji key and panel in every field but a
+ * password one (shellui: aniketos_shell/osk_glyphs). */
+ONION_SHELL_SETTING_BOOL(osk_emoji, true)
 /* The look of the system's on/off switches: 0 the system's own, 1 and up
  * the styles of shellui's aniketos_theme/toggle_styles. */
 ONION_SHELL_SETTING_INT(shell_toggle_style, 0)

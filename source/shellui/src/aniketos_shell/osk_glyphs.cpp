@@ -374,6 +374,147 @@ void next_page() {
   show_label();
 }
 
+/* ---- the glyphs through the confirm ------------------------------------- */
+
+/* The keyboard's engine keeps a glyph only in the text being typed (the
+   preedit). At the confirm it sends that text once more without the
+   console's private-use characters, and the field confirms the preedit it
+   holds, both in one frame: the glyphs would be lost. The last preedit with
+   glyphs is kept, and a confirm of that text without its glyphs gives the
+   field the kept preedit back first. A preedit without the glyphs that no
+   confirm follows in its frame is the user's own edit (the last glyph
+   deleted), and the kept text is dropped. The log has counts, never the
+   text (a field may hold a password). */
+
+/* `text` without the console's glyphs (U+E000-U+F8FF); `count` gets how many
+   there were. */
+std::string without_glyphs(const std::string &text, int *count) {
+  std::string out;
+  int glyphs = 0;
+  for (size_t i = 0; i < text.size();) {
+    const unsigned char lead = static_cast<unsigned char>(text[i]);
+    size_t length = lead < 0x80 ? 1 : lead < 0xe0 ? 2 : lead < 0xf0 ? 3 : 4;
+    if (i + length > text.size())
+      length = text.size() - i;
+    uint32_t code = 0;
+    if (length == 3)
+      code = ((lead & 0x0fu) << 12) |
+             ((static_cast<unsigned char>(text[i + 1]) & 0x3fu) << 6) |
+             (static_cast<unsigned char>(text[i + 2]) & 0x3fu);
+    if (length == 3 && code >= 0xe000 && code <= 0xf8ff)
+      ++glyphs;
+    else
+      out.append(text, i, length);
+    i += length;
+  }
+  if (count)
+    *count = glyphs;
+  return out;
+}
+
+uint32_t s_preedit_field = 0; /* the TextField of s_preedit */
+std::string s_preedit;        /* its last preedit with glyphs in it */
+int s_preedit_glyphs = 0;
+uint32_t s_preedit_caret = 0; /* that preedit's caret and clause */
+int32_t s_preedit_clause_start = 0;
+int32_t s_preedit_clause_end = 0;
+int64_t s_frame = 0;          /* Tick calls */
+int64_t s_bare_frame = -1;    /* frame of a preedit that was s_preedit
+                                 without its glyphs */
+int s_confirm_logs = 0;
+
+void forget_preedit() {
+  keep(s_preedit_field, nullptr);
+  s_preedit.clear();
+  s_preedit_glyphs = 0;
+  s_preedit_caret = 0;
+  s_preedit_clause_start = s_preedit_clause_end = 0;
+  s_bare_frame = -1;
+}
+
+using UpdatePreedit = void (*)(MonoObject *, MonoString *, uint32_t, int32_t,
+                               int32_t);
+UpdatePreedit s_update_preedit = nullptr;
+void update_preedit_hook(MonoObject *text_field, MonoString *text,
+                         uint32_t caret, int32_t start, int32_t end) {
+  if (s_update_preedit)
+    s_update_preedit(text_field, text, caret, start, end);
+  if (!active() && s_preedit_field)
+    forget_preedit(); /* the key turned off mid-edit */
+  if (!text_field || !active())
+    return;
+  const std::string typed = text_of(reinterpret_cast<MonoObject *>(text));
+  int glyphs = 0;
+  const std::string plain = without_glyphs(typed, &glyphs);
+  const bool ours = target(s_preedit_field) == text_field;
+  if (glyphs) {
+    keep(s_preedit_field, text_field);
+    s_preedit = typed;
+    s_preedit_glyphs = glyphs;
+    s_preedit_caret = caret;
+    s_preedit_clause_start = start;
+    s_preedit_clause_end = end;
+    s_bare_frame = -1;
+  } else if (ours && plain == without_glyphs(s_preedit, nullptr)) {
+    /* the engine right before its confirm, or the last glyph deleted: a
+       confirm in this frame tells them apart */
+    s_bare_frame = s_frame;
+  } else if (ours) {
+    /* edited since: the glyphs kept are not the field's any more */
+    forget_preedit();
+  }
+}
+
+using ConfirmPreedit = void (*)(MonoObject *, MonoString *, bool);
+ConfirmPreedit s_confirm_preedit = nullptr;
+void confirm_preedit_hook(MonoObject *text_field, MonoString *text,
+                          bool by_ime) {
+  MonoString *confirmed = text;
+  if (text_field && active() && target(s_preedit_field) == text_field) {
+    const std::string got = text_of(reinterpret_cast<MonoObject *>(text));
+    int glyphs = 0;
+    without_glyphs(got, &glyphs);
+    if (s_preedit_glyphs && !glyphs &&
+        (s_bare_frame < 0 || s_bare_frame == s_frame) &&
+        got == without_glyphs(s_preedit, nullptr)) {
+      /* the bare preedit has already replaced the field's: the one with the
+         glyphs goes back before the field confirms what it holds */
+      confirmed = managed(s_preedit);
+      if (s_update_preedit)
+        s_update_preedit(text_field, confirmed, s_preedit_caret,
+                         s_preedit_clause_start, s_preedit_clause_end);
+      if (s_confirm_logs++ < 20)
+        LOG_INFO("[OSK] confirm kept %d glyphs", s_preedit_glyphs);
+    }
+    forget_preedit();
+  }
+  if (s_confirm_preedit)
+    s_confirm_preedit(text_field, confirmed, by_ime);
+}
+
+/* ---- the keyboard's own emoji ------------------------------------------- */
+
+/* TextFieldEditIme.CreateImeOptions (PUI UI3): the options a field opens
+   the keyboard with. With EnableUnicodeEmoji the keyboard lays out its own
+   emoji key and panel, and its engine takes emoji. A password field is
+   left as it is. */
+constexpr int32_t kEnableUnicodeEmoji = 0x00040000; /* ImeOptions */
+constexpr int32_t kPasswordMode = 0x00000004;
+using CreateImeOptions = int32_t (*)(MonoObject *);
+CreateImeOptions s_create_ime_options = nullptr;
+int s_option_logs = 0;
+int32_t create_ime_options_hook(MonoObject *text_field) {
+  const int32_t given =
+      s_create_ime_options ? s_create_ime_options(text_field) : 0;
+  int32_t options = given;
+  if (s_enabled && g_settings.osk_emoji && !(options & kPasswordMode))
+    options |= kEnableUnicodeEmoji;
+  if (options != given && s_option_logs++ < 5)
+    LOG_INFO("[OSK] keyboard options 0x%x -> 0x%x (emoji)",
+             static_cast<unsigned>(given), static_cast<unsigned>(options));
+  return options;
+}
+
 /* ---- the hooks ---------------------------------------------------------- */
 
 /* FunctionAreaPanel.AddBasedOnLanguageArea: the language's own function
@@ -626,6 +767,50 @@ void Install() {
     LOG_WARN("[OSK] Widget.OnKeyEvent not hooked");
     return;
   }
+  /* the text a field gets from the keyboard's engine */
+  MonoClass *text_field =
+      pui ? mono_class_from_name(pui, "Sce.PlayStation.PUI.UI3", "TextField")
+          : nullptr;
+  struct TextHook {
+    const char *method;
+    int params;
+    void *destination;
+    void **original;
+  };
+  const TextHook text_hooks[] = {
+      {"UpdatePreedit", 4, reinterpret_cast<void *>(&update_preedit_hook),
+       reinterpret_cast<void **>(&s_update_preedit)},
+      {"ConfirmPreedit", 2, reinterpret_cast<void *>(&confirm_preedit_hook),
+       reinterpret_cast<void **>(&s_confirm_preedit)},
+  };
+  for (const TextHook &text_hook : text_hooks) {
+    const uint64_t address =
+        text_field ? Get_Address_of_Method(pui, text_field, text_hook.method,
+                                           text_hook.params)
+                   : 0;
+    const bool ok = address && InstallDetour(address, text_hook.destination,
+                                             text_hook.original);
+    if (!ok)
+      *text_hook.original = nullptr;
+    LOG_INFO("[OSK] TextField.%s hooked=%d", text_hook.method, ok ? 1 : 0);
+  }
+  /* the keyboard's own emoji, for every field that opens it */
+  MonoClass *edit_ime =
+      pui ? mono_class_from_name(pui, "Sce.PlayStation.PUI.UI3",
+                                 "TextFieldEditIme")
+          : nullptr;
+  const uint64_t create_options =
+      edit_ime ? Get_Address_of_Method(pui, edit_ime, "CreateImeOptions", 1)
+               : 0;
+  const bool options_hooked =
+      create_options &&
+      InstallDetour(create_options,
+                    reinterpret_cast<void *>(&create_ime_options_hook),
+                    reinterpret_cast<void **>(&s_create_ime_options));
+  if (!options_hooked)
+    s_create_ime_options = nullptr;
+  LOG_INFO("[OSK] TextFieldEditIme.CreateImeOptions hooked=%d",
+           options_hooked ? 1 : 0);
   if (hook(image, "FunctionAreaPanel", "AddBasedOnLanguageArea", 3,
            reinterpret_cast<void *>(&add_area_hook),
            reinterpret_cast<void **>(&s_add_area)))
@@ -635,6 +820,10 @@ void Install() {
 void Tick() {
   if (s_pending_frames > 0 && --s_pending_frames == 0)
     unlink(kPending); /* laid out and still running */
+  if (s_bare_frame >= 0)
+    forget_preedit(); /* no confirm came with it: the user deleted the
+                         glyphs (a confirm clears it) */
+  ++s_frame;
   /* the keyboard's code is loaded with its first use, not before */
   static int frames = 0;
   if (s_installed || s_tries > kMaxTries || ++frames % 120 != 0)

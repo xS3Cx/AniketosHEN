@@ -76,6 +76,12 @@ constexpr uint32_t kNativeSquare = 0x00008000u;
 std::atomic<bool> s_started{false};
 std::atomic<bool> s_toggle_requested{false};
 std::atomic<bool> s_capturing{false};
+/* The buttons held as last read, and whether ShellUI is still kept from
+   seeing them after the menu let go: the press that closed it (Cross on an
+   entry that hides the menu, L1+R3) would otherwise reach Home as a new
+   one, on whatever had the focus there; a game's tile started its game. */
+std::atomic<uint32_t> s_held{0};
+std::atomic<bool> s_release_guard{false};
 std::atomic<uint32_t> s_buttons_down{0};
 /* Subset of s_buttons_down produced by holding a direction (auto-repeat). */
 std::atomic<uint32_t> s_buttons_repeated{0};
@@ -171,6 +177,8 @@ void *reader_thread(void *) {
       (void)scePadClose(pad);
       pad = -1;
       previous = 0;
+      s_held.store(0, std::memory_order_release);
+      s_release_guard.store(false, std::memory_order_release);
       shortcut_latched = false;
       s_left_stick_x.store(0, std::memory_order_release);
       s_left_stick_y.store(0, std::memory_order_release);
@@ -267,6 +275,9 @@ void *reader_thread(void *) {
       for (RepeatState &item : repeat)
         item = {};
     }
+    s_held.store(state.buttons, std::memory_order_release);
+    if (!state.buttons)
+      s_release_guard.store(false, std::memory_order_release);
     previous = state.buttons;
     sleep_millis(8);
   }
@@ -322,7 +333,9 @@ void ReadLeftStick(float &x, float &y) {
 }
 
 void SetMenuCapturing(bool capturing) {
-  s_capturing.store(capturing, std::memory_order_release);
+  const bool was = s_capturing.exchange(capturing, std::memory_order_acq_rel);
+  if (was && !capturing && s_held.load(std::memory_order_acquire) != 0)
+    s_release_guard.store(true, std::memory_order_release);
   if (!capturing)
     s_buttons_down.store(0, std::memory_order_release);
   if (capturing)
@@ -333,7 +346,10 @@ void SetMenuCapturing(bool capturing) {
   }
 }
 
-bool IsMenuCapturing() { return s_capturing.load(std::memory_order_acquire); }
+bool IsMenuCapturing() {
+  return s_capturing.load(std::memory_order_acquire) ||
+         s_release_guard.load(std::memory_order_acquire);
+}
 
 int ActivePadHandle() { return s_active_pad.load(std::memory_order_acquire); }
 

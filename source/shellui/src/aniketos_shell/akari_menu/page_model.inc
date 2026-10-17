@@ -750,6 +750,9 @@ std::vector<Option> build_page(Page page) {
     /* the glyph key after Shift on the system keyboard (osk_glyphs) */
     options.push_back(toggle(tr("vsh.osk_glyph_key"), OptionId::OskGlyphKey,
                              g_settings.osk_glyph_key));
+    /* the keyboard's own emoji in every field (osk_glyphs) */
+    options.push_back(toggle(tr("vsh.osk_emoji"), OptionId::OskEmoji,
+                             g_settings.osk_emoji));
     break;
   case Page::ShellBackground: {
     scan_background_images();
@@ -799,6 +802,8 @@ std::vector<Option> build_page(Page page) {
                OptionId::HomeTabRestoreNames),
         toggle(tr("vsh.tiles.emulators_tab"), OptionId::HomeEmulatorsTab,
                g_settings.home_tab_emulators),
+        toggle(tr("vsh.tiles.tab_icons"), OptionId::HomeTabIcons,
+               g_settings.home_tab_icons),
         /* the bookmark tab after Emulators (home_bookmark) */
         toggle(tr("vsh.tiles.bookmark"), OptionId::HomeBookmark,
                g_settings.home_bookmark),

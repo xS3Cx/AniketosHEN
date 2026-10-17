@@ -31,6 +31,18 @@ inline constexpr int kEmulatorsContentLimit = 7771;
 /* Home's own tabs, the ones that can be renamed. */
 enum class StockTab { Games, Media };
 
+/* Whether the tabs carry their glyphs (home_tab_icons). */
+bool IconsShown();
+/* A tab's caption: `name` with `glyph` in front, unless the icons are
+ * switched off or the name starts with a glyph of its own. */
+std::string Caption(const char *glyph, const std::string &name);
+/* For Home's script, which gives React a stock tab's caption so that React
+ * lays the bar out for the text the tab really shows: `name` is the user's
+ * name with its glyph (empty while the tab keeps the system's caption) and
+ * `glyph` what goes in front of the system's caption (empty without
+ * icons). */
+void ScriptCaption(StockTab tab, std::string *name, std::string *glyph);
+
 void Install(MonoImage *pui);
 /* UI thread, once a frame. */
 void Tick();

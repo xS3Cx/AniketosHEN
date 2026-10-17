@@ -662,20 +662,29 @@ void RequestRename() {
 }
 
 void Tick() {
-  if (s_step != Step::Idle) {
-    bool confirmed = false;
-    std::string typed;
-    if (SystemDialogs::PollPrompt(&confirmed, &typed))
-      named(confirmed, typed);
-    return;
-  }
-  if (s_menu_up)
-    menu_tick();
   Request request;
   {
     std::lock_guard<std::mutex> lock(s_request_mutex);
     std::swap(request, s_request);
   }
+  if (s_step != Step::Idle) {
+    bool confirmed = false;
+    std::string typed;
+    if (SystemDialogs::PollPrompt(&confirmed, &typed)) {
+      named(confirmed, typed);
+    } else if (request.kind != Request::Kind::None) {
+      /* A prompt can go without an answer (closed by the system, as when a
+         game starts over Home): a new request replaces it. */
+      LOG_INFO("[BOOKMARK] the last prompt never answered; dropped");
+      s_step = Step::Idle;
+      s_pending.clear();
+      s_pending_moved = false;
+    } else {
+      return;
+    }
+  }
+  if (s_menu_up)
+    menu_tick();
   switch (request.kind) {
   case Request::Kind::Menu:
     open_menu(request.title);

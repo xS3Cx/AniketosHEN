@@ -1,6 +1,7 @@
 /* Copyright (C) 2025 OnionHEN / LightningMods — OnPress payloads / auto-start */
 #include "onpress.hpp"
 #include "shellui_payload_state.hpp"
+#include "shellui_payloads.hpp"
 #include <cerrno>
 #include <cstdlib>
 #include <fcntl.h>
@@ -33,7 +34,9 @@ bool control_enabled(const std::string &value) {
   return value == "1" || value == "true";
 }
 
-void start_payload(const PayloadEntry &entry) {
+} // namespace
+
+void shellui_payload_start(const PayloadEntry &entry) {
   pthread_t thread;
   auto *info = new PayloadEntry(entry);
   if (pthread_create(&thread, nullptr, load_payload_thread, info) == 0) {
@@ -44,7 +47,18 @@ void start_payload(const PayloadEntry &entry) {
   notify("notify.payload.launch_failed", entry.path.c_str(), entry.tid.c_str());
 }
 
-} // namespace
+bool shellui_payload_stop(const PayloadEntry &entry) {
+  char pid_path[256];
+  const int pid = static_cast<int>(shellui_payload_resolve_recorded_pid(
+      entry.tid.c_str(), pid_path, sizeof(pid_path)));
+  if (pid <= 1)
+    return false;
+  LOG_DEBUG("killing recorded payload pid: %d (%s)", pid, entry.tid.c_str());
+  IPC_Client::getInstance(false).ForceKillPID(pid);
+  unlink(pid_path);
+  notify("notify.process.killed", entry.name.c_str());
+  return true;
+}
 
 static OnPressResult prefix_id_payload_run(OnPressContext &ctx) {
   if (ctx.id.rfind(kRunPrefix, 0) != 0) {
@@ -54,18 +68,12 @@ static OnPressResult prefix_id_payload_run(OnPressContext &ctx) {
   if (!entry)
     return OnPressResult::Consumed;
 
-  char pid_path[256];
-  const int pid = static_cast<int>(shellui_payload_resolve_recorded_pid(
-      entry->tid.c_str(), pid_path, sizeof(pid_path)));
-  if (!control_enabled(ctx.value) && pid > 1) {
-    LOG_DEBUG("killing recorded payload pid: %d (%s)", pid,
-              entry->tid.c_str());
-    IPC_Client::getInstance(false).ForceKillPID(pid);
-    unlink(pid_path);
-    notify("notify.process.killed", entry->name.c_str());
-  } else if (control_enabled(ctx.value) && pid <= 1) {
+  const bool running = shellui_payload_is_running(entry->tid.c_str());
+  if (!control_enabled(ctx.value) && running) {
+    shellui_payload_stop(*entry);
+  } else if (control_enabled(ctx.value) && !running) {
     LOG_DEBUG("Payload %s not running", entry->tid.c_str());
-    start_payload(*entry);
+    shellui_payload_start(*entry);
   }
   return OnPressResult::Consumed;
 }

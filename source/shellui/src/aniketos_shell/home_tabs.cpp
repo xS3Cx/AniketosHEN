@@ -442,12 +442,16 @@ bool stock_tab_of(const std::string &panel_name, StockTab *tab) {
 }
 
 /* A tab is a panel sized by React for its caption as React knows it, with
-   the caption label inside; the focus frame is drawn around the panel. The
-   glyph our text hook puts in front makes the label wider, so each panel is
-   grown to its label and the following ones are pushed right. React may lay
-   the bar out again at any time: whatever is not our own last value is taken
-   as its new stock geometry. A stock tab under a name of the user's
-   (`captions`, by StockTab) is fitted to that name, narrower or not. */
+   the caption label inside; the focus frame is drawn around the panel.
+   Home's script gives React the captions the tabs show (the glyph, the
+   user's name: ScriptCaption), so React's layout is normally right and
+   nothing is moved; React lays the bar out again on every page switch, and
+   a correction here would show a frame late. Should a label still be wider
+   than its panel (no script, a language the text hook dresses on its own),
+   the panel is grown to it and the following ones are pushed right; a stock
+   tab under a name of the user's (`captions`, by StockTab) is fitted to that
+   name, narrower or not. Whatever is not our own last value is taken as
+   React's new stock geometry. */
 void fit_tab_panels(const std::string (&captions)[2]) {
   float shift = 0.0f;
   for (TabPanel &tab : s_tab_panels) {
@@ -504,14 +508,13 @@ std::string &name_setting(StockTab tab) {
                                 : g_settings.home_tab_media_name;
 }
 
-/* What a stock tab is to show: its glyph and the user's name for it; empty
-   while it keeps the system's caption. */
+/* What a stock tab is to show: the user's name for it, with its glyph (see
+   Caption); empty while it keeps the system's caption. */
 std::string caption_of(StockTab tab) {
   const std::string name = HomeBookmark::CleanName(name_setting(tab));
   if (name.empty())
     return {};
-  return std::string(tab == StockTab::Games ? kGamesGlyph : kMediaGlyph) +
-         " " + name;
+  return Caption(tab == StockTab::Games ? kGamesGlyph : kMediaGlyph, name);
 }
 
 bool is_label(MonoObject *object) {
@@ -702,27 +705,45 @@ void remember_tab_names() {
   }
 }
 
-/* The rename prompt asked for from the Shell Menu, and its answer. */
+/* The rename prompt asked for from the Shell Menu, and its answer. A prompt
+   can go without one (closed by the system, as when a game starts over
+   Home): asking again replaces it. */
 void rename_tick() {
-  if (s_renaming >= 0) {
-    bool confirmed = false;
-    std::string typed;
-    if (SystemDialogs::PollPrompt(&confirmed, &typed))
-      renamed(confirmed, typed);
-    return;
-  }
   int request = -1;
   {
     std::lock_guard<std::mutex> lock(s_request_mutex);
     std::swap(request, s_rename_request);
   }
-  if (request >= 0)
+  if (request >= 0) {
+    if (s_renaming >= 0)
+      LOG_INFO("[HOMETABS] the last prompt never answered; asking again");
+    s_renaming = -1;
     open_rename_prompt(request == 0 ? StockTab::Games : StockTab::Media);
+    return;
+  }
+  if (s_renaming >= 0) {
+    bool confirmed = false;
+    std::string typed;
+    if (SystemDialogs::PollPrompt(&confirmed, &typed))
+      renamed(confirmed, typed);
+  }
 }
 
 } // namespace
 
 bool HasEmulators() { return !s_filter_sql.empty(); }
+
+bool IconsShown() { return g_settings.home_tab_icons; }
+
+std::string Caption(const char *glyph, const std::string &name) {
+  /* a glyph of the user's leads: U+E000-U+F8FF, EE 80 80 to EF A3 BF */
+  const unsigned char lead = name.size() >= 3 ? name[0] : 0;
+  const unsigned char second = name.size() >= 3 ? name[1] : 0;
+  const bool own = lead == 0xee || (lead == 0xef && second <= 0xa3);
+  if (!IconsShown() || own)
+    return name;
+  return std::string(glyph) + " " + name;
+}
 
 bool Ready() { return s_build_where_original != nullptr; }
 
@@ -778,6 +799,12 @@ std::string TabLabelText(MonoObject *label, StockTab tab,
   if (entry.handle)
     s_tab_labels.push_back(entry);
   return {};
+}
+
+void ScriptCaption(StockTab tab, std::string *name, std::string *glyph) {
+  *name = caption_of(tab);
+  *glyph = IconsShown() ? (tab == StockTab::Games ? kGamesGlyph : kMediaGlyph)
+                        : "";
 }
 
 std::string TabName(StockTab tab) {

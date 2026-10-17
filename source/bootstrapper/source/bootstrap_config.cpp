@@ -142,8 +142,11 @@ bool bootstrap_config_load(BootstrapConfig *config) {
   }
 
   config->firmware_version = version.version;
-  std::snprintf(config->firmware_text, sizeof(config->firmware_text), "%.*s",
-                (int)sizeof(version.version_str), version.version_str);
+  /* "11.40" from the number, not version_str: the report scrubber reads a
+     dotted run like "11.40.00.04.00" as an IP address and blanks it. */
+  std::snprintf(config->firmware_text, sizeof(config->firmware_text),
+                "%x.%02x", (version.version >> 24) & 0xffu,
+                (version.version >> 16) & 0xffu);
   config->kstuff_autoload = settings.kstuff_autoload;
   return true;
 }

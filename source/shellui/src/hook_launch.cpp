@@ -134,8 +134,12 @@ static std::string menu_entry_title(const std::string &url) {
 }
 
 static std::string extractTIDFromURI(const std::string& url) {
-    const std::string prefix = "titleId=";
-    size_t pos = url.find(prefix);
+    /* "titleId=" in most entries, "titleid=" in Check for Update's */
+    const std::string prefix = "titleid=";
+    std::string lower = url;
+    for (char &c : lower)
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    size_t pos = lower.find(prefix);
     
     if (pos != std::string::npos) {
         pos += prefix.length();

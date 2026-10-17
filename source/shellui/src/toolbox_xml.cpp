@@ -20,6 +20,7 @@
 #include "external_sprx_ui.hpp"
 #include "onion_cjson.hpp"
 
+#include <cerrno>
 #include <dirent.h>
 #include <algorithm>
 #include <fcntl.h>
@@ -35,6 +36,7 @@
 
 #include "shellui_state.hpp"
 #include "shellui_payload_state.hpp"
+#include "shellui_payloads.hpp"
 #include "toolbox_helpers.hpp"
 #include "overlay_metrics.hpp"
 #include "toolbox_route.hpp"
@@ -69,7 +71,8 @@ std::string payload_list_status(const PayloadEntry& entry) {
   return toolbox_i18n::tr("payload.status.stopped");
 }
 
-void append_payload_entry(const std::string& directory,
+void append_payload_entry(std::vector<PayloadEntry>& list,
+                          const std::string& directory,
                           const char* filename) {
   if (!toolbox::is_payload_elf_name(filename))
     return;
@@ -106,16 +109,16 @@ void append_payload_entry(const std::string& directory,
   entry.version = "";
   entry.id = identity;
   const auto existing = std::find_if(
-      g_ui.payloads_list.begin(), g_ui.payloads_list.end(),
+      list.begin(), list.end(),
       [&](const PayloadEntry& item) { return item.id == entry.id; });
-  if (existing != g_ui.payloads_list.end()) {
+  if (existing != list.end()) {
     LOG_ERROR("Skipping Payload with colliding identity: %s", path.c_str());
     return;
   }
 
   if (!onion_payload_config_load(path.c_str(), &entry.config))
     LOG_WARN("Invalid payload config, using defaults: %s", path.c_str());
-  g_ui.payloads_list.push_back(std::move(entry));
+  list.push_back(std::move(entry));
 }
 
 std::string read_file_to_string(const char* path) {
@@ -274,7 +277,7 @@ void generate_account_xml(std::string& xml_buffer) {
   xml_buffer = page.build();
 }
 
-static bool payloads_model(ps5ui::Node& model) {
+std::vector<PayloadEntry> shellui_scan_payloads() {
   /* Same policy as the bootstrapper's kPayloadDirectories: internal storage
    * lists only this distribution's root (OnionHEN payloads are migrated
    * there); removable drives keep accepting the OnionHEN folder names. */
@@ -295,25 +298,31 @@ static bool payloads_model(ps5ui::Node& model) {
       "/usb3/onionhen/payloads",
   };
 
-  g_ui.payloads_list.clear();
-  ps5ui::Page page("id_payload", toolbox_i18n::tr("payload.title"));
-
+  std::vector<PayloadEntry> list;
   for (const auto& directory : kPayloadDirs) {
     DIR* dir = opendir(directory.c_str());
     if (!dir) {
-      LOG_ERROR("Failed to open directory: %s", directory.c_str());
+      if (errno != ENOENT) /* a folder that is not there is the usual case */
+        LOG_ERROR("Failed to open directory: %s", directory.c_str());
       continue;
     }
     while (struct dirent* entry = readdir(dir))
-      append_payload_entry(directory, entry->d_name);
+      append_payload_entry(list, directory, entry->d_name);
     closedir(dir);
   }
 
-  std::sort(g_ui.payloads_list.begin(), g_ui.payloads_list.end(),
+  std::sort(list.begin(), list.end(),
             [](const PayloadEntry& a, const PayloadEntry& b) {
               return onion_payload_compare(a.config.priority, a.path.c_str(),
                                            b.config.priority, b.path.c_str()) < 0;
             });
+  return list;
+}
+
+static bool payloads_model(ps5ui::Node& model) {
+  g_ui.payloads_list = shellui_scan_payloads();
+  ps5ui::Page page("id_payload", toolbox_i18n::tr("payload.title"));
+
   for (const auto& entry : g_ui.payloads_list) {
     const std::string status = payload_list_status(entry);
     page.link("id_payload_item_" + entry.id, entry.name,

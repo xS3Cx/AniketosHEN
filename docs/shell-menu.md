@@ -67,6 +67,34 @@ Its directories and namespaces are named `aniketos_*`, `AniketosShell` and
   theme.
 - **Logging.** SceShellUI now writes `/data/AniketosHEN/AniketosHEN_shellui.log`.
 
+## HEN button menu
+
+The HEN button in Home's top bar opens a menu: *HEN Toolbox*, *Install
+packages* (the places packages can be in, then the `.pkg` files of each),
+*Payloads*, *Connect to the Internet* (a switch) and *Unload HEN*.
+*Payloads* lists every payload of the payloads folders (the Toolbox's
+Payloads page lists the same ones, in their load order) with whether it is
+running; choosing one starts it, or stops it when it runs, and a
+notification says so. Auto-start, priority and delay stay on the Toolbox's
+page.
+
+- **How it works:** `home_menu.cpp` builds the rows with the native pop-up
+  of `system_dialogs.cpp` each time the menu opens. The payloads come from
+  the scan the Toolbox page uses (`shellui_scan_payloads`, `toolbox_xml.cpp`);
+  starting goes through util and stopping kills the recorded process
+  (`onpress_payloads.cpp`), as the Toolbox's switch does.
+
+## Start-up notifications
+
+The two notifications every start shows (*AniketosHEN is starting* and the
+welcome) are toasts only: they are not kept in the notification list. Error
+and warning notifications are kept, so they can be read later.
+
+- **How it works:** both go to `sceNotificationSend` with its logged flag
+  off (`onion_notify_rich_toast` / `onion_notify_try_rich_toast` in
+  `libonion_platform/source/notify.c`); every other rich notification keeps
+  it on.
+
 ## Home video background
 
 *Appearance → System customize → Home Video Background* plays a looping video
@@ -132,11 +160,20 @@ system's own, gives the tab back the system's caption, which follows the
 console's language; *Restore system tab names* does that for both tabs at
 once. *Emulators tab* (on by default) takes the Emulators tab out of Home:
 the emulators go back to the Games row, and L1 and R1 move through the tabs
-that are left.
+that are left. *Tab icons* (on by default) takes the glyph off the front of
+every tab (Games, Media, Emulators, the bookmark); a name that starts with
+a glyph of the user's shows that one instead of ours.
 
 - **Settings:** `home_tab_games_name` and `home_tab_media_name` (empty: the
-  system's name) and `home_tab_emulators` in `[shell_menu]`.
-- **How it works:** React keeps the system's captions. The text hook that
+  system's name), `home_tab_emulators` and `home_tab_icons` in
+  `[shell_menu]`.
+- **How it works:** Home's script (`home_inject_js.inc`) gives React the
+  captions Games and Media show: the user's name with its glyph, or the
+  glyph in front of the system's own translated caption (a text element the
+  system translates, so the console's language still applies). React then
+  lays the tab bar out for the text the tabs really show; before that, its
+  layout was a frame behind on every page switch and the tabs jumped. The
+  text hook that
   puts the glyph in front of Games and Media (`home_tiles.cpp`) hands each
   label it dresses to `home_tabs.cpp`, which writes the user's name into it
   once the label turns out to sit in the tab bar's `space-switcher-game` or
@@ -215,18 +252,30 @@ are the console's local time.
 - **Safety:** `no_home_js` in `/data/AniketosHEN` leaves the screen as the
   system has it.
 
-## Glyph key on the system keyboard
+## Glyph key and emoji on the system keyboard
 
 The system keyboard gets a key with the PlayStation logo right after Shift,
 which gives up a third of its width for it. Pressing it puts the console's
 own glyphs (the private-use characters of the system font: buttons, logos,
 icons) on the letter keys, one page at a time, and its label shows the page
 (`1/8`). Pressing it on the last page, or Shift, @#: or the accent key, brings
-the letters back. A glyph key types its character like any letter.
+the letters back. A glyph key types its character like any letter, and the
+glyphs stay in the text once it is confirmed (a tab name, a search, a
+message).
+
+Every keyboard also opens with the system's own emoji key and panel
+(categories, recently used, skin tones), which the system otherwise keeps
+for a few fields such as messages. Password fields are left without it.
 
 - **Settings:** *Appearance → System customize → Glyph key on keyboard*
-  (`osk_glyph_key` in `[shell_menu]`, on by default). It is taken in the
-  next time a keyboard opens.
+  (`osk_glyph_key`) and *Emoji on keyboard* (`osk_emoji`), both in
+  `[shell_menu]` and on by default. They are taken in the next time a
+  keyboard opens.
+- **Emoji:** a field asks for its keyboard's options in PUI's
+  `TextFieldEditIme.CreateImeOptions`; `osk_glyphs.cpp` adds
+  `ImeOptions.EnableUnicodeEmoji` there unless the field is a password
+  field (`ImeOptions.PasswordMode`). The keyboard and its engine do the
+  rest.
 - **How it works:** `osk_glyphs.cpp` hooks the keyboard's own classes in
   `Sce.Vsh.ShellUI.Ime` by name. The key is one more entry in the function
   area's layout list (`FunctionAreaPanel.AddBasedOnLanguageArea`) and one
@@ -238,11 +287,17 @@ the letters back. A glyph key types its character like any letter.
   becomes a copy of the letter there with the glyph as its label and text and
   no key code. The glyph list is `osk_glyph_table.inc`.
 - **Safety:** a file `no_osk_glyphs` in `/data/AniketosHEN` leaves the keyboard
-  as the system has it. If ShellUI stops within seconds of the key being laid
+  as the system has it, emoji included. If ShellUI stops within seconds of the key being laid
   out for the first time in a run, the key is left out for the next run.
-- **Known limit:** the system's IME engine keeps the glyphs while the text is
-  being typed (preedit) but drops them when it confirms the text, so they do
-  not reach the field yet.
+- **Confirming:** the system's IME engine keeps the glyphs only while the
+  text is being typed (the preedit). At the confirm it sends that text again
+  without them and the field confirms the preedit it holds, so the glyphs
+  would be lost. `osk_glyphs.cpp` keeps the field's last preedit with glyphs
+  (`TextField.UpdatePreedit`) and, when the confirm is that text without
+  them, hands the field the preedit with its glyphs just before the confirm
+  goes through (`TextField.ConfirmPreedit`). A preedit that loses its glyphs
+  with no confirm in the same frame is the user deleting them, and is left
+  as it is.
 
 ## Performance
 

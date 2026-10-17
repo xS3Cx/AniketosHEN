@@ -155,8 +155,10 @@ bool &toggle_target(OptionId id) {
   case OptionId::ShellTilesPS5CaseMockup:
     return g_settings.shell_tiles_ps5_case_mockup;
   case OptionId::HomeEmulatorsTab: return g_settings.home_tab_emulators;
+  case OptionId::HomeTabIcons: return g_settings.home_tab_icons;
   case OptionId::HomeBookmark: return g_settings.home_bookmark;
   case OptionId::OskGlyphKey: return g_settings.osk_glyph_key;
+  case OptionId::OskEmoji: return g_settings.osk_emoji;
   case OptionId::ShellTilesOutlineEnabled:
     return g_settings.shell_tiles_outline_enabled;
   case OptionId::ShellTilesOutlineSyncBackground:
@@ -860,10 +862,21 @@ void activate(const Option &option) {
       shellui_request_home_reload();
       LOG_INFO("[HOMETABS] emulators tab enabled=%d", target ? 1 : 0);
     }
+    if (option.id == OptionId::HomeTabIcons) {
+      /* the captions are made as Home starts */
+      request_save();
+      shellui_request_home_reload();
+      LOG_INFO("[HOMETABS] tab icons=%d", target ? 1 : 0);
+    }
     if (option.id == OptionId::OskGlyphKey) {
       /* the keyboard takes it in when it is next laid out */
       request_save();
       LOG_INFO("[OSK] glyph key enabled=%d", target ? 1 : 0);
+    }
+    if (option.id == OptionId::OskEmoji) {
+      /* taken in when a keyboard next opens */
+      request_save();
+      LOG_INFO("[OSK] emoji enabled=%d", target ? 1 : 0);
     }
     if (option.id == OptionId::CustomizationEnabled) {
       request_save();

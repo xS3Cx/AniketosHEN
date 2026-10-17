@@ -122,30 +122,43 @@ void onion_notify_debug(const char *fmt, ...) {
   va_end(args);
 }
 
-static int onion_notify_send_rich_payload(const char *payload) {
+static int onion_notify_send_rich_payload(const char *payload, bool logged) {
   if (!payload || payload[0] == '\0' || !g_rich_send) {
     return -1;
   }
-  return g_rich_send(0xFE, true, payload);
+  /* logged: kept in the notification list after the toast */
+  return g_rich_send(0xFE, logged, payload);
 }
 
-void onion_notify_try_rich(const char *payload, const char *plain_key) {
-  if (onion_notify_send_rich_payload(payload) == 0) {
+static void onion_notify_try_rich_logged(const char *payload,
+                                         const char *plain_key, bool logged) {
+  if (onion_notify_send_rich_payload(payload, logged) == 0) {
     return;
   }
   LOG_WARN("Rich notify unavailable; using system toast");
   onion_notify(/*show_watermark=*/0, plain_key ? plain_key : "");
 }
 
-void onion_notify_rich(const char *message, const char *sub_message,
-                       const char *icon_url, const char *preview_icon,
-                       const char *notification_id) {
+void onion_notify_try_rich(const char *payload, const char *plain_key) {
+  onion_notify_try_rich_logged(payload, plain_key, true);
+}
+
+void onion_notify_try_rich_toast(const char *payload, const char *plain_key) {
+  onion_notify_try_rich_logged(payload, plain_key, false);
+}
+
+static void onion_notify_rich_logged(const char *message,
+                                     const char *sub_message,
+                                     const char *icon_url,
+                                     const char *preview_icon,
+                                     const char *notification_id,
+                                     bool logged) {
   const char *plain_key =
       (sub_message && sub_message[0] != '\0')
           ? sub_message
           : (message && message[0] != '\0') ? message : "notify.brand";
   if (icon_url && icon_url[0] == '\0') {
-    onion_notify_try_rich(NULL, plain_key);
+    onion_notify_try_rich_logged(NULL, plain_key, logged);
     return;
   }
 
@@ -204,7 +217,7 @@ void onion_notify_rich(const char *message, const char *sub_message,
                                notification_id_value)) {
     LOG_ERROR("Rich notify: failed to build payload");
     cJSON_Delete(root);
-    onion_notify_try_rich(NULL, plain_key);
+    onion_notify_try_rich_logged(NULL, plain_key, logged);
     return;
   }
 
@@ -213,12 +226,26 @@ void onion_notify_rich(const char *message, const char *sub_message,
   if (!payload || strlen(payload) >= 4096) {
     LOG_ERROR("Rich notify: payload too large");
     cJSON_free(payload);
-    onion_notify_try_rich(NULL, plain_key);
+    onion_notify_try_rich_logged(NULL, plain_key, logged);
     return;
   }
 
   LOG_DEBUG("Rich notify: %s%s%s", msg, sub[0] ? " - " : "", sub);
 
-  onion_notify_try_rich(payload, plain_key);
+  onion_notify_try_rich_logged(payload, plain_key, logged);
   cJSON_free(payload);
+}
+
+void onion_notify_rich(const char *message, const char *sub_message,
+                       const char *icon_url, const char *preview_icon,
+                       const char *notification_id) {
+  onion_notify_rich_logged(message, sub_message, icon_url, preview_icon,
+                           notification_id, true);
+}
+
+void onion_notify_rich_toast(const char *message, const char *sub_message,
+                             const char *icon_url, const char *preview_icon,
+                             const char *notification_id) {
+  onion_notify_rich_logged(message, sub_message, icon_url, preview_icon,
+                           notification_id, false);
 }
