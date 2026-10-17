@@ -71,10 +71,12 @@ onion_boot_level bootstrap_safety_begin(const char *firmware_text) {
                               &guard))
     LOG_WARN("boot state could not be recorded; starting at level %s",
              onion_boot_level_name(guard.level));
-  LOG_INFO("boot level %s (previous %s, unfinished=%d, restarted=%d)",
+  LOG_INFO("boot level %s (previous %s, unfinished=%d, restarted=%d, "
+           "ended by the user=%d)",
            onion_boot_level_name(guard.level),
            onion_boot_level_name(guard.previous),
-           guard.previous_unfinished ? 1 : 0, guard.previous_rebooted ? 1 : 0);
+           guard.previous_unfinished ? 1 : 0, guard.previous_rebooted ? 1 : 0,
+           guard.previous_ended ? 1 : 0);
 
   if (guard.previous_unfinished && guard.previous_rebooted) {
     enum { kBodyBytes = ONION_REPORT_MAX_BYTES };

@@ -20,6 +20,9 @@
  *
  *   A reload in the same session (no restart in between) keeps the level: it
  *   is the normal way to restart the stack and says nothing about a crash.
+ *   So does a start the user ended before "running" by putting the console
+ *   in rest mode, turning it off or restarting it (marked "ended" by the
+ *   daemon when the system leaves its working state).
  */
 #pragma once
 
@@ -58,6 +61,7 @@ typedef struct OnionBootGuard {
   onion_boot_level previous; /* level the previous start ran at */
   bool previous_unfinished;  /* the previous start never reached "running" */
   bool previous_rebooted;    /* ... and the console restarted since */
+  bool previous_ended;       /* the previous start was ended on purpose */
 } OnionBootGuard;
 
 enum {
@@ -85,6 +89,11 @@ bool onion_boot_guard_begin(const char *state_path, const char *session_path,
 
 /* Record that the start recorded in @state_path reached a stable point. */
 bool onion_boot_guard_mark_running(const char *state_path);
+
+/* Record that the start in progress in @state_path was ended on purpose
+ * (rest mode, power-off, restart) before it reached "running", so the next
+ * start keeps its level. A start that already reached "running" stays so. */
+bool onion_boot_guard_mark_ended(const char *state_path);
 
 const char *onion_boot_level_name(onion_boot_level level);
 

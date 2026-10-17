@@ -20,6 +20,7 @@ enum { kStateMaxBytes = 256, kPathMax = 1024 };
 
 static const char kPhaseStarting[] = "starting";
 static const char kPhaseRunning[] = "running";
+static const char kPhaseEnded[] = "ended";
 
 const char *onion_boot_level_name(onion_boot_level level) {
   switch (level) {
@@ -155,6 +156,7 @@ typedef struct BootState {
   bool present;
   int level;
   bool running;
+  bool ended; /* stopped on purpose before "running" */
 } BootState;
 
 static bool parse_int_after(const char *text, const char *key, int *out) {
@@ -172,7 +174,7 @@ static bool parse_int_after(const char *text, const char *key, int *out) {
 }
 
 static BootState read_state(const char *path) {
-  BootState state = {false, ONION_BOOT_NORMAL, true};
+  BootState state = {false, ONION_BOOT_NORMAL, true, false};
   const int fd = open(path, O_RDONLY | O_NOFOLLOW);
   if (fd < 0)
     return state;
@@ -192,6 +194,7 @@ static BootState read_state(const char *path) {
   state.present = true;
   state.level = level > ONION_BOOT_RECOVERY ? ONION_BOOT_RECOVERY : level;
   state.running = strstr(text, "phase=running") != NULL;
+  state.ended = strstr(text, "phase=ended") != NULL;
   return state;
 }
 
@@ -221,7 +224,11 @@ bool onion_boot_guard_begin(const char *state_path, const char *session_path,
   const BootState previous = read_state(state_path);
   const bool same_session = path_exists(session_path);
   int level = previous.level;
-  if (previous.present && !previous.running) {
+  if (previous.present && previous.ended) {
+    /* Rest mode, power-off or restart chosen before "running": says nothing
+       about a crash, nor that the level can step down. */
+    out->previous_ended = true;
+  } else if (previous.present && !previous.running) {
     out->previous_unfinished = true;
     out->previous_rebooted = !same_session;
     /* Only a start cut short by a restart counts against the next one. */
@@ -240,6 +247,15 @@ bool onion_boot_guard_begin(const char *state_path, const char *session_path,
       close(fd);
   }
   return write_state(state_path, level, kPhaseStarting);
+}
+
+bool onion_boot_guard_mark_ended(const char *state_path) {
+  if (!state_path)
+    return false;
+  const BootState state = read_state(state_path);
+  if (!state.present || state.running || state.ended)
+    return true; /* nothing in progress: a finished start stays finished */
+  return write_state(state_path, state.level, kPhaseEnded);
 }
 
 bool onion_boot_guard_mark_running(const char *state_path) {

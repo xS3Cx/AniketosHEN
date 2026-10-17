@@ -170,6 +170,52 @@ static int test_reload_in_same_session_keeps_level(void) {
   return 0;
 }
 
+static int test_power_action_before_running_keeps_level(void) {
+  Paths p;
+  TEST_ASSERT_TRUE(make_paths(&p));
+  OnionBootGuard guard;
+  TEST_ASSERT_TRUE(onion_boot_guard_begin(p.state, p.session, &guard));
+  restart(&p); /* a crash: the next start is safe */
+  TEST_ASSERT_TRUE(onion_boot_guard_begin(p.state, p.session, &guard));
+  TEST_ASSERT_EQ_INT(ONION_BOOT_SAFE, guard.level);
+
+  /* The user puts the console in rest mode, turns it off or restarts it
+   * before util marked the start running: not a crash. */
+  TEST_ASSERT_TRUE(onion_boot_guard_mark_ended(p.state));
+  restart(&p);
+  TEST_ASSERT_TRUE(onion_boot_guard_begin(p.state, p.session, &guard));
+  TEST_ASSERT_TRUE(guard.previous_ended);
+  TEST_ASSERT_TRUE(!guard.previous_unfinished);
+  TEST_ASSERT_EQ_INT(ONION_BOOT_SAFE, guard.level);
+
+  /* A start that then finishes steps back down as before. */
+  TEST_ASSERT_TRUE(onion_boot_guard_mark_running(p.state));
+  restart(&p);
+  TEST_ASSERT_TRUE(onion_boot_guard_begin(p.state, p.session, &guard));
+  TEST_ASSERT_TRUE(!guard.previous_ended);
+  TEST_ASSERT_EQ_INT(ONION_BOOT_NORMAL, guard.level);
+  remove_paths(&p);
+  return 0;
+}
+
+static int test_power_action_after_running_changes_nothing(void) {
+  Paths p;
+  TEST_ASSERT_TRUE(make_paths(&p));
+  /* Nothing recorded yet: nothing to mark. */
+  TEST_ASSERT_TRUE(onion_boot_guard_mark_ended(p.state));
+  OnionBootGuard guard;
+  TEST_ASSERT_TRUE(onion_boot_guard_begin(p.state, p.session, &guard));
+  TEST_ASSERT_TRUE(onion_boot_guard_mark_running(p.state));
+  TEST_ASSERT_TRUE(onion_boot_guard_mark_ended(p.state));
+  restart(&p);
+  TEST_ASSERT_TRUE(onion_boot_guard_begin(p.state, p.session, &guard));
+  TEST_ASSERT_TRUE(!guard.previous_ended);
+  TEST_ASSERT_TRUE(!guard.previous_unfinished);
+  TEST_ASSERT_EQ_INT(ONION_BOOT_NORMAL, guard.level);
+  remove_paths(&p);
+  return 0;
+}
+
 static int test_garbage_state_is_treated_as_clean(void) {
   Paths p;
   TEST_ASSERT_TRUE(make_paths(&p));
@@ -204,6 +250,10 @@ int test_boot_safety_suite(void) {
                              test_finished_starts_step_back_down);
   failures += onion_test_run("boot_level_same_session_reload",
                              test_reload_in_same_session_keeps_level);
+  failures += onion_test_run("boot_level_power_action_keeps_level",
+                             test_power_action_before_running_keeps_level);
+  failures += onion_test_run("boot_level_power_action_after_running",
+                             test_power_action_after_running_changes_nothing);
   failures += onion_test_run("boot_level_garbage_state",
                              test_garbage_state_is_treated_as_clean);
   return failures;

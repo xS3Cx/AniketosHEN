@@ -10,6 +10,7 @@
 #include "plugin_ipc_server.hpp"
 #include "plugin_manager_runtime.hpp"
 #include "sprx_plugin_manager_runtime.hpp"
+#include <onion/boot_safety.h>
 #include <onion/ipc_client.hpp>
 #include <onion/platform.h>
 #include <atomic>
@@ -27,10 +28,21 @@ bool listeners_ready() {
 void *resume_recovery_thread(void *args) noexcept {
   (void)args;
   bool was_sleeping = false;
+  bool was_working = false;
   while (!g_stack_shutting_down.load(std::memory_order_acquire)) {
     const DaemonPowerState power_state = daemon_power_state_get();
     if (daemon_power_state_is_sleeping(power_state)) {
       was_sleeping = true;
+    }
+    /* Leaving WORKING is the console going to rest mode, turning off or
+       restarting: chosen by the user, not a crash, so a start cut short by
+       it must not make the next one more cautious (<onion/boot_safety.h>). */
+    if (power_state == DaemonPowerState::Working) {
+      was_working = true;
+    } else if (was_working) {
+      was_working = false;
+      if (!onion_boot_guard_mark_ended(ONION_BOOT_STATE_PATH))
+        LOG_WARN("rest: could not record the power action for the boot guard");
     }
     if (was_sleeping && power_state == DaemonPowerState::Working) {
       was_sleeping = false;
