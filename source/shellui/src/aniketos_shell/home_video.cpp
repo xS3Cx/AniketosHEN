@@ -45,7 +45,7 @@ constexpr const char *kUsbVideoDirectory = "/mnt/usb%d/" ONION_DIST_DIR_NAME
 constexpr int kUsbSlots = 8;
 constexpr std::initializer_list<const char *> kVideoExtensions = {".mp4",
                                                                   ".m4v"};
-/* Still images for the same place, shown when no video is. The folder is the
+/* Still images for the same place, shown when no video plays. The folder is the
    one the older background-image option used, so pictures already copied
    there are found. */
 constexpr const char *kImageDirectory =
@@ -435,7 +435,10 @@ int s_frame = 0;
 int s_retry_at = 0;
 int s_failures = 0;
 int s_played_checks = 0;
+int s_start_checks = 0; /* checks in Playing before the player played */
 int s_hidden_checks = 0;
+int s_no_root_since = -1; /* frame Home's root went missing, or -1 */
+bool s_no_root_noted = false;
 int32_t s_last_status = -1;
 std::string s_current;      /* the file being played */
 bool s_sound_applied = false;
@@ -727,6 +730,33 @@ void fail(const char *why) {
   s_retry_at = s_frame + 300 * s_failures;
 }
 
+/* Home's root, or null. The video and the picture both hang there and wait
+   for it without a word; it is found through the system clock, so a clock
+   ShellClock does not recognise leaves it unknown. Said in the log once it
+   has been missing for about 10 s. */
+MonoObject *home_root() {
+  MonoObject *root = ShellClock::GetHomeRoot();
+  if (root && ShellClock::IsWidgetDisposed(root))
+    root = nullptr;
+  if (root) {
+    if (s_no_root_noted)
+      LOG_INFO("[HOMEVIDEO] Home's root found");
+    s_no_root_since = -1;
+    s_no_root_noted = false;
+    return root;
+  }
+  if (s_no_root_since < 0) {
+    s_no_root_since = s_frame;
+  } else if (!s_no_root_noted && s_frame - s_no_root_since >= 600) {
+    float opacity = 0.0f;
+    LOG_WARN("[HOMEVIDEO] Home's root not found for 10 s; the video and the "
+             "picture wait for it (system clock known=%d)",
+             ShellClock::GetNativeClockOpacity(&opacity) ? 1 : 0);
+    s_no_root_noted = true;
+  }
+  return nullptr;
+}
+
 /* Home's scene fades out when something else takes the screen. */
 bool home_shown(MonoObject *root) {
   float opacity = 1.0f;
@@ -775,6 +805,19 @@ void watch(MonoObject *root) {
     teardown();
     unlink(kPending); /* an interrupted start, not a failed one */
     s_state = State::Hidden;
+    return;
+  }
+  /* A player that never gets as far as playing (a file its decoder will not
+     take, a decoder another app holds, a stream it never asks for) has failed
+     too, without an error, so the picture can show. */
+  if (shown && s_played_checks >= 0 && s_status_playing >= 0 &&
+      status != s_status_playing && ++s_start_checks >= 60) {
+    char why[96];
+    std::snprintf(why, sizeof(why),
+                  "the player did not start playing in 30 s (status %d, "
+                  "requests %d)",
+                  status, s_requests.load());
+    fail(why);
     return;
   }
   if (shown && status >= 0 &&
@@ -877,7 +920,8 @@ std::string wanted() {
 
 /* ---- a still image ----------------------------------------------------
  * The same place as the video (under Home's React tree, in Home's scene),
- * with a PUI ImageBox instead of a player. Shown when no video is. */
+ * with a PUI ImageBox instead of a player. Shown when no video plays: none
+ * is chosen, or the chosen one failed or was left off after a crash. */
 std::vector<std::string> s_images;
 bool s_images_scanned = false;
 int s_images_scanned_frame = 0;
@@ -908,7 +952,8 @@ void scan_images() {
   s_images_scanned_frame = s_frame;
 }
 
-/* The picture to show now, or nothing. */
+/* The picture to show now, or nothing; `video_shown` when the video is on
+   screen or about to be. */
 std::string wanted_image(bool video_shown) {
   if (!(AniketosTheme::CustomizationOn() && g_settings.home_image_enabled) || video_shown || exists(kKillSwitch))
     return {};
@@ -1012,8 +1057,8 @@ void tick_image(bool video_shown) {
     drop_image();
     if (file.empty())
       return;
-    MonoObject *root = ShellClock::GetHomeRoot();
-    if (!root || ShellClock::IsWidgetDisposed(root))
+    MonoObject *root = home_root();
+    if (!root)
       return;
     /* remembered even when it fails, so a bad file is not retried forever */
     const bool shown = build_image(root, file);
@@ -1030,9 +1075,8 @@ void tick_image(bool video_shown) {
   }
   if (!widget)
     return;
-  MonoObject *root = ShellClock::GetHomeRoot();
-  if (root && !ShellClock::IsWidgetDisposed(root) &&
-      (object_property(widget, "get_Parent") != root ||
+  MonoObject *root = home_root();
+  if (root && (object_property(widget, "get_Parent") != root ||
        object_property(root, "get_FirstChild") != widget))
     put_first(root, widget);
 }
@@ -1273,6 +1317,7 @@ void Restart() {
   teardown();
   s_failures = 0;
   s_played_checks = 0;
+  s_start_checks = 0;
   s_current.clear();
   unlink(kPending);
   s_state = State::Idle;
@@ -1298,12 +1343,29 @@ std::string Status() {
 
 namespace {
 
+/* Whether the video is on screen or on its way there. Not once it failed for
+   good, was left off after a crash, or waits to retry after a failure: the
+   picture shows instead. */
+bool video_on_screen(const std::string &file) {
+  if (file.empty())
+    return false;
+  switch (s_state) {
+  case State::Failed:
+  case State::Off:
+    return false;
+  case State::Waiting:
+    return s_failures == 0;
+  default:
+    return true;
+  }
+}
+
 void tick_playback() {
   if (!s_videos_scanned)
     scan(); /* also makes the folder, so there is a place to put files */
 
   const std::string file = wanted();
-  tick_image(!file.empty());
+  tick_image(video_on_screen(file));
   if (file != s_current && s_state != State::Idle) {
     /* switched off, another file chosen, or the file has gone */
     LOG_INFO("[HOMEVIDEO] '%s' -> '%s'", s_current.c_str(), file.c_str());
@@ -1338,22 +1400,22 @@ void tick_playback() {
     s_retry_at = s_frame;
     break;
   case State::Waiting: {
-    MonoObject *root = ShellClock::GetHomeRoot();
-    if (!root || s_frame < s_retry_at || ShellClock::IsWidgetDisposed(root) ||
-        !home_shown(root))
+    MonoObject *root = home_root();
+    if (!root || s_frame < s_retry_at || !home_shown(root))
       return;
     mark_pending();
     if (build(root)) {
       s_state = State::Playing;
       s_played_checks = 0;
+      s_start_checks = 0;
     } else {
       fail("the player could not be built");
     }
     break;
   }
   case State::Hidden: {
-    MonoObject *root = ShellClock::GetHomeRoot();
-    if (root && !ShellClock::IsWidgetDisposed(root) && home_shown(root)) {
+    MonoObject *root = home_root();
+    if (root && home_shown(root)) {
       LOG_INFO("[HOMEVIDEO] Home is back");
       s_state = State::Waiting;
       s_retry_at = s_frame;
@@ -1361,8 +1423,7 @@ void tick_playback() {
     break;
   }
   case State::Playing: {
-    MonoObject *root = ShellClock::GetHomeRoot();
-    if (root && !ShellClock::IsWidgetDisposed(root))
+    if (MonoObject *root = home_root())
       watch(root);
     break;
   }

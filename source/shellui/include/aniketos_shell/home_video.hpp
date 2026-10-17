@@ -31,7 +31,8 @@ const std::vector<std::string> &Videos(bool rescan = false);
 /* The file being played, or empty. */
 std::string Current();
 std::string FileName(const std::string &path);
-/* A still image in the same place, shown when no video is: the Shell Menu
+/* A still image in the same place, shown when no video plays (none chosen,
+ * or the chosen one failed or was left off after a crash): the Shell Menu
  * settings home_image_enabled and home_image_path, and the .png/.jpg files
  * in ImageDirectory(). */
 const char *ImageDirectory();

@@ -1,5 +1,6 @@
 #include <onion/distribution.h>
 #include "aniketos_theme/customization.hpp"
+#include "clock_text.hpp"
 #include "shell_clock.hpp"
 
 #include "external_symbols.hpp"
@@ -371,38 +372,11 @@ size_t utf8_glyph_count(const std::string &text) {
   return count;
 }
 
-// Only a complete H:MM/HH:MM value (plus an optional AM/PM-like suffix) is a
-// clock. This deliberately rejects strings such as "23.8  5:47".
+// The clock's time in any system language: H:MM/HH:MM (H.MM in Finnish)
+// with a 12-hour marker before or after it, nothing else with digits. See
+// clock_text.hpp; "23.8  5:47" is still rejected.
 bool looks_like_stock_clock(const char *text) {
-  if (!text)
-    return false;
-  const size_t length = std::strlen(text);
-  if (length < 4 || length > 20)
-    return false;
-  const unsigned char *p = reinterpret_cast<const unsigned char *>(text);
-  if (!std::isdigit(*p))
-    return false;
-  int hour = *p++ - '0';
-  if (std::isdigit(*p))
-    hour = hour * 10 + (*p++ - '0');
-  if (hour > 23 || *p++ != ':')
-    return false;
-  if (!std::isdigit(p[0]) || !std::isdigit(p[1]))
-    return false;
-  const int minute = (p[0] - '0') * 10 + (p[1] - '0');
-  if (minute > 59)
-    return false;
-  p += 2;
-  if (*p == '\0')
-    return true;
-  if (*p++ != ' ' || *p == '\0')
-    return false;
-  for (; *p; ++p) {
-    if (std::isdigit(*p) || *p == ':' || *p == '.' || *p == '\n' ||
-        *p == '\r')
-      return false;
-  }
-  return true;
+  return ClockText::Parse(text);
 }
 
 bool plausible_native_clock_geometry(MonoObject *label) {
@@ -415,6 +389,24 @@ bool plausible_native_clock_geometry(MonoObject *label) {
     return true;
   return width <= 220.0f && height >= 34.0f && height <= 82.0f &&
          y >= -12.0f && y <= 24.0f;
+}
+
+/* A label showing a time that is not taken for the clock (no test id, a
+   size no stock clock has), said in the log a few times a session: without
+   the clock, Home's root and what hangs there (the video, the picture) stay
+   unknown. */
+void note_unbound_clock(MonoObject *label, const std::string &stock) {
+  static int noted = 0;
+  static std::string last;
+  if (noted >= 6 || stock == last)
+    return;
+  ++noted;
+  last = stock;
+  LOG_INFO("[CLOCK] '%s' looks like the time but is not taken for the clock: "
+           "label=%p width=%.1f height=%.1f y=%.1f",
+           stock.c_str(), static_cast<void *>(label),
+           label_dimension(label, "Width"), label_dimension(label, "Height"),
+           label_dimension(label, "Y"));
 }
 
 MonoObject *clock_target() {
@@ -884,19 +876,13 @@ std::string format_time(const std::tm &local) {
   bool twelve_hour = mode == 2;
   bool leading_zero = mode == 1;
   if (mode == 0) {
-    const char *localized_am = toolbox_i18n::tr("clock.am");
-    const char *localized_pm = toolbox_i18n::tr("clock.pm");
-    twelve_hour = s_last_stock_time.find("AM") != std::string::npos ||
-                  s_last_stock_time.find("PM") != std::string::npos ||
-                  s_last_stock_time.find("am") != std::string::npos ||
-                  s_last_stock_time.find("pm") != std::string::npos ||
-                  (localized_am && *localized_am &&
-                   s_last_stock_time.find(localized_am) != std::string::npos) ||
-                  (localized_pm && *localized_pm &&
-                   s_last_stock_time.find(localized_pm) != std::string::npos);
-    const char *colon = std::strchr(s_last_stock_time.c_str(), ':');
-    leading_zero = colon && colon - s_last_stock_time.c_str() >= 2 &&
-                   colon[-2] == '0' && std::isdigit(colon[-1]);
+    /* follow the system: a marker in any language ("p. m.", "du.", "PM"
+       before the time) means 12-hour */
+    ClockText::Time stock;
+    if (ClockText::Parse(s_last_stock_time.c_str(), &stock)) {
+      twelve_hour = stock.twelve_hour;
+      leading_zero = stock.hour_digits == 2 && stock.hour < 10;
+    }
   }
   int hour = local.tm_hour;
   if (twelve_hour) {
@@ -1525,6 +1511,8 @@ void native_label_set_text_hook(MonoObject *label, MonoString *text) {
     bind_native_clock(label, stock);
   else if (clock_like && clock_target() == label)
     s_last_stock_time = stock;
+  else if (clock_like && find_clock_alias(label) < 0)
+    note_unbound_clock(label, stock);
 
   if (clock_target() != label) {
     if (AniketosTheme::HomeTiles::IsSpaceSwitcherTabLabel(stock))
@@ -1860,6 +1848,9 @@ void set_spannable_hook(MonoObject *label, MonoObject *spannable) {
         return;
       }
     }
+  } else if (clock_like && clock_target() != label &&
+             find_clock_alias(label) < 0) {
+    note_unbound_clock(label, stock);
   }
   if (clock_target() == label && (AniketosTheme::CustomizationOn() && g_settings.shell_clock_enabled) &&
       s_native_label_set_text_orig) {
