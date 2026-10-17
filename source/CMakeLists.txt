@@ -39,7 +39,7 @@ endif()
 # Version shown to users (welcome notification, About page, Settings banner,
 # error reports). Bump it for every build handed out. Empty falls back to the
 # git tag, or dirty-<sha> for an untagged tree.
-set(ANIKETOSHEN_VERSION "0.04d" CACHE STRING
+set(ANIKETOSHEN_VERSION "0.04e" CACHE STRING
 	"Release version shown to users (empty: derive from git)")
 set(ONIONHEN_GENERATED_INCLUDE_DIR "${CMAKE_BINARY_DIR}/generated/include")
 set(ONIONHEN_VERSION_HEADER
