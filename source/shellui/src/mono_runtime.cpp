@@ -464,7 +464,7 @@ void shellui_poll_presence_reload(void) {
   g_presence_reload_due.store(0, std::memory_order_release);
   const bool home =
       g_presence_reload_home.exchange(false, std::memory_order_acq_rel);
-  LOG_INFO("reloading %sControl Center for the presence dot",
+  LOG_INFO("reloading %sControl Center for its script (presence dot, clock)",
            home ? "Home and " : "");
   if (home)
     ReloadRNPSApp("NPXS40002");

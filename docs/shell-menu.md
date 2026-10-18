@@ -134,9 +134,10 @@ behind the Home screen.
 ## Home clock
 
 The custom clock (seconds, 12/24-hour form, colour and size, the date under
-it) is drawn by Home's own clock. The Home script
-(`aniketos_shell/home_inject_js.inc`) finds the module that exports `Clock`
-and puts its own component behind that name: it renders Sony's clock (a View
+it) is drawn by Sony's own clock, in Home and in the Control Center, which
+have the same component. The script (`aniketos_shell/home_inject_js.inc`)
+finds the module that exports `Clock` and puts its own component behind that
+name: it renders Sony's clock (a View
 holding one Text) and swaps in the text with the seconds and a second Text
 for the date, in the same View. The time is laid out by React from the text
 it really shows, so it no longer jumps at the minute, and the date moves,
@@ -145,7 +146,7 @@ Sony's own (the time cache's `toTime`) with the seconds added after the
 minutes.
 
 - **Settings** come from `ShellClock::ScriptConfig()`: in the script's config
-  at Home's start, then every 2 s through Home's registry module
+  at the app's start, then every 2 s through its registry module
   (`aniketos.clock`, answered in `home_bookmark.cpp`), so a change in the
   Shell Menu shows without reloading Home. The JSON is plain ASCII: the
   script executor cuts a source holding other text short.
@@ -157,11 +158,16 @@ minutes.
   boundary), leaves Sony's clock as it is. A Home that restarts twice before
   the script reports it running gets no script until ShellUI starts again;
   the script logs Home's JS errors (`ANIKETOS fatal error: ...`).
-- When the script is out (or on a firmware without that `Clock`), the label
-  hooks in `shell_clock.cpp` draw the clock as before. While the script
-  draws it, the hooks write into no label, so a game's Information screen
-  keeps its own values (a version such as "10.40" is only taken for a clock
-  on the label Sony marks as the clock).
+- **The Control Center** gets the script while the custom clock (or the
+  presence dot) is on; it is reloaded once, 4 s after the HEN's hooks are in,
+  for the script to get in.
+- **Label hooks:** the time Text the script draws has Sony's test id with
+  `.aniketos` added (`clock-text.aniketos`). The label hooks in
+  `shell_clock.cpp` still follow that label (Home's root, the opacity) but
+  write nothing into it; any clock without the mark (an app without the
+  script, a firmware without that `Clock`) is drawn by the hooks as before.
+  A dotted time such as "10.40" counts as a clock only on the label Sony
+  marks as the clock, so a game's Information screen keeps its values.
 
 ## Game tile shape
 

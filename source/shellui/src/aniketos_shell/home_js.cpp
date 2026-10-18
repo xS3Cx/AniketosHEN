@@ -53,13 +53,28 @@ MonoClass *s_executor_class = nullptr;
 bool s_disabled = false;
 /* Unconfirmed starts before this one (the count kept in kUnconfirmed). */
 int s_unconfirmed_starts = 0;
-/* Home with the script in it, not yet reported running. A Home that falls
-   over starts again within a second, inside the same ShellUI, so the markers
-   above never see it: after kHomeRestartsAllowed such restarts the script
-   stays out until ShellUI starts again. */
-bool s_home_unconfirmed = false;
-int s_home_restarts = 0;
-constexpr int kHomeRestartsAllowed = 2;
+/* An app (Home, the Control Center) with the script in it, not yet
+   reported running. An app that falls over starts again within a second,
+   inside the same ShellUI, so the markers above never see it: after
+   kRestartsAllowed such restarts the script stays out until ShellUI starts
+   again. */
+struct AppStarts {
+  bool unconfirmed = false;
+  int restarts = 0;
+};
+AppStarts s_home_starts;
+AppStarts s_control_center_starts;
+constexpr int kRestartsAllowed = 2;
+
+void note_app_start(AppStarts &starts, const char *app) {
+  if (starts.unconfirmed && ++starts.restarts >= kRestartsAllowed &&
+      !s_disabled) {
+    s_disabled = true;
+    LOG_WARN("[HOMEJS] %s started %d times over before it was running with "
+             "the script; it stays out until ShellUI starts again",
+             app, starts.restarts);
+  }
+}
 
 std::string text_of(MonoObject *managed) {
   if (!managed)
@@ -104,8 +119,10 @@ void console_log_hook(MonoString *message, int level, void *a, void *b) {
     if (text.compare(0, 14, "ANIKETOS alive") == 0) {
       unlink(kUnconfirmed); /* Home survived with the script in it */
       s_unconfirmed_starts = 0;
-      s_home_unconfirmed = false;
-      s_home_restarts = 0;
+      AppStarts &starts = text.find("app=control-center") != std::string::npos
+                              ? s_control_center_starts
+                              : s_home_starts;
+      starts = {};
     }
     /* the top-bar icon the script added was pressed */
     if (text.compare(0, 13, "ANIKETOS:menu") == 0)
@@ -113,10 +130,6 @@ void console_log_hook(MonoString *message, int level, void *a, void *b) {
     /* a choice in the Trophies app's options menu */
     if (text.compare(0, 16, "ANIKETOS:trophy|") == 0)
       TrophyTools::HandleScriptMessage(text.substr(16));
-    /* the script draws the custom clock in Sony's clock: the label hooks
-       only follow it from now on */
-    if (text.compare(0, 14, "ANIKETOS:clock") == 0)
-      ShellClock::SetNativeClock(true);
   }
   if (s_console_log_original)
     s_console_log_original(message, level, a, b);
@@ -180,21 +193,17 @@ void run_script_hook(MonoObject *executor, MonoObject *bundle) {
   LOG_INFO("[HOMEJS] RunScript in '%s'", app.c_str());
   const bool home = app.find("rnps-home") != std::string::npos;
   /* Home, when the new tab's tile row can be filled; Control Center for the
-     presence dot alone. */
+     presence dot and the custom clock. */
   const bool control_center =
       app.find("rnps-control-center") != std::string::npos &&
-      (AniketosTheme::CustomizationOn() ? g_settings.home_presence_dot : 0) != 0;
+      ((AniketosTheme::CustomizationOn() ? g_settings.home_presence_dot : 0) !=
+           0 ||
+       ShellClock::CustomClockOn());
   if (home) {
     shellui_note_home_start();
-    /* the label hooks draw the clock until this Home's script says it does */
-    ShellClock::SetNativeClock(false);
-    if (s_home_unconfirmed && ++s_home_restarts >= kHomeRestartsAllowed &&
-        !s_disabled) {
-      s_disabled = true;
-      LOG_WARN("[HOMEJS] Home started %d times over before it was running "
-               "with the script; it stays out until ShellUI starts again",
-               s_home_restarts);
-    }
+    note_app_start(s_home_starts, "Home");
+  } else if (control_center) {
+    note_app_start(s_control_center_starts, "Control Center");
   }
   /* the Emulators tab, unless switched off, and the bookmark tab while it
      holds a game */
@@ -224,7 +233,8 @@ void run_script_hook(MonoObject *executor, MonoObject *bundle) {
        no glyph of ours (one the user typed shows as typed) */
     const std::string bookmark_name = HomeBookmark::Name();
     const std::string config =
-        std::string("globalThis.__aniketosConfig = {space: ") +
+        std::string("globalThis.__aniketosConfig = {app: ") +
+        (home ? "'home'" : "'control-center'") + ", space: " +
         (home ? "'emulators'" : "''") +
         ", emulators: " + (emulators ? "true" : "false") + ", caption: " +
         JsString(caption) + ", label: " +
@@ -254,8 +264,8 @@ void run_script_hook(MonoObject *executor, MonoObject *bundle) {
       unlink(kUnconfirmed); /* nothing went in, so nothing to confirm */
     LOG_INFO("[HOMEJS] injected into '%s' ok=%d", app.c_str(), ok ? 1 : 0);
     injected = ok;
-    if (home && ok)
-      s_home_unconfirmed = true;
+    if (ok)
+      (home ? s_home_starts : s_control_center_starts).unconfirmed = true;
   }
   /* Before the bundle runs and asks for its rows: the emulators, and the
      games moved to the bookmark, leave the Games row only for a tab of

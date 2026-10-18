@@ -1,9 +1,9 @@
 /* JavaScript evaluated in Home's runtime right before its bundle (see
  * home_js.cpp). `__aniketosConfig` is defined by the native side just ahead
- * of it: {space, emulators, caption, label, limit, icon, presence, clock, and
- * the bookmark's}; space is empty in an app other than Home, where only the
- * presence dot is touched, and emulators is false when the Emulators tab is
- * switched off.
+ * of it: {app, space, emulators, caption, label, limit, icon, presence, clock,
+ * and the bookmark's}; app is 'home' or 'control-center', space is empty in
+ * the Control Center, where only the presence dot and the clock are touched,
+ * and emulators is false when the Emulators tab is switched off.
  *
  * Home is a webpack bundle whose screens are driven by data: the tab bar is
  * `spaceIds.map(...)`, a tab's caption is `textBySpaceId[id]`, and each
@@ -379,17 +379,18 @@ R"JS((function () {
     } catch (e) {}
   }
 
-  /* The custom clock, drawn by Home's own clock. Sony's clock (the module
-     exporting `Clock`) is a View holding one Text whose text is the time,
-     from a timer that sets it again only when the minute changes. Ours draws
+  /* The custom clock, drawn by the app's own clock (Home and the Control
+     Center have the same component). Sony's clock (the module exporting
+     `Clock`) is a View holding one Text whose text is the time, from a
+     timer that sets it again only when the minute changes. Ours draws
      that same element, with the same View, Text, style and timing, and with
      the user's settings: seconds, a 12- or 24-hour form, the colour and size,
      and the date as a second Text inside the same View. Being part of the
      clock, the date is laid out, moved, faded and hidden with it, and the
      clock's width comes from React's layout of the text it really shows.
      The system's time format is Sony's own (the time cache's toTime). The
-     settings are read through Home's registry module (aniketos.clock), which
-     the native side answers. */
+     settings are read through the app's registry module (aniketos.clock),
+     which the native side answers. */
   var CK = { cfg: cfg.clock || null, rev: 0, raw: '', cache: null,
              component: null, asking: false, told: false, failed: false };
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
@@ -471,7 +472,7 @@ R"JS((function () {
       return element;
     if (!CK.told) {
       CK.told = true;
-      log(':clock');
+      log('clock: drawn in Sony\'s clock (' + props.testID + ')');
     }
     if (!c || !c.on) return element;
     var now = new Date(), key;
@@ -483,6 +484,9 @@ R"JS((function () {
     own.style = [text.props.style, look];
     own.children = clockTime(now, text.props.children);
     own.key = 'time';
+    /* the native label hooks leave a clock with this ending alone
+       (shell_clock.cpp, kScriptClockMark) */
+    own.testID = text.props.testID + '.aniketos';
     var children = [React.createElement(text.type, own)];
     if (c.date) {
       var date = { position: 'absolute', top: '100%', left: -300, right: -300,
@@ -571,7 +575,7 @@ R"JS((function () {
      everything else read through to the original. */
   function patchClock(module, id) {
     var exports = module && module.exports;
-    if (!SPACE || !CK.cfg || A.patched.clock || !exports ||
+    if (!CK.cfg || A.patched.clock || !exports ||
         typeof exports !== 'object' || !A.React ||
         typeof A.React.useState !== 'function')
       return;
@@ -693,7 +697,8 @@ R"JS((function () {
   /* Home up and drawing: the native side stops treating this start as
      unconfirmed. */
   setTimeout(function () {
-    log('alive patched=' + JSON.stringify(A.patched) + ' errors=' + A.errors +
+    log('alive app=' + cfg.app + ' patched=' + JSON.stringify(A.patched) +
+        ' errors=' + A.errors +
         ' hooked=' + hooked + ' spaces=' + JSON.stringify(A.spaceIds || null));
   }, 8000);
   log('installed for space ' + SPACE);

@@ -389,15 +389,28 @@ bool looks_like_stock_clock(MonoObject *label, const char *text) {
          has_clock_test_id(label);
 }
 
-/* React draws the custom clock itself (home_inject_js.inc reports it): then
-   nothing here writes into a clock label, and the date overlay is not
-   drawn; the label is only followed, for Home's root and for its opacity. */
-bool s_native_clock = false;
-
-bool custom_clock_drawn_here() {
-  return AniketosTheme::CustomizationOn() && g_settings.shell_clock_enabled &&
-         !s_native_clock;
+bool custom_clock_on() {
+  return AniketosTheme::CustomizationOn() && g_settings.shell_clock_enabled;
 }
+
+/* A clock our script draws in React itself (home_inject_js.inc, in Home and
+   the Control Center) carries Sony's test id with this ending. Such a label
+   is followed like any clock, for Home's root and for the opacity, but
+   nothing here writes into it and the date overlay is not drawn for it; a
+   clock without it (no script in that app, or switched off there) is
+   dressed here as before. */
+constexpr char kScriptClockMark[] = ".aniketos";
+
+bool drawn_by_script(MonoObject *label);
+MonoObject *clock_target();
+
+/* Whether the custom clock is drawn into `label` from here. */
+bool custom_clock_drawn_for(MonoObject *label) {
+  return custom_clock_on() && !(label && drawn_by_script(label));
+}
+
+/* ... into the clock being followed. */
+bool custom_clock_drawn_here() { return custom_clock_drawn_for(clock_target()); }
 
 bool plausible_native_clock_geometry(MonoObject *label) {
   if (!label)
@@ -1391,7 +1404,7 @@ void update_clock_alias(MonoObject *label, size_t alias_index, time_t now) {
   if (s_native_base_width <= 0.0f)
     goto restore_state;
 
-  if (!custom_clock_drawn_here()) {
+  if (!custom_clock_drawn_for(label)) {
     restore_native_label(label);
     goto restore_state;
   }
@@ -1613,6 +1626,14 @@ void native_label_set_text_hook(MonoObject *label, MonoString *text) {
     return;
   }
   const time_t now = std::time(nullptr);
+  if (drawn_by_script(label)) {
+    /* React draws this one; the others stay as they are */
+    s_date_overlay = {};
+    s_last_rendered = stock;
+    if (s_native_label_set_text_orig)
+      s_native_label_set_text_orig(label, text);
+    return;
+  }
   if (!custom_clock_drawn_here()) {
     restore_all_native_labels();
     s_date_overlay = {};
@@ -1657,7 +1678,28 @@ void native_label_set_text_hook(MonoObject *label, MonoString *text) {
 }
 
 bool has_clock_test_id(MonoObject *label) {
-  return label_test_id(label) == "clock-text";
+  const std::string id = label_test_id(label);
+  return id == "clock-text" || id == std::string("clock-text") + kScriptClockMark;
+}
+
+/* The answer for the last label asked about is kept for half a second: the
+   tick asks about the followed clock thirty times a second. */
+bool drawn_by_script(MonoObject *label) {
+  static MonoObject *asked = nullptr;
+  static bool answer = false;
+  static uint64_t asked_ms = 0;
+  if (!label)
+    return false;
+  const uint64_t now_ms = monotonic_millis();
+  if (label != asked || now_ms - asked_ms >= 500) {
+    const std::string id = label_test_id(label);
+    const size_t mark = sizeof(kScriptClockMark) - 1;
+    answer = id.size() > mark &&
+             id.compare(id.size() - mark, mark, kScriptClockMark) == 0;
+    asked = label;
+    asked_ms = now_ms;
+  }
+  return answer;
 }
 
 void native_label_on_update_hook(MonoObject *label) {
@@ -1679,7 +1721,9 @@ void native_label_on_update_hook(MonoObject *label) {
       return;
     }
     const time_t now = std::time(nullptr);
-    if (!custom_clock_drawn_here()) {
+    if (drawn_by_script(label))
+      return; /* React draws this one */
+    if (!custom_clock_on()) {
       restore_all_native_labels();
       s_date_overlay = {};
       return;
@@ -1929,7 +1973,7 @@ void set_spannable_hook(MonoObject *label, MonoObject *spannable) {
       /* The clock we follow is on screen and stays the one we follow. This
          one is dressed as a second clock, here and now. */
       const int alias = remember_clock_alias(label, stock);
-      if (alias >= 0 && custom_clock_drawn_here() &&
+      if (alias >= 0 && custom_clock_drawn_for(label) &&
           s_native_label_set_text_orig) {
         update_clock_alias(label, static_cast<size_t>(alias), std::time(nullptr));
         return;
@@ -2120,7 +2164,7 @@ void recover_clock() {
 uint32_t s_known_labels[2] = {};
 
 void sweep_clock_labels(time_t now) {
-  if (!custom_clock_drawn_here())
+  if (!custom_clock_on())
     return;
   static int rescan = 0;
   const bool may_rescan = --rescan <= 0;
@@ -2161,7 +2205,8 @@ void sweep_clock_labels(time_t now) {
         s_known_labels[i] = mono_gchandle_new_weakref(label, 0);
     }
     if (!label || is_disposed(label) ||
-        native_clock_opacity(label) <= kShownOpacity)
+        native_clock_opacity(label) <= kShownOpacity ||
+        drawn_by_script(label))
       continue;
     const std::string shown = raw_text(label);
     if (!looks_like_stock_clock(label, shown.c_str()) || shown == format_time(local))
@@ -2354,13 +2399,15 @@ void Tick() {
 
   if (!custom_clock_drawn_here()) {
     publish_date_overlay(now, false, {});
-    restore_all_native_labels();
-    /* (React's own text, when React draws the clock, is left alone) */
-    if (!s_native_clock &&
-        (s_last_rendered != s_last_stock_time || settings_changed)) {
-      if (MonoString *stock = ui_string(s_last_stock_time)) {
-        if (s_native_label_set_text_orig)
-          s_native_label_set_text_orig(target, stock);
+    /* Switched off: every clock gets Sony's look and time back. Drawn by
+       React: that clock is React's, and any other is dressed by its hooks. */
+    if (!custom_clock_on()) {
+      restore_all_native_labels();
+      if (s_last_rendered != s_last_stock_time || settings_changed) {
+        if (MonoString *stock = ui_string(s_last_stock_time)) {
+          if (s_native_label_set_text_orig)
+            s_native_label_set_text_orig(target, stock);
+        }
       }
     }
     s_last_rendered = s_last_stock_time;
@@ -2763,14 +2810,7 @@ bool GetDateOverlayState(DateOverlayState *state) {
 
 void RequestRefresh() { s_force_refresh = true; }
 
-void SetNativeClock(bool active) {
-  if (s_native_clock == active)
-    return;
-  s_native_clock = active;
-  s_force_refresh = true; /* gives back what was dressed, hides the date */
-  LOG_INFO("[CLOCK] the custom clock is drawn by %s",
-           active ? "Home's React (script)" : "the label hooks");
-}
+bool CustomClockOn() { return custom_clock_on(); }
 
 namespace {
 std::string json_color(int r, int g, int b) {

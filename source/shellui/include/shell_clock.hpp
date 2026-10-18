@@ -45,9 +45,11 @@ void VisitSceneRoots(void (*visit)(MonoObject *root, void *context),
 void RemoveStaleHomeChildren(MonoObject *root);
 std::string DebugPropText(MonoObject *object, const char *name);
 void RequestRefresh();
-/* Home's script draws the custom clock itself (home_inject_js.inc, reported
- * through Home's console): the label hooks then only follow the clock. */
-void SetNativeClock(bool active);
+/* The custom clock is switched on (and customization with it). Home and the
+ * Control Center then get the script that draws it in Sony's clock
+ * (home_inject_js.inc); a clock the script draws is marked by its test id
+ * and the label hooks leave it alone. */
+bool CustomClockOn();
 /* The clock's settings for that script, as JSON: on, seconds, hour format,
  * the AM/PM words, the date's parts and the menu language's month and
  * weekday names, colours and sizes. Plain ASCII (other text is written as

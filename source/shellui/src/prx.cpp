@@ -966,9 +966,12 @@ int main(int argc, char const* argv[]) {
    * this inject worker. One pending flag coalesces both reasons.
    */
   shellui_request_home_reload();
-  /* Control Center draws the user's avatar too and does not restart by
-     itself; it has to, for the script that forces the dot to get in. */
-  if ((AniketosTheme::CustomizationOn() ? g_settings.home_presence_dot : 0) != 0)
+  /* Control Center draws the user's avatar and a clock too and does not
+     restart by itself; it has to, for the script that forces the dot and
+     draws the custom clock to get in. */
+  if ((AniketosTheme::CustomizationOn() ? g_settings.home_presence_dot : 0) !=
+          0 ||
+      ShellClock::CustomClockOn())
     shellui_request_presence_reload(4000, false);
   hooked = true;
   run_keep_alive();
