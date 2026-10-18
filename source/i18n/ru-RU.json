@@ -597,7 +597,6 @@
     "vsh.home_image.enable": "Использовать изображение как фон",
     "vsh.home_image.file": "Изображение",
     "vsh.home_image.folder": "Папка с изображениями",
-    "vsh.home_bg.blur": "Размытие фона %",
     "vsh.home_bg.dim": "Затемнение фона %",
     "vsh.home_bg.haze": "Дымка на фоне %",
     "vsh.home_bg.vignette": "Виньетка %",

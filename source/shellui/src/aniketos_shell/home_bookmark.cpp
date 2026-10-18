@@ -4,6 +4,7 @@
 #include "aniketos_shell/system_dialogs.hpp"
 #include "hooked_funcs.hpp"
 #include "onion_cjson.hpp"
+#include "shell_clock.hpp"
 #include "toolbox_i18n.hpp"
 
 #include <onion/detour.h>
@@ -31,6 +32,8 @@ using toolbox_i18n::tr;
 constexpr const char *kFile = ONION_DIST_USER_DATA_ROOT "/home_bookmark.json";
 /* What the script asks Home's registry module for. */
 constexpr const char *kRegistryKey = "aniketos.home_bookmark";
+/* ... and for the custom clock's settings (ShellClock::ScriptConfig). */
+constexpr const char *kClockKey = "aniketos.clock";
 /* Bytes of a name, cut at a character boundary: a tab's caption. */
 constexpr size_t kMaxNameBytes = 40;
 
@@ -268,6 +271,18 @@ RegistryGet s_registry_get_original = nullptr;
    system registry. The one asking for our key gets the revision instead. */
 void registry_get_hook(MonoObject *module, MonoObject *param,
                        MonoObject *promise) {
+  if (param && promise) {
+    MonoObject *exception = nullptr;
+    MonoString *shown = mono_object_to_string(param, &exception);
+    const std::string asked =
+        exception ? std::string()
+                  : text_of(reinterpret_cast<MonoObject *>(shown));
+    /* Home's script asks for the custom clock's settings now and then, so a
+       change in the Shell Menu shows without reloading Home */
+    if (asked.find(kClockKey) != std::string::npos &&
+        resolve(promise, ShellClock::ScriptConfig()))
+      return;
+  }
   if (param && promise && Enabled()) {
     MonoObject *exception = nullptr;
     MonoString *shown = mono_object_to_string(param, &exception);

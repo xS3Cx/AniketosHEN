@@ -597,7 +597,6 @@
     "vsh.home_image.enable": "Usar una imagen como fondo",
     "vsh.home_image.file": "Imagen",
     "vsh.home_image.folder": "Carpeta de imágenes",
-    "vsh.home_bg.blur": "Desenfoque del fondo %",
     "vsh.home_bg.dim": "Oscurecer el fondo %",
     "vsh.home_bg.haze": "Neblina del fondo %",
     "vsh.home_bg.vignette": "Viñeta %",

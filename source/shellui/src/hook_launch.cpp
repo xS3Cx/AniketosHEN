@@ -175,7 +175,7 @@ void createJson_hook(MonoObject* inst, MonoObject* array, MonoString* id, MonoSt
 
     /* The bookmark tab on Home: just above "Delete", which every game and
        app of the user's has and the system's own tiles do not. One entry,
-       with the bookmark's star in front: it opens AniketosHEN's own menu
+       with AniketosHEN's star in front: it opens AniketosHEN's own menu
        (HomeBookmark) with Copy to, Move to and Remove from, each opening the
        tabs under the names they have now. Nothing else is added to Sony's
        menu. */

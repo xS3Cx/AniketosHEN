@@ -17,6 +17,15 @@
  * clock, which keeps out labels such as "23.8  5:47". */
 namespace ClockText {
 
+/* The separators Parse accepts between the hour and the minutes. ':' is
+ * every system language's but Finnish. '.' is Finnish only ("22.18",
+ * "9.05 PM"), and it is also how versions and sizes are written ("6.00",
+ * "10.40", "1.25 GB"), so it is asked for only where the text is known to
+ * come from the clock. ClockLabel also takes seconds after the minutes, with
+ * the same separator ("22:18:05", "9:05:07 PM"): the clock our script draws
+ * (home_inject_js.inc) in Sony's clock label. */
+enum class Separators { Colon, ColonOrDot, ClockLabel };
+
 struct Time {
   int hour = 0; /* as shown */
   int minute = 0;
@@ -65,10 +74,28 @@ inline bool marker(const unsigned char *begin, const unsigned char *end,
   return true;
 }
 
+/* Whether [p, end) is " AM" or " PM", the only 12-hour marker Finnish has
+ * (msgid_time_am_var / msgid_time_pm_var: "%time% AM", "%time% PM"). */
+inline bool finnish_marker(const unsigned char *p, const unsigned char *end) {
+  std::size_t skip = 0;
+  std::size_t blanks = 0;
+  while (p < end && (skip = blank(p)) != 0) {
+    p += skip;
+    ++blanks;
+  }
+  if (!blanks || end - p < 2 || (p[0] != 'A' && p[0] != 'P') || p[1] != 'M')
+    return false;
+  for (p += 2; p < end; p += skip)
+    if (!(skip = blank(p)))
+      return false;
+  return true;
+}
+
 } // namespace detail
 
 /* Whether `text` is a time as the system clock shows it; `out` gets it. */
-inline bool Parse(const char *text, Time *out = nullptr) {
+inline bool Parse(const char *text, Time *out = nullptr,
+                  Separators separators = Separators::Colon) {
   if (!text)
     return false;
   const auto *s = reinterpret_cast<const unsigned char *>(text);
@@ -93,7 +120,8 @@ inline bool Parse(const char *text, Time *out = nullptr) {
     time.hour_digits = 2;
   }
   const unsigned char separator = s[p];
-  if (separator != ':' && separator != '.')
+  if (separator != ':' &&
+      !(separator == '.' && separators != Separators::Colon))
     return false;
   ++p;
   if (!detail::digit(s[p]) || !detail::digit(s[p + 1]))
@@ -102,6 +130,10 @@ inline bool Parse(const char *text, Time *out = nullptr) {
   p += 2;
   if (time.hour > 23 || time.minute > 59)
     return false;
+  if (separators == Separators::ClockLabel && s[p] == separator &&
+      detail::digit(s[p + 1]) && detail::digit(s[p + 2]) &&
+      (s[p + 1] - '0') * 10 + (s[p + 2] - '0') <= 59)
+    p += 3;
 
   bool before = false;
   bool after = false;
@@ -109,15 +141,11 @@ inline bool Parse(const char *text, Time *out = nullptr) {
       !detail::marker(s, s + start, &before) ||
       !detail::marker(s + p, s + length, &after) || (before && after))
     return false;
-  /* A dot as the separator is Finnish, whose marker comes after the time and
-     has no dots; a "Ver. 2.50" is no clock. */
-  if (separator == '.') {
-    if (before)
-      return false;
-    for (std::size_t q = p; q < length; ++q)
-      if (s[q] == '.')
-        return false;
-  }
+  /* A dot as the separator is Finnish: nothing before the time, and after it
+     nothing or " AM"/" PM". "Ver. 2.50" and "1.25 GB" are no clock. */
+  if (separator == '.' &&
+      (before || (after && !detail::finnish_marker(s + p, s + length))))
+    return false;
   time.twelve_hour = before || after;
   if (out)
     *out = time;

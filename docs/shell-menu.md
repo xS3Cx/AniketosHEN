@@ -11,8 +11,9 @@ own addition to the OnionHEN tree it is forked from.
   unload the HEN stack.
 - Fan threshold, DualSense light-bar colours and animations, console buzzer and
   power-LED tests.
-- Three menu styles (Akari, Anomaly, Apparition), colours,
-  gradients, animations, scale and position.
+- Four menu styles (Akari, Anomaly, Apparition, and Sweety, the console's
+  own PUI pop-up menu on the left), colours, gradients, animations, scale and
+  position.
 - Shell appearance: native background colour/animation/image, tile focus
   outline, panel tint, home-screen clock and date.
 - A home-screen OSD (on by default), and the settings of the in-game monitor
@@ -111,16 +112,14 @@ behind the Home screen.
   the volume up turns the sound on. They are stored as
   `home_video_enabled`, `home_video_path`, `home_video_sound` and
   `home_video_volume` in `[shell_menu]`.
-- **Effects:** five sliders, 0 (off) to 100, lay full-screen layers over the
+- **Effects:** four sliders, 0 (off) to 100, lay full-screen layers over the
   video or picture, under the particles and the rest of Home, and apply as
-  they move: *Background blur %* (a PUI `BackgroundBlurEffect` on a clear
-  panel, which blurs what lies beneath it), *Background dimming %* (black,
-  up to 85 %), *Background haze %* (black too, up to 50 %; both panels
-  are kept out of the system-panel theme, which would tint them), *Vignette %*
-  and *Darken top and bottom %* (black gradients embedded in the module,
-  stretched over the screen). A layer exists only while its slider is above
-  0. Stored as `home_bg_blur`, `home_bg_dim`, `home_bg_haze`,
-  `home_bg_vignette` and `home_bg_edges`.
+  they move: *Background dimming %* (black, up to 85 %), *Background haze %*
+  (black too, up to 50 %; both panels are kept out of the system-panel
+  theme, which would tint them), *Vignette %* and *Darken top and bottom %*
+  (black gradients embedded in the module, stretched over the screen). A
+  layer exists only while its slider is above 0. Stored as `home_bg_dim`,
+  `home_bg_haze`, `home_bg_vignette` and `home_bg_edges`.
 - **How it works:** the console's own `Sce.Vsh.Video.VideoPlayer` and PUI
   `VideoView` are created by name and placed under Home's React tree, so the
   video fades and moves with Home. The player core cannot open files from the
@@ -131,6 +130,38 @@ behind the Home screen.
   never reach playback (ShellUI went down), the video is left off until it is
   switched on again in the menu. A file named `no_home_video` in
   `/data/AniketosHEN` disables the feature regardless of settings.
+
+## Home clock
+
+The custom clock (seconds, 12/24-hour form, colour and size, the date under
+it) is drawn by Home's own clock. The Home script
+(`aniketos_shell/home_inject_js.inc`) finds the module that exports `Clock`
+and puts its own component behind that name: it renders Sony's clock (a View
+holding one Text) and swaps in the text with the seconds and a second Text
+for the date, in the same View. The time is laid out by React from the text
+it really shows, so it no longer jumps at the minute, and the date moves,
+fades and hides with the clock. With *System* as the hour format the time is
+Sony's own (the time cache's `toTime`) with the seconds added after the
+minutes.
+
+- **Settings** come from `ShellClock::ScriptConfig()`: in the script's config
+  at Home's start, then every 2 s through Home's registry module
+  (`aniketos.clock`, answered in `home_bookmark.cpp`), so a change in the
+  Shell Menu shows without reloading Home. The JSON is plain ASCII: the
+  script executor cuts a source holding other text short.
+- **Font sizes**: Sony's Text accepts only the sizes of react-native's
+  `FontSizePS` table (any other is a fatal error that restarts Home), so a
+  size is taken to the nearest of them; the time keeps Sony's size while the
+  setting is at its default.
+- **Fallbacks**: an error in the clock code, or in drawing it (a React error
+  boundary), leaves Sony's clock as it is. A Home that restarts twice before
+  the script reports it running gets no script until ShellUI starts again;
+  the script logs Home's JS errors (`ANIKETOS fatal error: ...`).
+- When the script is out (or on a firmware without that `Clock`), the label
+  hooks in `shell_clock.cpp` draw the clock as before. While the script
+  draws it, the hooks write into no label, so a game's Information screen
+  keeps its own values (a version such as "10.40" is only taken for a clock
+  on the label Sony marks as the clock).
 
 ## Game tile shape
 
@@ -161,8 +192,8 @@ console's language; *Restore system tab names* does that for both tabs at
 once. *Emulators tab* (on by default) takes the Emulators tab out of Home:
 the emulators go back to the Games row, and L1 and R1 move through the tabs
 that are left. *Tab icons* (on by default) takes the glyph off the front of
-every tab (Games, Media, Emulators, the bookmark); a name that starts with
-a glyph of the user's shows that one instead of ours.
+Games, Media and Emulators (the bookmark always shows its name as typed); a
+name that starts with a glyph of the user's shows that one instead of ours.
 
 - **Settings:** `home_tab_games_name` and `home_tab_media_name` (empty: the
   system's name), `home_tab_emulators` and `home_tab_icons` in
@@ -191,7 +222,7 @@ a glyph of the user's shows that one instead of ours.
 
 ## Bookmark tab, and copying or moving between tabs
 
-A game's or app's Options menu has *Copy / move*, with the bookmark's star
+A game's or app's Options menu has *Copy / move*, with AniketosHEN's star
 in front. It opens a menu like the HEN button's: *Copy to*, *Move to* and
 *Remove from*, each opening the tabs under the names they have now: Games,
 Media (a name of the user's if they were renamed) and the bookmark. A copy
@@ -202,7 +233,8 @@ its own row); a tab it was put in is not offered again.
 The first title copied or moved to the bookmark (*New Bookmark* in the
 submenu) asks for a name with the system keyboard: the bookmark becomes a
 tab of its own after Emulators (after Media while the Emulators tab is off),
-captioned with the star and that name. One bookmark for now; removing its
+captioned with that name as typed (a glyph the user types in front of it
+shows too). One bookmark for now; removing its
 last game removes it. L1 and R1 move through all the tabs (Games, Media,
 Emulators, the bookmark).
 

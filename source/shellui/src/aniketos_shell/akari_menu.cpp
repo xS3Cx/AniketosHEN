@@ -89,6 +89,9 @@ constexpr const char *kClockDateName = "id_anivsh_shell_clock_date";
 constexpr const char *kBackgroundDirectory =
     "/user/data/" HEN_FOLDER "/ShellUI/background";
 constexpr size_t kMaxVisibleOptions = 10;
+/* Sweety (vsh_menu_theme 6): the menu's pages shown as the console's own
+   pop-up menus, see akari_menu/sweety_native.inc. */
+constexpr int kThemeSweety = 6;
 constexpr int kGradientSlices = 32;
 constexpr int kFrameGradientSlices = 24;
 /* Share of a colour slider's track that holds the hues; the rest fades to
@@ -257,7 +260,6 @@ enum class OptionId {
   HomeImageEnabled,
   HomeImageFile,
   HomeImageRefresh,
-  HomeBackgroundBlur,
   HomeBackgroundDim,
   HomeBackgroundHaze,
   HomeBackgroundVignette,
@@ -673,6 +675,7 @@ bool flush_save() {
 #include "akari_menu/page_model.inc"
 #include "akari_menu/view.inc"
 #include "akari_menu/settings_actions.inc"
+#include "akari_menu/sweety_native.inc"
 
 void Initialize() {
   ensure_background_directory();
@@ -870,6 +873,9 @@ void UpdateDiagnostics(const Diagnostics &diagnostics) {
 void Show() {
   if (!s_host)
     return;
+  /* Sweety: drawn by PUI itself, when it can be */
+  if (SweetyNative::Wanted() && SweetyNative::Show())
+    return;
   if (!s_stack.empty())
     reset_page_selection(s_stack.back());
   // Toolbox refreshes settings when its root page opens.  Do the same before
@@ -910,6 +916,7 @@ void Show() {
 }
 
 void Hide() {
+  SweetyNative::Hide();
   if (s_animation == AnimationState::Hidden)
     return;
   s_animation = AnimationState::Closing;
@@ -929,7 +936,7 @@ void Hide() {
 }
 
 void Toggle() {
-  if (IsVisible())
+  if (IsVisible() || SweetyNative::s_active)
     Hide();
   else
     Show();
@@ -938,6 +945,15 @@ void Toggle() {
 void Tick() {
   if (!s_host)
     return;
+  SweetyNative::Tick();
+  /* The style was changed with the menu open: over to the other renderer. */
+  if (SweetyNative::s_active && active_menu_theme() != kThemeSweety) {
+    SweetyNative::Hide();
+    Show();
+  } else if (IsVisible() && SweetyNative::Wanted()) {
+    Hide();
+    SweetyNative::Show();
+  }
   if (s_confirming_reveal) {
     int button = -1;
     if (SystemDialogs::PollAlert(&button)) {

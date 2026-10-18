@@ -9,8 +9,8 @@
  * same menu puts a game or app in Home's own Games or Media row too.
  *
  * Its parts:
- *  - a game's Options menu (hook_launch) gets one entry with the tab's star
- *    in front; its URI comes back here through the boot hook (hook_boot)
+ *  - a game's Options menu (hook_launch) gets one entry with AniketosHEN's
+ *    star in front; its URI comes back here through the boot hook (hook_boot)
  *    and opens a native pop-up menu, as the HEN button's does: "Copy to",
  *    "Move to" and "Remove from", each opening the tabs under the names
  *    they have now (Games, Media, the bookmark). The first game copied or
@@ -33,7 +33,8 @@ inline constexpr char kMenuUri[] = "OnionHEN?BookmarkMenu";
 /* The content limit by which the tab's list is recognised (the Emulators
  * tab's is the one before). */
 inline constexpr int kContentLimit = 7772;
-/* Glyph in front of the tab's caption: U+EFAA (a star). */
+/* AniketosHEN's star (U+EFAA), in front of the Copy / move entry in a game's
+   Options menu. The tab itself shows the user's name as typed. */
 inline constexpr char kGlyph[] = "\xEE\xBE\xAA";
 
 /* Where a title can be copied or moved. */

@@ -597,7 +597,6 @@
     "vsh.home_image.enable": "ใช้รูปภาพเป็นพื้นหลัง",
     "vsh.home_image.file": "รูปภาพ",
     "vsh.home_image.folder": "โฟลเดอร์รูปภาพ",
-    "vsh.home_bg.blur": "เบลอพื้นหลัง %",
     "vsh.home_bg.dim": "ทำให้พื้นหลังมืดลง %",
     "vsh.home_bg.haze": "หมอกบนพื้นหลัง %",
     "vsh.home_bg.vignette": "ขอบมืด %",

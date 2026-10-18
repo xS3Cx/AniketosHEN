@@ -9,6 +9,7 @@
 #include "aniketos_theme/global_theme.hpp"
 #include "aniketos_theme/home_tiles.hpp"
 #include "aniketos_theme/theme_config.hpp"
+#include "aniketos_shell/home_js.hpp"
 #include "toolbox_i18n.hpp"
 
 #include <onion/detour.h>
@@ -102,6 +103,7 @@ struct NativeClockAlias {
   float base_height = 0.0f;
   std::string stock_time;
   bool customized = false;
+  uint32_t stock_color = 0; /* pinned box of the label's own TextColor */
 };
 std::array<NativeClockAlias, kMaxNativeClockAliases> s_clock_aliases{};
 
@@ -372,11 +374,29 @@ size_t utf8_glyph_count(const std::string &text) {
   return count;
 }
 
-// The clock's time in any system language: H:MM/HH:MM (H.MM in Finnish)
-// with a 12-hour marker before or after it, nothing else with digits. See
-// clock_text.hpp; "23.8  5:47" is still rejected.
-bool looks_like_stock_clock(const char *text) {
-  return ClockText::Parse(text);
+bool has_clock_test_id(MonoObject *label);
+
+// The clock's time in any system language (clock_text.hpp). The colon form
+// ("22:18", "10:18 p. m.", "du.10:18") is every language's but Finnish. The
+// dot form ("22.18", "9.05 PM") is Finnish only; on any other label it is a
+// version or a size ("6.00", "10.40" on a game's Information screen), so it
+// is taken only from the label Sony marks as the clock.
+bool looks_like_stock_clock(MonoObject *label, const char *text) {
+  if (ClockText::Parse(text))
+    return true;
+  return label &&
+         ClockText::Parse(text, nullptr, ClockText::Separators::ClockLabel) &&
+         has_clock_test_id(label);
+}
+
+/* React draws the custom clock itself (home_inject_js.inc reports it): then
+   nothing here writes into a clock label, and the date overlay is not
+   drawn; the label is only followed, for Home's root and for its opacity. */
+bool s_native_clock = false;
+
+bool custom_clock_drawn_here() {
+  return AniketosTheme::CustomizationOn() && g_settings.shell_clock_enabled &&
+         !s_native_clock;
 }
 
 bool plausible_native_clock_geometry(MonoObject *label) {
@@ -415,6 +435,30 @@ MonoObject *clock_target() {
              : nullptr;
 }
 
+/* The label's own TextColor, boxed and pinned (0 if it cannot be read):
+   what it gets back if it turns out not to be a clock. */
+uint32_t pinned_text_color(MonoObject *label) {
+  MonoClass *klass = property_class(label, "TextColor");
+  MonoProperty *property = klass && mono_class_get_property_from_name
+                               ? mono_class_get_property_from_name(klass,
+                                                                   "TextColor")
+                               : nullptr;
+  MonoMethod *getter = property && mono_property_get_get_method
+                           ? mono_property_get_get_method(property)
+                           : nullptr;
+  if (!getter || !mono_runtime_invoke || !mono_gchandle_new)
+    return 0;
+  MonoObject *exception = nullptr;
+  MonoObject *boxed = mono_runtime_invoke(getter, label, nullptr, &exception);
+  return boxed && !exception ? mono_gchandle_new(boxed, 1) : 0;
+}
+
+void clear_alias(NativeClockAlias &alias) {
+  release_handle(alias.handle);
+  release_handle(alias.stock_color);
+  alias = {};
+}
+
 int find_clock_alias(MonoObject *label) {
   if (!label || !mono_gchandle_get_target)
     return -1;
@@ -424,8 +468,7 @@ int find_clock_alias(MonoObject *label) {
       continue;
     MonoObject *target = mono_gchandle_get_target(alias.handle);
     if (!target) {
-      release_handle(alias.handle);
-      alias = {};
+      clear_alias(alias);
       continue;
     }
     if (target == label)
@@ -449,10 +492,8 @@ int remember_clock_alias(MonoObject *label, const std::string &stock) {
     if (!alias.handle || !mono_gchandle_get_target)
       continue;
     MonoObject *target = mono_gchandle_get_target(alias.handle);
-    if (!target || is_disposed(target)) {
-      release_handle(alias.handle);
-      alias = {};
-    }
+    if (!target || is_disposed(target))
+      clear_alias(alias);
   }
   for (size_t index = 0; index < s_clock_aliases.size(); ++index) {
     NativeClockAlias &alias = s_clock_aliases[index];
@@ -467,6 +508,8 @@ int remember_clock_alias(MonoObject *label, const std::string &stock) {
     alias.base_height = label_dimension(label, "Height");
     alias.stock_time = stock;
     alias.customized = false;
+    if (alias.base_width > 0.0f)
+      alias.stock_color = pinned_text_color(label);
     return static_cast<int>(index);
   }
   LOG_WARN("[CLOCK] native clock alias table full capacity=%zu",
@@ -478,9 +521,7 @@ void forget_clock_alias(MonoObject *label) {
   const int index = find_clock_alias(label);
   if (index < 0)
     return;
-  NativeClockAlias &alias = s_clock_aliases[static_cast<size_t>(index)];
-  release_handle(alias.handle);
-  alias = {};
+  clear_alias(s_clock_aliases[static_cast<size_t>(index)]);
 }
 
 bool is_disposed(MonoObject *object) {
@@ -796,7 +837,7 @@ void sync_clock_language(time_t now) {
 }
 
 uint64_t settings_signature() {
-  uint64_t value = (AniketosTheme::CustomizationOn() && g_settings.shell_clock_enabled) ? 1u : 0u;
+  uint64_t value = custom_clock_drawn_here() ? 1u : 0u;
   value = value * 31u + (g_settings.shell_clock_show_seconds ? 1u : 0u);
   value = value * 31u + (g_settings.shell_clock_show_date ? 1u : 0u);
   value = value * 31u + (g_settings.shell_clock_show_year ? 1u : 0u);
@@ -879,7 +920,8 @@ std::string format_time(const std::tm &local) {
     /* follow the system: a marker in any language ("p. m.", "du.", "PM"
        before the time) means 12-hour */
     ClockText::Time stock;
-    if (ClockText::Parse(s_last_stock_time.c_str(), &stock)) {
+    if (ClockText::Parse(s_last_stock_time.c_str(), &stock,
+                         ClockText::Separators::ColonOrDot)) {
       twelve_hour = stock.twelve_hour;
       leading_zero = stock.hour_digits == 2 && stock.hour < 10;
     }
@@ -1002,7 +1044,7 @@ void publish_date_overlay(time_t now, bool target_ready,
     s_date_overlay.g = std::clamp(g_settings.shell_clock_date_g, 0, 255);
     s_date_overlay.b = std::clamp(g_settings.shell_clock_date_b, 0, 255);
   }
-  if (!target_ready || !(AniketosTheme::CustomizationOn() && g_settings.shell_clock_enabled) ||
+  if (!target_ready || !custom_clock_drawn_here() ||
       !g_settings.shell_clock_show_date)
     return;
   std::tm local{};
@@ -1132,7 +1174,7 @@ void restore_all_native_labels() {
   s_native_base_width = saved.width;
   s_native_base_height = saved.height;
   s_visible_time_width = saved.visible_width;
-  s_native_customized = saved.customized && (AniketosTheme::CustomizationOn() && g_settings.shell_clock_enabled);
+  s_native_customized = saved.customized && custom_clock_drawn_here();
 }
 
 void layout_native_clock(MonoObject *label, const std::string &time_text) {
@@ -1298,6 +1340,8 @@ void adopt_native_geometry(MonoObject *label, NativeClockAlias &alias,
   alias.base_x = label_dimension(label, "X");
   alias.base_width = width;
   alias.base_height = label_dimension(label, "Height");
+  if (!alias.stock_color)
+    alias.stock_color = pinned_text_color(label);
   if (!active)
     return;
   s_native_base_x = alias.base_x;
@@ -1347,7 +1391,7 @@ void update_clock_alias(MonoObject *label, size_t alias_index, time_t now) {
   if (s_native_base_width <= 0.0f)
     goto restore_state;
 
-  if (!(AniketosTheme::CustomizationOn() && g_settings.shell_clock_enabled)) {
+  if (!custom_clock_drawn_here()) {
     restore_native_label(label);
     goto restore_state;
   }
@@ -1483,6 +1527,45 @@ void bind_native_clock(MonoObject *label, const std::string &stock) {
 }
 
 
+/* React put a text that is no time into a label dressed as a clock. The
+   label Sony marks as the clock stays ours. Any other label is something
+   else now, typically a list row: React keys rows by position, so when a row
+   is inserted above (a game's Information screen adds "Installed in" a
+   moment after it opens) each label below is handed the next row's text.
+   It gets back its own size and colour and the time is never drawn in it
+   again. */
+void let_go_of_label(MonoObject *label, const std::string &text) {
+  if (!label)
+    return;
+  const bool followed = clock_target() == label;
+  const int index = find_clock_alias(label);
+  if ((!followed && index < 0) || has_clock_test_id(label))
+    return;
+  if (index >= 0) {
+    NativeClockAlias &alias = s_clock_aliases[static_cast<size_t>(index)];
+    if (alias.customized && alias.base_width > 0.0f) {
+      set_object_property(label, "X", alias.base_x);
+      set_object_property(label, "Width", alias.base_width);
+      set_object_property(label, "Height", alias.base_height);
+    }
+    MonoObject *color = alias.stock_color && mono_gchandle_get_target
+                            ? mono_gchandle_get_target(alias.stock_color)
+                            : nullptr;
+    if (color && mono_object_unbox)
+      set_object_property_invoke(label, "TextColor", mono_object_unbox(color));
+  }
+  if (followed)
+    release_clock(false);
+  forget_clock_alias(label);
+  static int logged = 0;
+  if (logged < 10) {
+    ++logged;
+    LOG_INFO("[CLOCK] label %p was taken for a clock but now shows '%s'; "
+             "given back",
+             static_cast<void *>(label), text.c_str());
+  }
+}
+
 std::string label_test_id(MonoObject *label) {
   if (!label)
     return {};
@@ -1501,7 +1584,9 @@ void native_label_set_text_hook(MonoObject *label, MonoString *text) {
   std::string stock;
   if (label && text)
     stock = managed_string(reinterpret_cast<MonoObject *>(text));
-  const bool clock_like = looks_like_stock_clock(stock.c_str());
+  const bool clock_like = looks_like_stock_clock(label, stock.c_str());
+  if (!clock_like)
+    let_go_of_label(label, stock);
   /* Sony's clock label is recognised by its test id where it has one; the
      size check is only for builds whose clock carries none. A label already
      resized for a large font fails that check, and used to be left showing
@@ -1528,7 +1613,7 @@ void native_label_set_text_hook(MonoObject *label, MonoString *text) {
     return;
   }
   const time_t now = std::time(nullptr);
-  if (!(AniketosTheme::CustomizationOn() && g_settings.shell_clock_enabled)) {
+  if (!custom_clock_drawn_here()) {
     restore_all_native_labels();
     s_date_overlay = {};
     s_last_rendered = stock;
@@ -1594,7 +1679,7 @@ void native_label_on_update_hook(MonoObject *label) {
       return;
     }
     const time_t now = std::time(nullptr);
-    if (!(AniketosTheme::CustomizationOn() && g_settings.shell_clock_enabled)) {
+    if (!custom_clock_drawn_here()) {
       restore_all_native_labels();
       s_date_overlay = {};
       return;
@@ -1641,7 +1726,7 @@ void native_label_on_update_hook(MonoObject *label) {
     }
     return;
   }
-  if (looks_like_stock_clock(stock.c_str()) &&
+  if (looks_like_stock_clock(label, stock.c_str()) &&
       plausible_native_clock_geometry(label))
     bind_native_clock(label, stock);
 }
@@ -1830,7 +1915,9 @@ void set_spannable_hook(MonoObject *label, MonoObject *spannable) {
     if (shown && !exception)
       stock = managed_string(reinterpret_cast<MonoObject *>(shown));
   }
-  const bool clock_like = looks_like_stock_clock(stock.c_str());
+  const bool clock_like = looks_like_stock_clock(label, stock.c_str());
+  if (!clock_like)
+    let_go_of_label(label, stock);
   if (clock_like && clock_target() != label &&
       (has_clock_test_id(label) || plausible_native_clock_geometry(label))) {
     /* Another clock (the Control Center has its own). It becomes the one we
@@ -1842,7 +1929,7 @@ void set_spannable_hook(MonoObject *label, MonoObject *spannable) {
       /* The clock we follow is on screen and stays the one we follow. This
          one is dressed as a second clock, here and now. */
       const int alias = remember_clock_alias(label, stock);
-      if (alias >= 0 && (AniketosTheme::CustomizationOn() && g_settings.shell_clock_enabled) &&
+      if (alias >= 0 && custom_clock_drawn_here() &&
           s_native_label_set_text_orig) {
         update_clock_alias(label, static_cast<size_t>(alias), std::time(nullptr));
         return;
@@ -1852,7 +1939,7 @@ void set_spannable_hook(MonoObject *label, MonoObject *spannable) {
              find_clock_alias(label) < 0) {
     note_unbound_clock(label, stock);
   }
-  if (clock_target() == label && (AniketosTheme::CustomizationOn() && g_settings.shell_clock_enabled) &&
+  if (clock_target() == label && custom_clock_drawn_here() &&
       s_native_label_set_text_orig) {
     if (clock_like)
       s_last_stock_time = stock;
@@ -2033,7 +2120,7 @@ void recover_clock() {
 uint32_t s_known_labels[2] = {};
 
 void sweep_clock_labels(time_t now) {
-  if (!(AniketosTheme::CustomizationOn() && g_settings.shell_clock_enabled))
+  if (!custom_clock_drawn_here())
     return;
   static int rescan = 0;
   const bool may_rescan = --rescan <= 0;
@@ -2077,7 +2164,7 @@ void sweep_clock_labels(time_t now) {
         native_clock_opacity(label) <= kShownOpacity)
       continue;
     const std::string shown = raw_text(label);
-    if (!looks_like_stock_clock(shown.c_str()) || shown == format_time(local))
+    if (!looks_like_stock_clock(label, shown.c_str()) || shown == format_time(local))
       continue;
     MonoObject *target = clock_target();
     LOG_INFO("[CLOCK] stock time '%s' on screen: label=%p target=%p "
@@ -2171,7 +2258,7 @@ void Tick() {
   }
   /* The same for the text, thirty times a second: at the turn of the minute
      React writes Sony's time, and not always by the setter the hook is on. */
-  if (probe && s_native_customized && (AniketosTheme::CustomizationOn() && g_settings.shell_clock_enabled) &&
+  if (probe && s_native_customized && custom_clock_drawn_here() &&
       !s_last_rendered.empty() && s_native_opacity > kShownOpacity) {
     const std::string shown = raw_text(target);
     if (shown != s_last_rendered) {
@@ -2234,7 +2321,7 @@ void Tick() {
      pending for good (IsReadyToRenderInternal stayed false), and the time was
      never painted again once Home came back. Everything is brought up to date
      the moment the clock is shown again. */
-  if (!visible && (AniketosTheme::CustomizationOn() && g_settings.shell_clock_enabled)) {
+  if (!visible && custom_clock_drawn_here()) {
     if (visibility_changed)
       publish_date_overlay(now, true, s_last_rendered);
     s_force_refresh = true;
@@ -2256,7 +2343,7 @@ void Tick() {
   const bool colour_only = animation_frame && !s_force_refresh &&
                            now == s_last_second && !settings_changed &&
                            !visibility_changed && !opacity_changed &&
-                           (AniketosTheme::CustomizationOn() && g_settings.shell_clock_enabled) &&
+                           custom_clock_drawn_here() &&
                            s_native_customized;
   s_force_refresh = false;
   s_settings_signature = signature;
@@ -2265,10 +2352,12 @@ void Tick() {
   if (animation_frame)
     s_last_animation_frame_ms = frame_ms;
 
-  if (!(AniketosTheme::CustomizationOn() && g_settings.shell_clock_enabled)) {
+  if (!custom_clock_drawn_here()) {
     publish_date_overlay(now, false, {});
     restore_all_native_labels();
-    if (s_last_rendered != s_last_stock_time || settings_changed) {
+    /* (React's own text, when React draws the clock, is left alone) */
+    if (!s_native_clock &&
+        (s_last_rendered != s_last_stock_time || settings_changed)) {
       if (MonoString *stock = ui_string(s_last_stock_time)) {
         if (s_native_label_set_text_orig)
           s_native_label_set_text_orig(target, stock);
@@ -2673,5 +2762,87 @@ bool GetDateOverlayState(DateOverlayState *state) {
 }
 
 void RequestRefresh() { s_force_refresh = true; }
+
+void SetNativeClock(bool active) {
+  if (s_native_clock == active)
+    return;
+  s_native_clock = active;
+  s_force_refresh = true; /* gives back what was dressed, hides the date */
+  LOG_INFO("[CLOCK] the custom clock is drawn by %s",
+           active ? "Home's React (script)" : "the label hooks");
+}
+
+namespace {
+std::string json_color(int r, int g, int b) {
+  char text[16];
+  std::snprintf(text, sizeof(text), "\"#%02x%02x%02x\"", std::clamp(r, 0, 255),
+                std::clamp(g, 0, 255), std::clamp(b, 0, 255));
+  return text;
+}
+
+/* The names of a month or weekday style, in the menu's language, as a JSON
+   array; null for a style without names (numbers) or a language without a
+   list. */
+std::string json_names(const char *group, int count, int style) {
+  if (style == 0)
+    return "null";
+  std::string out = "[";
+  for (int index = 0; index < count; ++index) {
+    const std::string name =
+        translated_indexed(group, index, style == 1 ? "short" : "long");
+    if (name.empty())
+      return "null";
+    out += (index ? "," : "") + HomeJs::JsString(name);
+  }
+  return out + "]";
+}
+} // namespace
+
+std::string ScriptConfig() {
+  const bool on = AniketosTheme::CustomizationOn() &&
+                  g_settings.shell_clock_enabled;
+  std::string out = std::string("{\"on\":") + (on ? "true" : "false");
+  out += ",\"seconds\":";
+  out += g_settings.shell_clock_show_seconds ? "true" : "false";
+  out += ",\"hour\":" +
+         std::to_string(std::clamp(g_settings.shell_clock_hour_format, 0, 2));
+  out += ",\"am\":" + HomeJs::JsString(toolbox_i18n::tr("clock.am"));
+  out += ",\"pm\":" + HomeJs::JsString(toolbox_i18n::tr("clock.pm"));
+  out += ",\"date\":";
+  out += g_settings.shell_clock_show_date ? "true" : "false";
+  out += ",\"order\":" + std::to_string(effective_date_order());
+  out += ",\"sep\":" + HomeJs::JsString(date_separator());
+  out += ",\"year\":";
+  out += g_settings.shell_clock_show_year ? "true" : "false";
+  out += ",\"months\":" +
+         json_names("month", 12,
+                    std::clamp(g_settings.shell_clock_month_style, 0, 2));
+  out += ",\"weekdays\":" +
+         json_names("weekday", 7,
+                    std::clamp(g_settings.shell_clock_weekday_style, 0, 2));
+  out += ",\"tc\":" + json_color(g_settings.shell_clock_time_r,
+                                  g_settings.shell_clock_time_g,
+                                  g_settings.shell_clock_time_b);
+  /* 0 keeps Sony's size: the setting as it comes is no size anyone chose */
+  static const int default_time_size =
+      onion::Settings{}.shell_clock_time_font_size;
+  out += ",\"ts\":" +
+         std::to_string(g_settings.shell_clock_time_font_size ==
+                                default_time_size
+                            ? 0
+                            : std::clamp(g_settings.shell_clock_time_font_size,
+                                         8, 96));
+  out += ",\"dc\":" + json_color(g_settings.shell_clock_date_r,
+                                  g_settings.shell_clock_date_g,
+                                  g_settings.shell_clock_date_b);
+  out += ",\"ds\":" +
+         std::to_string(std::clamp(g_settings.shell_clock_date_font_size, 8, 96));
+  /* the gap between the digits and the date, as the overlay had it */
+  out += ",\"gap\":" +
+         std::to_string(std::max(0, 6 + std::clamp(
+                                         g_settings.shell_clock_date_spacing,
+                                         -80, 160)));
+  return out + "}";
+}
 
 } // namespace ShellClock

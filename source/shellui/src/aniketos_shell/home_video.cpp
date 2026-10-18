@@ -1084,17 +1084,15 @@ void tick_image(bool video_shown) {
 
 /* ---- effects over the video or picture --------------------------------
  * Full-screen layers right above the video or picture and under the rest of
- * Home (the particles, then Home's React tree): blur, a PUI
- * BackgroundBlurEffect on a clear panel, which blurs whatever lies beneath
- * it; dimming and haze, black panels (the panels are counted as ours, or the
- * system-panel theme would paint them its colour); a vignette and shading at
- * the top and bottom, embedded black gradients stretched over the screen.
- * Each follows its Shell Menu slider live, from 0 (no layer at all) to 100. */
-enum Effect { kBlur, kDim, kHaze, kVignette, kEdges, kEffectCount };
-constexpr const char *kEffectNames[kEffectCount] = {"blur", "dim", "haze",
-                                                    "vignette", "edges"};
+ * Home (the particles, then Home's React tree): dimming and haze, black
+ * panels (the panels are counted as ours, or the system-panel theme would
+ * paint them its colour); a vignette and shading at the top and bottom,
+ * embedded black gradients stretched over the screen. Each follows its
+ * Shell Menu slider live, from 0 (no layer at all) to 100. */
+enum Effect { kDim, kHaze, kVignette, kEdges, kEffectCount };
+constexpr const char *kEffectNames[kEffectCount] = {"dim", "haze", "vignette",
+                                                    "edges"};
 /* What each gets at 100. */
-constexpr float kBlurRadius = 40.0f;
 constexpr float kDimOpacity = 0.85f;
 constexpr float kHazeOpacity = 0.5f;
 
@@ -1114,7 +1112,6 @@ EffectLayer s_effect_layers[kEffectCount];
 int effect_strength(int effect) {
   int strength = 0;
   switch (effect) {
-  case kBlur: strength = g_settings.home_bg_blur; break;
   case kDim: strength = g_settings.home_bg_dim; break;
   case kHaze: strength = g_settings.home_bg_haze; break;
   case kVignette: strength = g_settings.home_bg_vignette; break;
@@ -1128,14 +1125,6 @@ void drop_effect(int effect) {
   EffectLayer &layer = s_effect_layers[effect];
   MonoObject *widget = target(layer.widget);
   if (widget && !ShellClock::IsWidgetDisposed(widget)) {
-    if (effect == kBlur) {
-      /* the blur holds offscreen textures; they go with it */
-      MonoObject *blur = object_property(widget, "get_PostEffect");
-      void *none[1] = {nullptr};
-      call(widget, "set_PostEffect", 1, none);
-      if (blur)
-        call(blur, "Dispose", 0);
-    }
     call(widget, "RemoveFromParent", 0);
     call(widget, "Dispose", 0);
   }
@@ -1193,29 +1182,15 @@ MonoObject *build_effect(MonoObject *root, int effect) {
   }
 
   AniketosUI::Pui::Adopt(widget);
-  UIColor color{0.0f, 0.0f, 0.0f, effect == kBlur ? 0.0f : 1.0f, 0};
+  UIColor color{0.0f, 0.0f, 0.0f, 1.0f, 0};
   void *color_arguments[1] = {&color};
   if (!call(widget, "set_BackgroundColor", 1, color_arguments))
     return nullptr;
-  if (effect == kBlur) {
-    MonoObject *blur = make(mono_class_from_name(
-        pui, "Sce.PlayStation.PUI.UI3", "BackgroundBlurEffect"));
-    void *blur_arguments[1] = {blur};
-    if (!blur || !call(widget, "set_PostEffect", 1, blur_arguments))
-      return nullptr;
-  }
   return widget;
 }
 
 void apply_effect(MonoObject *widget, int effect, int strength) {
   const float amount = strength / 100.0f;
-  if (effect == kBlur) {
-    float radius = amount * kBlurRadius;
-    void *radius_arguments[1] = {&radius};
-    call(object_property(widget, "get_PostEffect"), "set_Radius", 1,
-         radius_arguments);
-    return;
-  }
   float opacity = amount * (effect == kDim    ? kDimOpacity
                             : effect == kHaze ? kHazeOpacity
                                               : 1.0f);

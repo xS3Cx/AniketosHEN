@@ -236,7 +236,6 @@ int &int_target(OptionId id) {
     return g_settings.shell_tiles_outline_animation_speed;
   case OptionId::HomeParticlesCount: return g_settings.home_particles_count;
   case OptionId::HomeVideoVolume: return g_settings.home_video_volume;
-  case OptionId::HomeBackgroundBlur: return g_settings.home_bg_blur;
   case OptionId::HomeBackgroundDim: return g_settings.home_bg_dim;
   case OptionId::HomeBackgroundHaze: return g_settings.home_bg_haze;
   case OptionId::HomeBackgroundVignette: return g_settings.home_bg_vignette;
@@ -278,9 +277,8 @@ int &int_target(OptionId id) {
 int selector_index_for(OptionId id) {
   switch (id) {
   case OptionId::MenuThemeSelector: {
-    constexpr int themes[] = {0, 1, 2, 4, 5};
-    for (int i = 0; i < static_cast<int>(std::size(themes)); ++i)
-      if (themes[i] == g_settings.vsh_menu_theme)
+    for (int i = 0; i < kThemeChoiceCount; ++i)
+      if (kThemeChoices[i] == g_settings.vsh_menu_theme)
         return i;
     return 0;
   }

@@ -597,7 +597,6 @@
     "vsh.home_image.enable": "Use a picture as background",
     "vsh.home_image.file": "Picture",
     "vsh.home_image.folder": "Picture folder",
-    "vsh.home_bg.blur": "Background blur %",
     "vsh.home_bg.dim": "Background dimming %",
     "vsh.home_bg.haze": "Background haze %",
     "vsh.home_bg.vignette": "Vignette %",

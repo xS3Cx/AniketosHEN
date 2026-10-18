@@ -62,6 +62,8 @@ struct NativeRow {
   float labelled = -1e30f; /* the number its title shows now */
 };
 std::vector<NativeRow> s_native_rows;
+/* where the menu shown last asked to go */
+NativeMenuPlacement s_native_placement;
 int s_native_selected = -1;
 bool s_native_was_open = false;
 
@@ -892,7 +894,7 @@ void CloseNativeMenu() {
 
 bool OpenNativeMenu(const std::vector<NativeMenuItem> &items,
                     const std::string &header, int focus, std::string *failure,
-                    MonoObject *scene) {
+                    MonoObject *scene, const NativeMenuPlacement &placement) {
   Failure result{failure};
   if (!PopupMenuAvailable())
     return result.fail("popup menu selection hook not installed");
@@ -903,7 +905,8 @@ bool OpenNativeMenu(const std::vector<NativeMenuItem> &items,
   if (!scene)
     return result.fail("no scene to open the menu on");
   CloseNativeMenu();
-  /* The anchor: a point at the right edge, half way down the scene. */
+  s_native_placement = placement;
+  /* The anchor: a point near the right (or left) edge, half way down. */
   MonoObject *menu = nullptr;
   {
     MonoMethod *root_getter =
@@ -917,7 +920,8 @@ bool OpenNativeMenu(const std::vector<NativeMenuItem> &items,
                            : nullptr;
     MonoClass *menu_class = find_class(kPuiImage, kUi3, "PopupMenu");
     MonoMethod *with_target =
-        menu_class ? find_method_taking(menu_class, ".ctor", 1, "Widget")
+        menu_class ? find_method_taking(menu_class, ".ctor", 1,
+                                        "Sce.PlayStation.PUI.UI3.Widget")
                    : nullptr;
     if (anchor && with_target) {
       float width = 1920.0f, height = 1080.0f, one = 1.0f;
@@ -931,7 +935,8 @@ bool OpenNativeMenu(const std::vector<NativeMenuItem> &items,
           *(axis ? &height : &width) =
               *static_cast<float *>(mono_object_unbox(boxed));
       }
-      float x = width - 96.0f, y = height * 0.5f;
+      float x = placement.left ? placement.margin : width - placement.margin;
+      float y = height * 0.5f;
       void *arguments[1] = {&x};
       call(anchor, "set_X", arguments, 1);
       arguments[0] = &y;
@@ -1094,9 +1099,9 @@ bool OpenNativeMenu(const std::vector<NativeMenuItem> &items,
     void *arguments[1] = {&dismiss};
     call(menu, "set_DismissOnSelect", arguments, 1);
   }
-  /* To the left of the anchor, centred on it. */
+  /* Beside the anchor (to its left, or to its right), centred on it. */
   if (anchored) {
-    int32_t left_of = 1; /* RelativePosition.Left */
+    int32_t left_of = placement.left ? 3 : 1; /* RelativePosition.Right/Left */
     int32_t middle = 2;  /* VerticalAlignment.Center */
     void *arguments[1] = {&left_of};
     if (find_method(mono_object_get_class(menu), "set_RelativePosition", 1))
@@ -1104,9 +1109,19 @@ bool OpenNativeMenu(const std::vector<NativeMenuItem> &items,
     arguments[0] = &middle;
     if (find_method(mono_object_get_class(menu), "set_VerticalAlignment", 1))
       call(menu, "set_VerticalAlignment", arguments, 1);
+    /* at a screen edge it is pushed back on screen, never flipped to the
+       anchor's other side */
+    int32_t fit = 1; /* CollisionBehavior.Fit */
+    arguments[0] = &fit;
+    for (const char *setter :
+         {"set_HorizontalCollisionBehavior", "set_VerticalCollisionBehavior"})
+      if (find_method(mono_object_get_class(menu), setter, 1))
+        call(menu, setter, arguments, 1);
   }
+  LOG_INFO("[SYSDIALOG] native menu anchored=%d left=%d rows=%zu",
+           anchored ? 1 : 0, placement.left ? 1 : 0, items.size());
   if (find_method(mono_object_get_class(menu), "set_MinWidth", 1)) {
-    float width = 720.0f; /* one width for every page */
+    float width = placement.min_width; /* one width for every page */
     void *arguments[1] = {&width};
     call(menu, "set_MinWidth", arguments, 1);
   }
@@ -1192,7 +1207,10 @@ void maintain_native_menu() {
       property_float(root, "get_Width", &root_width) &&
       property_float(root, "get_Height", &root_height) && frame_width > 8 &&
       root_width > frame_width) {
-    float x = std::round(root_width - frame_width - 96.0f);
+    float x = std::round(s_native_placement.left
+                             ? s_native_placement.margin
+                             : root_width - frame_width -
+                                   s_native_placement.margin);
     float y = std::round(std::max(48.0f, (root_height - frame_height) * 0.5f));
     float now_x = 0, now_y = 0;
     property_float(frame, "get_X", &now_x);
@@ -1205,7 +1223,8 @@ void maintain_native_menu() {
                now_x, now_y, frame_width, frame_height, x, y);
     }
     /* Only a menu PUI placed by itself is moved; one hung off our anchor is
-       where PUI put it from the first frame. */
+       kept beside it by PUI, through every layout change (scrolling, a page
+       of another height). */
     if (!s_native_anchor) {
       if (std::fabs(now_x - x) > 0.5f)
         set_property(frame, "set_X", &x);

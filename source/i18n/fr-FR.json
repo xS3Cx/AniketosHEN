@@ -597,7 +597,6 @@
     "vsh.home_image.enable": "Utiliser une image comme fond",
     "vsh.home_image.file": "Image",
     "vsh.home_image.folder": "Dossier des images",
-    "vsh.home_bg.blur": "Flou de l'arrière-plan %",
     "vsh.home_bg.dim": "Assombrir l'arrière-plan %",
     "vsh.home_bg.haze": "Voile sur l'arrière-plan %",
     "vsh.home_bg.vignette": "Vignette %",

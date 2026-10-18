@@ -45,6 +45,14 @@ void VisitSceneRoots(void (*visit)(MonoObject *root, void *context),
 void RemoveStaleHomeChildren(MonoObject *root);
 std::string DebugPropText(MonoObject *object, const char *name);
 void RequestRefresh();
+/* Home's script draws the custom clock itself (home_inject_js.inc, reported
+ * through Home's console): the label hooks then only follow the clock. */
+void SetNativeClock(bool active);
+/* The clock's settings for that script, as JSON: on, seconds, hour format,
+ * the AM/PM words, the date's parts and the menu language's month and
+ * weekday names, colours and sizes. Plain ASCII (other text is written as
+ * \u escapes): the script executor cuts a script with other text short. */
+std::string ScriptConfig();
 /** One-line description of the clock state, for the profiler log. */
 void DebugSnapshot(char *out, size_t out_size);
 void DebugDumpProperties(const char *tag);

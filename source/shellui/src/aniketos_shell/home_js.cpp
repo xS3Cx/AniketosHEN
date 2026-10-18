@@ -8,6 +8,7 @@
 #include "aniketos_shell/home_menu.hpp"
 #include "aniketos_shell/home_tabs.hpp"
 #include "aniketos_shell/trophy_tools.hpp"
+#include "shell_clock.hpp"
 #include "toolbox_i18n.hpp"
 
 #include <onion/detour.h>
@@ -52,6 +53,13 @@ MonoClass *s_executor_class = nullptr;
 bool s_disabled = false;
 /* Unconfirmed starts before this one (the count kept in kUnconfirmed). */
 int s_unconfirmed_starts = 0;
+/* Home with the script in it, not yet reported running. A Home that falls
+   over starts again within a second, inside the same ShellUI, so the markers
+   above never see it: after kHomeRestartsAllowed such restarts the script
+   stays out until ShellUI starts again. */
+bool s_home_unconfirmed = false;
+int s_home_restarts = 0;
+constexpr int kHomeRestartsAllowed = 2;
 
 std::string text_of(MonoObject *managed) {
   if (!managed)
@@ -96,6 +104,8 @@ void console_log_hook(MonoString *message, int level, void *a, void *b) {
     if (text.compare(0, 14, "ANIKETOS alive") == 0) {
       unlink(kUnconfirmed); /* Home survived with the script in it */
       s_unconfirmed_starts = 0;
+      s_home_unconfirmed = false;
+      s_home_restarts = 0;
     }
     /* the top-bar icon the script added was pressed */
     if (text.compare(0, 13, "ANIKETOS:menu") == 0)
@@ -103,6 +113,10 @@ void console_log_hook(MonoString *message, int level, void *a, void *b) {
     /* a choice in the Trophies app's options menu */
     if (text.compare(0, 16, "ANIKETOS:trophy|") == 0)
       TrophyTools::HandleScriptMessage(text.substr(16));
+    /* the script draws the custom clock in Sony's clock: the label hooks
+       only follow it from now on */
+    if (text.compare(0, 14, "ANIKETOS:clock") == 0)
+      ShellClock::SetNativeClock(true);
   }
   if (s_console_log_original)
     s_console_log_original(message, level, a, b);
@@ -170,8 +184,18 @@ void run_script_hook(MonoObject *executor, MonoObject *bundle) {
   const bool control_center =
       app.find("rnps-control-center") != std::string::npos &&
       (AniketosTheme::CustomizationOn() ? g_settings.home_presence_dot : 0) != 0;
-  if (home)
+  if (home) {
     shellui_note_home_start();
+    /* the label hooks draw the clock until this Home's script says it does */
+    ShellClock::SetNativeClock(false);
+    if (s_home_unconfirmed && ++s_home_restarts >= kHomeRestartsAllowed &&
+        !s_disabled) {
+      s_disabled = true;
+      LOG_WARN("[HOMEJS] Home started %d times over before it was running "
+               "with the script; it stays out until ShellUI starts again",
+               s_home_restarts);
+    }
+  }
   /* the Emulators tab, unless switched off, and the bookmark tab while it
      holds a game */
   const bool emulators = home && g_settings.home_tab_emulators;
@@ -196,6 +220,9 @@ void run_script_hook(MonoObject *executor, MonoObject *bundle) {
                             &games_glyph);
     HomeTabs::ScriptCaption(HomeTabs::StockTab::Media, &media_name,
                             &media_glyph);
+    /* the bookmark has no identity but the user's name: shown as typed, with
+       no glyph of ours (one the user typed shows as typed) */
+    const std::string bookmark_name = HomeBookmark::Name();
     const std::string config =
         std::string("globalThis.__aniketosConfig = {space: ") +
         (home ? "'emulators'" : "''") +
@@ -208,12 +235,12 @@ void run_script_hook(MonoObject *executor, MonoObject *bundle) {
         ", icon: " + JsString(home ? AniketosIconPath() : "") +
         /* the presence dot to show on avatars while not online */
         ", presence: " + JsString(presence_name()) +
+        /* the custom clock's settings, drawn by the script in Sony's own
+           clock (asked for again while it is up: aniketos.clock) */
+        ", clock: " + ShellClock::ScriptConfig() +
         /* the bookmark tab: its caption (empty for none) and its name */
-        ", bookmark: " +
-        JsString(bookmark ? HomeTabs::Caption(HomeBookmark::kGlyph,
-                                              HomeBookmark::Name())
-                          : std::string()) +
-        ", bookmarkLabel: " + JsString(HomeBookmark::Name()) +
+        ", bookmark: " + JsString(bookmark ? bookmark_name : std::string()) +
+        ", bookmarkLabel: " + JsString(bookmark_name) +
         ", bookmarkLimit: " + std::to_string(HomeBookmark::kContentLimit) +
         ", bookmarkWatch: " + (home && HomeBookmark::Enabled() ? "true" : "false") +
         ", stockCaptions: {game: [" + JsString(games_name) + ", " +
@@ -227,6 +254,8 @@ void run_script_hook(MonoObject *executor, MonoObject *bundle) {
       unlink(kUnconfirmed); /* nothing went in, so nothing to confirm */
     LOG_INFO("[HOMEJS] injected into '%s' ok=%d", app.c_str(), ok ? 1 : 0);
     injected = ok;
+    if (home && ok)
+      s_home_unconfirmed = true;
   }
   /* Before the bundle runs and asks for its rows: the emulators, and the
      games moved to the bookmark, leave the Games row only for a tab of

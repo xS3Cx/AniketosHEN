@@ -37,7 +37,7 @@ const char *const kSonyTwelveHour[] = {
 int test_every_sony_twelve_hour_form() {
   for (const char *text : kSonyTwelveHour) {
     ClockText::Time time;
-    if (!ClockText::Parse(text, &time)) {
+    if (!ClockText::Parse(text, &time, ClockText::Separators::ColonOrDot)) {
       fprintf(stderr, "    not taken for a clock: '%s'\n", text);
       return 1;
     }
@@ -53,9 +53,14 @@ int test_twenty_four_hour_forms() {
   TEST_ASSERT_EQ_INT(22, time.hour);
   TEST_ASSERT_EQ_INT(18, time.minute);
   TEST_ASSERT_TRUE(!time.twelve_hour);
-  /* Finnish */
-  TEST_ASSERT_TRUE(ClockText::Parse("22.18", &time));
+  /* Finnish, only where the dot is asked for */
+  TEST_ASSERT_TRUE(
+      ClockText::Parse("22.18", &time, ClockText::Separators::ColonOrDot));
+  TEST_ASSERT_EQ_INT(22, time.hour);
+  TEST_ASSERT_EQ_INT(18, time.minute);
   TEST_ASSERT_TRUE(!time.twelve_hour);
+  TEST_ASSERT_TRUE(!ClockText::Parse("22.18"));
+  TEST_ASSERT_TRUE(!ClockText::Parse("9.05 PM"));
   /* a direction mark is no marker */
   TEST_ASSERT_TRUE(ClockText::Parse("\xe2\x80\xab" "22:18", &time));
   TEST_ASSERT_TRUE(!time.twelve_hour);
@@ -82,12 +87,95 @@ int test_other_labels_are_not_the_clock() {
       "9.05 p. m.",       "123",           "TOO LONG PREFIX 9:05",
   };
   for (const char *text : others) {
-    if (ClockText::Parse(text)) {
+    if (ClockText::Parse(text) ||
+        ClockText::Parse(text, nullptr, ClockText::Separators::ColonOrDot)) {
       fprintf(stderr, "    taken for a clock: '%s'\n", text);
       return 1;
     }
   }
   TEST_ASSERT_TRUE(!ClockText::Parse(nullptr));
+  return 0;
+}
+
+/* The values of a game's Information screen (system software, SDK,
+   platform) and other dotted numbers are no clock unless the dot is asked
+   for; the colon forms need no asking. */
+int test_versions_are_not_the_clock() {
+  const char *const values[] = {"6.00", "10.40", "4.50", "1.00", "13.42",
+                                "11.40", "01.05", "0.00", "PS5", "PS4"};
+  for (const char *text : values) {
+    if (ClockText::Parse(text)) {
+      fprintf(stderr, "    taken for a clock: '%s'\n", text);
+      return 1;
+    }
+  }
+  ClockText::Time time;
+  TEST_ASSERT_TRUE(ClockText::Parse("10:18 p. m.", &time) && time.twelve_hour);
+  TEST_ASSERT_TRUE(ClockText::Parse("du.10:18", &time) && time.twelve_hour);
+  TEST_ASSERT_TRUE(ClockText::Parse("PM10:18", &time) && time.twelve_hour);
+  TEST_ASSERT_TRUE(ClockText::Parse("22:18", &time) && !time.twelve_hour);
+  return 0;
+}
+
+/* With the dot asked for, only Finnish's own forms: the bare time, " AM",
+   " PM". */
+int test_dot_takes_only_finnish_forms() {
+  ClockText::Time time;
+  TEST_ASSERT_TRUE(
+      ClockText::Parse("22.18", &time, ClockText::Separators::ColonOrDot));
+  TEST_ASSERT_TRUE(!time.twelve_hour);
+  TEST_ASSERT_TRUE(
+      ClockText::Parse("9.05 PM", &time, ClockText::Separators::ColonOrDot));
+  TEST_ASSERT_TRUE(time.twelve_hour);
+  TEST_ASSERT_TRUE(ClockText::Parse("9.05\xc2\xa0" "AM", &time,
+                                    ClockText::Separators::ColonOrDot));
+  const char *const others[] = {"1.25 GB",    "3.50 MB",  "12.34 GB",
+                                "9.05 a. m.", "9.05PM",   "9.05 PMx",
+                                "9.05 AM.",   "AM 9.05",  "AM9.05",
+                                "9.05 Ver",   "10.40 (PS5)"};
+  for (const char *text : others) {
+    if (ClockText::Parse(text, nullptr, ClockText::Separators::ColonOrDot)) {
+      fprintf(stderr, "    taken for a clock: '%s'\n", text);
+      return 1;
+    }
+  }
+  return 0;
+}
+
+/* Sony's clock label with the seconds our script puts in it: taken only when
+   asked for (the label is known to be the clock), with the time's own
+   separator and a marker as before. */
+int test_clock_label_takes_seconds() {
+  const auto label = ClockText::Separators::ClockLabel;
+  ClockText::Time time;
+  TEST_ASSERT_TRUE(ClockText::Parse("22:18:05", &time, label));
+  TEST_ASSERT_EQ_INT(22, time.hour);
+  TEST_ASSERT_EQ_INT(18, time.minute);
+  TEST_ASSERT_TRUE(!time.twelve_hour);
+  TEST_ASSERT_TRUE(ClockText::Parse("9:05:07 PM", &time, label));
+  TEST_ASSERT_TRUE(time.twelve_hour);
+  TEST_ASSERT_TRUE(ClockText::Parse("PM9:05:59", &time, label));
+  TEST_ASSERT_TRUE(time.twelve_hour);
+  TEST_ASSERT_TRUE(ClockText::Parse("9.05.07 PM", &time, label));
+  TEST_ASSERT_TRUE(ClockText::Parse("\xe2\x80\xab" "9:05:07 \xd9\x85", &time,
+                                    label));
+  TEST_ASSERT_TRUE(time.twelve_hour);
+  /* the forms without seconds stay the clock */
+  TEST_ASSERT_TRUE(ClockText::Parse("22:18", &time, label));
+  TEST_ASSERT_TRUE(ClockText::Parse("10:18 p. m.", &time, label));
+  const char *const others[] = {"22:18:60", "22:18:5",    "22:18.05",
+                                "9.05:07 PM", "22:18:05:01", "22:18:05 9",
+                                "Games",    "1.25 GB"};
+  for (const char *text : others) {
+    if (ClockText::Parse(text, nullptr, label)) {
+      fprintf(stderr, "    taken for a clock: '%s'\n", text);
+      return 1;
+    }
+  }
+  /* elsewhere seconds are no clock */
+  TEST_ASSERT_TRUE(!ClockText::Parse("22:18:05"));
+  TEST_ASSERT_TRUE(
+      !ClockText::Parse("22:18:05", nullptr, ClockText::Separators::ColonOrDot));
   return 0;
 }
 
@@ -102,5 +190,11 @@ extern "C" int test_clock_text_suite(void) {
   failures += onion_test_run("clock_text.leading_zero", test_leading_zero);
   failures += onion_test_run("clock_text.other_labels",
                              test_other_labels_are_not_the_clock);
+  failures += onion_test_run("clock_text.versions",
+                             test_versions_are_not_the_clock);
+  failures += onion_test_run("clock_text.finnish_dot",
+                             test_dot_takes_only_finnish_forms);
+  failures += onion_test_run("clock_text.clock_label_seconds",
+                             test_clock_label_takes_seconds);
   return failures;
 }

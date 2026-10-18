@@ -1,7 +1,7 @@
 /* JavaScript evaluated in Home's runtime right before its bundle (see
  * home_js.cpp). `__aniketosConfig` is defined by the native side just ahead
- * of it: {space, emulators, caption, label, limit, icon, presence, and the
- * bookmark's}; space is empty in an app other than Home, where only the
+ * of it: {space, emulators, caption, label, limit, icon, presence, clock, and
+ * the bookmark's}; space is empty in an app other than Home, where only the
  * presence dot is touched, and emulators is false when the Emulators tab is
  * switched off.
  *
@@ -379,12 +379,265 @@ R"JS((function () {
     } catch (e) {}
   }
 
+  /* The custom clock, drawn by Home's own clock. Sony's clock (the module
+     exporting `Clock`) is a View holding one Text whose text is the time,
+     from a timer that sets it again only when the minute changes. Ours draws
+     that same element, with the same View, Text, style and timing, and with
+     the user's settings: seconds, a 12- or 24-hour form, the colour and size,
+     and the date as a second Text inside the same View. Being part of the
+     clock, the date is laid out, moved, faded and hidden with it, and the
+     clock's width comes from React's layout of the text it really shows.
+     The system's time format is Sony's own (the time cache's toTime). The
+     settings are read through Home's registry module (aniketos.clock), which
+     the native side answers. */
+  var CK = { cfg: cfg.clock || null, rev: 0, raw: '', cache: null,
+             component: null, asking: false, told: false, failed: false };
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+  function clockTime(now, stock) {
+    var c = CK.cfg, h = now.getHours(), mm = pad(now.getMinutes());
+    var ss = pad(now.getSeconds());
+    if (c.hour === 1)
+      return pad(h) + ':' + mm + (c.seconds ? ':' + ss : '');
+    if (c.hour === 2)
+      return ((h % 12) || 12) + ':' + mm + (c.seconds ? ':' + ss : '') +
+             ' ' + (h < 12 ? c.am : c.pm);
+    var text = stock;
+    try {
+      if (CK.cache) text = CK.cache.toTime(now);
+    } catch (e) {}
+    if (typeof text !== 'string') return stock;
+    /* the seconds after the minutes, with the language's separator */
+    return c.seconds
+               ? text.replace(/(\d)([:.])(\d\d)(?!\d)/, '$1$2$3$2' + ss)
+               : text;
+  }
+  function clockDate(now) {
+    var c = CK.cfg, parts = [];
+    var day = pad(now.getDate());
+    var month = c.months ? c.months[now.getMonth()]
+                         : pad(now.getMonth() + 1);
+    var year = c.year ? '' + now.getFullYear() : '';
+    if (c.order === 2) parts = [month, day, year];
+    else if (c.order === 3) parts = [year, month, day];
+    else parts = [day, month, year];
+    var text = '';
+    for (var i = 0; i < parts.length; i++)
+      if (parts[i]) text += (text ? c.sep : '') + parts[i];
+    if (c.weekdays) text = c.weekdays[now.getDay()] + ', ' + text;
+    return text;
+  }
+  /* Text takes only the sizes of React Native's FontSizePS table (any other
+     is a fatal error); the size asked for is taken to the nearest of them.
+     0 when there is no table: the Text keeps the size it has. */
+  function fontSize(px) {
+    if (!CK.sizes) {
+      CK.sizes = [];
+      var table = A.rn && A.rn.FontSizePS;
+      for (var name in table)
+        if (typeof table[name] === 'number' && table[name] > 0 &&
+            name.indexOf('5X') < 0)
+          CK.sizes.push(table[name]);
+      log('clock: font sizes ' + JSON.stringify(CK.sizes));
+    }
+    var best = 0;
+    for (var i = 0; i < CK.sizes.length; i++)
+      if (!best || Math.abs(CK.sizes[i] - px) < Math.abs(best - px))
+        best = CK.sizes[i];
+    return best;
+  }
+  /* Draws Sony's clock instead of ours if ours fails while React draws it */
+  function makeBoundary(React) {
+    function Boundary(props) {
+      React.Component.call(this, props);
+      this.state = { failed: false };
+    }
+    Boundary.prototype = Object.create(React.Component.prototype);
+    Boundary.prototype.constructor = Boundary;
+    Boundary.getDerivedStateFromError = function () { return { failed: true }; };
+    Boundary.prototype.componentDidCatch = function (e) { clockFailed(e); };
+    Boundary.prototype.render = function () {
+      return this.state.failed ? this.props.fallback : this.props.children;
+    };
+    return Boundary;
+  }
+  /* Sony's clock element with our text in its Text and the date under it */
+  function dressClock(element) {
+    var React = A.React, c = CK.cfg;
+    var props = element && element.props;
+    var text = props && props.children;
+    if (!React || !text || !text.props || typeof props.testID !== 'string' ||
+        text.props.testID !== props.testID + '-text' ||
+        typeof text.props.children !== 'string')
+      return element;
+    if (!CK.told) {
+      CK.told = true;
+      log(':clock');
+    }
+    if (!c || !c.on) return element;
+    var now = new Date(), key;
+    var own = {};
+    for (key in text.props) own[key] = text.props[key];
+    var look = { color: c.tc };
+    var size = c.ts > 0 ? fontSize(c.ts) : 0;
+    if (size) look.fontSize = size;
+    own.style = [text.props.style, look];
+    own.children = clockTime(now, text.props.children);
+    own.key = 'time';
+    var children = [React.createElement(text.type, own)];
+    if (c.date) {
+      var date = { position: 'absolute', top: '100%', left: -300, right: -300,
+                   marginTop: c.gap, textAlign: 'center', color: c.dc };
+      size = fontSize(c.ds);
+      if (size) date.fontSize = size;
+      children.push(React.createElement(text.type, {
+        key: 'date', testID: props.testID + '-date', numberOfLines: 1,
+        style: date, children: clockDate(now)
+      }));
+    }
+    var view = {};
+    for (key in props) view[key] = props[key];
+    view.children = children;
+    if (!CK.Boundary) CK.Boundary = makeBoundary(React);
+    return React.createElement(CK.Boundary, { fallback: element },
+                               React.createElement(element.type, view));
+  }
+  function clockKey() {
+    var c = CK.cfg, now = new Date();
+    if (!c || !c.on) return CK.rev;
+    return CK.rev + '|' + clockTime(now, '') + '|' +
+           (c.date ? clockDate(now) : '');
+  }
+  /* A failure of ours leaves Sony's clock as it is, for good */
+  function clockFailed(e) {
+    if (!CK.failed) log('clock: ' + e);
+    CK.failed = true;
+  }
+  function makeClock(inner) {
+    var Clock = function (props) {
+      var React = A.React;
+      var element = inner(props); /* Sony's hooks, then ours */
+      var shown = React.useState(null);
+      React.useEffect(function () {
+        var timer = null;
+        var step = function () {
+          if (CK.failed) return;
+          try {
+            shown[1](clockKey()); /* drawn again only when it changed */
+          } catch (e) { clockFailed(e); return; }
+          timer = setTimeout(step, 1000 - Date.now() % 1000);
+        };
+        timer = setTimeout(step, 1000 - Date.now() % 1000);
+        return function () { clearTimeout(timer); };
+      }, []);
+      if (CK.failed) return element;
+      try {
+        return dressClock(element);
+      } catch (e) { clockFailed(e); }
+      return element;
+    };
+    return A.React.memo(Clock);
+  }
+  function watchClock() {
+    setInterval(function () {
+      var nm = F.nm;
+      if (CK.asking || !nm || typeof nm.Get !== 'function') return;
+      CK.asking = true;
+      var asked;
+      try { asked = nm.Get({ keys: ['aniketos.clock'] }); }
+      catch (e) { CK.asking = false; return; }
+      Promise.resolve(asked).then(function (answer) {
+        CK.asking = false;
+        if (typeof answer !== 'string' || answer === CK.raw) return;
+        try {
+          var next = JSON.parse(answer);
+          if (next && typeof next === 'object') {
+            CK.raw = answer;
+            CK.cfg = next;
+            CK.rev++;
+          }
+        } catch (e) { log('clock: ' + e); }
+      }, function () { CK.asking = false; });
+    }, 2000);
+  }
+  /* The time cache (toTime) the clock formats the system's time with. */
+  function patchClockCache(o) {
+    if (!CK.cache && o && typeof o.toTime === 'function' &&
+        typeof o.onCacheUpdate === 'function' &&
+        typeof o.updateCache === 'function')
+      CK.cache = o;
+  }
+  /* The module's `Clock` is a getter that loads the clock when first asked
+     for; the module's exports are put behind an object whose `Clock` is ours,
+     everything else read through to the original. */
+  function patchClock(module, id) {
+    var exports = module && module.exports;
+    if (!SPACE || !CK.cfg || A.patched.clock || !exports ||
+        typeof exports !== 'object' || !A.React ||
+        typeof A.React.useState !== 'function')
+      return;
+    var d = Object.getOwnPropertyDescriptor(exports, 'Clock');
+    if (!d || !(d.get || d.value)) return;
+    var view = Object.create(exports);
+    Object.defineProperty(view, 'Clock', {
+      enumerable: true, configurable: true,
+      get: function () {
+        if (CK.component) return CK.component;
+        var stock = d.get ? d.get.call(exports) : d.value;
+        var inner = stock && typeof stock === 'object' &&
+                    typeof stock.type === 'function' && !stock.compare
+                        ? stock.type
+                        : stock;
+        if (typeof inner !== 'function') return stock;
+        CK.component = makeClock(inner);
+        return CK.component;
+      }
+    });
+    module.exports = view;
+    once('clock', id);
+    watchClock();
+  }
+
+  /* An error React Native reports (fatal ones restart the app) is written to
+     our log too, before React Native's own handler gets it. ErrorUtils comes
+     with the bundle, so this is tried as modules come in. */
+  function watchErrors() {
+    var utils = globalThis.ErrorUtils;
+    if (A.errorsWatched || !utils ||
+        typeof utils.setGlobalHandler !== 'function')
+      return;
+    A.errorsWatched = true;
+    var wrap = function (handler) {
+      if (typeof handler !== 'function' || handler.__aniketos) return handler;
+      var wrapped = function (error, fatal) {
+        try {
+          log((fatal ? 'fatal error: ' : 'error: ') +
+              (error && error.message ? error.message : String(error)) +
+              ' | ' + String(error && error.stack).slice(0, 240));
+        } catch (e) {}
+        return handler.apply(this, arguments);
+      };
+      wrapped.__aniketos = true;
+      return wrapped;
+    };
+    var set = utils.setGlobalHandler;
+    utils.setGlobalHandler = function (handler) {
+      return set.call(this, wrap(handler));
+    };
+    try {
+      if (typeof utils.getGlobalHandler === 'function')
+        set.call(utils, wrap(utils.getGlobalHandler()));
+    } catch (e) {}
+  }
+
   function patchModule(module, id) {
     try {
+      watchErrors();
       var exports = module && module.exports;
       findReact(exports);
       if (exports && exports.default) findReact(exports.default);
       findNative(exports);
+      if (exports) patchClockCache(exports.default);
+      patchClock(module, id);
       patchTitles(exports, id);
       patchHubViewer(exports, id);
       patchSpaceFocus(exports, id);

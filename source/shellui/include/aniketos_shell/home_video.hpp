@@ -13,9 +13,8 @@
  * lives here. Everything is found by name at run time.
  *
  * Driven by the Shell Menu settings home_video_enabled, home_video_path,
- * home_video_sound and home_video_volume; home_bg_blur, home_bg_dim,
- * home_bg_haze, home_bg_vignette and home_bg_edges lay effects over the video
- * or picture. Videos are the .mp4/.m4v files in Directory() and in
+ * home_video_sound and home_video_volume; home_bg_dim, home_bg_haze,
+ * home_bg_vignette and home_bg_edges lay effects over the video or picture. Videos are the .mp4/.m4v files in Directory() and in
  * <USB drive>/<distribution folder>/videos. A file named no_home_video in
  * the distribution's data folder keeps the feature off whatever is set. */
 namespace HomeVideo {

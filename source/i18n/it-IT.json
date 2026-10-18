@@ -597,7 +597,6 @@
     "vsh.home_image.enable": "Usa un'immagine come sfondo",
     "vsh.home_image.file": "Immagine",
     "vsh.home_image.folder": "Cartella delle immagini",
-    "vsh.home_bg.blur": "Sfocatura dello sfondo %",
     "vsh.home_bg.dim": "Oscuramento dello sfondo %",
     "vsh.home_bg.haze": "Foschia dello sfondo %",
     "vsh.home_bg.vignette": "Vignettatura %",

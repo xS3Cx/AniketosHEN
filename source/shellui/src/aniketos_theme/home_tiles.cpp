@@ -1,5 +1,6 @@
 /* Copyright (C) 2026 AniketosHEN — native HomeUI tile focus theming. */
 
+#include "aniketos_shell/home_bookmark.hpp"
 #include "aniketos_shell/home_tabs.hpp"
 #include "aniketos_theme/customization.hpp"
 #include <onion/distribution.h>
@@ -1338,7 +1339,11 @@ MonoString *DecorateSpaceSwitcherLabel(MonoObject *label, MonoString *text) {
       symbol = kMediaSymbol;
   }
   if (!symbol) {
-    const int tab = localized_space_tab(original);
+    int tab = localized_space_tab(original);
+    /* the bookmark's caption is the user's name as typed, which may be a
+       stock tab's word ("Games", "Gry", "Media"): it is not that tab */
+    if (tab >= 0 && original == HomeBookmark::Name())
+      tab = -1;
     if (tab == 0)
       symbol = kGamesSymbol;
     else if (tab == 1)

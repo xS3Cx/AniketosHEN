@@ -137,9 +137,8 @@ ONION_SHELL_SETTING_INT(home_video_volume, 100)
 ONION_SHELL_SETTING_BOOL(home_image_enabled, false)
 ONION_SHELL_SETTING_STRING(home_image_path, "")
 /* Layers over the video or picture, each 0 (none) to 100 (shellui:
- * aniketos_shell/home_video): blur, dimming, haze, vignette and shading of
- * the top and bottom. */
-ONION_SHELL_SETTING_INT(home_bg_blur, 0)
+ * aniketos_shell/home_video): dimming, haze, vignette and shading of the
+ * top and bottom. */
 ONION_SHELL_SETTING_INT(home_bg_dim, 0)
 ONION_SHELL_SETTING_INT(home_bg_haze, 0)
 ONION_SHELL_SETTING_INT(home_bg_vignette, 0)
@@ -156,8 +155,9 @@ ONION_SHELL_SETTING_INT(home_presence_dot, 0)
 ONION_SHELL_SETTING_STRING(home_tab_games_name, "")
 ONION_SHELL_SETTING_STRING(home_tab_media_name, "")
 ONION_SHELL_SETTING_BOOL(home_tab_emulators, true)
-/* The glyph in front of each tab's caption (Games, Media, Emulators, the
- * bookmark); a name of the user's that starts with a glyph has that one. */
+/* The glyph in front of the captions of Games, Media and Emulators; a name
+ * of the user's that starts with a glyph has that one. The bookmark shows its
+ * name as typed. */
 ONION_SHELL_SETTING_BOOL(home_tab_icons, true)
 /* A bookmark tab on Home after Emulators, named by the user and filled
  * from a game's Options menu (shellui: aniketos_shell/home_bookmark). */

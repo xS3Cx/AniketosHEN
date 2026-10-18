@@ -129,10 +129,19 @@ struct NativeMenuItem {
   std::vector<std::string> choices; /* Choice: a drop-down list */
   int chosen = 0;
 };
+/* Where the card goes: hung to the left of a point `margin` px from the
+ * right edge (the default), or to the right of one `margin` px from the left
+ * edge; vertically centred either way. `min_width` is the card's width. */
+struct NativeMenuPlacement {
+  bool left = false;
+  float margin = 96.0f;
+  float min_width = 720.0f;
+};
 /* `focus` is the row that has the focus when it opens. */
 bool OpenNativeMenu(const std::vector<NativeMenuItem> &items,
                     const std::string &header, int focus = 0,
-                    std::string *failure = nullptr, MonoObject *scene = nullptr);
+                    std::string *failure = nullptr, MonoObject *scene = nullptr,
+                    const NativeMenuPlacement &placement = {});
 enum class NativeMenuEvent { None, Selected, Closed };
 /* Selected: a row was pressed (a switch has already flipped). Closed: the
  * user dismissed the menu. Each is reported once. */

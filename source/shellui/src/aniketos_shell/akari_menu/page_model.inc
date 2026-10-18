@@ -187,16 +187,18 @@ const char *theme_display_name(int theme) {
   switch (theme) {
   case 2: return "Anomaly";
   case 5: return "Apparition";
+  case kThemeSweety: return "Sweety";
   default: return "Akari";
   }
 }
 
 // Persisted theme ids 1, 3 and 4 belonged to styles that were removed. They
 // stay reserved so an old config cannot silently turn into a different one.
-constexpr int kThemeChoiceCount = 3;
+constexpr int kThemeChoices[] = {0, 2, 5, kThemeSweety};
+constexpr int kThemeChoiceCount = static_cast<int>(std::size(kThemeChoices));
 
 int cycle_theme(int current, int direction) {
-  constexpr int themes[kThemeChoiceCount] = {0, 2, 5};
+  const int *themes = kThemeChoices;
   int index = 0;
   for (int i = 0; i < kThemeChoiceCount; ++i) {
     if (themes[i] == current) {
@@ -902,9 +904,6 @@ std::vector<Option> build_page(Page page) {
     options.push_back(value(tr("vsh.home_image.folder"),
                             ONION_DIST_DATA_ROOT "/ShellUI/background"));
     /* layers over the video or picture, applied as the sliders move */
-    options.push_back(slider_int(tr("vsh.home_bg.blur"),
-                                 OptionId::HomeBackgroundBlur,
-                                 g_settings.home_bg_blur, 0, 100, 5));
     options.push_back(slider_int(tr("vsh.home_bg.dim"),
                                  OptionId::HomeBackgroundDim,
                                  g_settings.home_bg_dim, 0, 100, 5));

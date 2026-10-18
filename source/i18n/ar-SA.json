@@ -597,7 +597,6 @@
     "vsh.home_image.enable": "استخدام صورة كخلفية",
     "vsh.home_image.file": "الصورة",
     "vsh.home_image.folder": "مجلد الصور",
-    "vsh.home_bg.blur": "تمويه الخلفية %",
     "vsh.home_bg.dim": "تعتيم الخلفية %",
     "vsh.home_bg.haze": "ضباب على الخلفية %",
     "vsh.home_bg.vignette": "تظليل الحواف %",
