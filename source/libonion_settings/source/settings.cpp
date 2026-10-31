@@ -633,6 +633,10 @@ bool apply_parser(IniParser *parser, Settings *out) {
       kRestModeDelayMaxSeconds));
   out->cheats_mirror = parse_cheats_mirror(ini_get(parser, "cheats.mirror"),
                                            out->cheats_mirror);
+  out->cheats_visual_menu = parse_bool(ini_get(parser, "cheats.visual_menu"),
+                                       out->cheats_visual_menu);
+  if (const char *render = ini_get(parser, "cheats.visual_menu_render"))
+    out->cheats_visual_render = std::strcmp(render, "pui3") == 0 ? 1 : 0;
   out->app_jailbreak_enabled =
       parse_bool(ini_get(parser, "app_jailbreak.enabled"),
                  out->app_jailbreak_enabled);
@@ -826,6 +830,13 @@ std::string settings_serialize(const Settings &in) {
   b += "# Available values: auto, github, cnb\n";
   b += "# auto uses cnb.cool when the UI/system language is zh-Hans, otherwise GitHub.\n";
   b += "mirror=" + std::string(cheats_mirror_name(in.cheats_mirror)) + "\n";
+  b += "# visual_menu opens the running game's cheats in a menu over the game\n";
+  b += "# with L1+L3+R3. Available values: true, false\n";
+  b += "visual_menu=" + bool_text(in.cheats_visual_menu) + "\n";
+  b += "# visual_menu_render: pui2 draws the classic mod menu, pui3 shows the\n";
+  b += "# system's own menu card. Available values: pui2, pui3\n";
+  b += std::string("visual_menu_render=") +
+       (in.cheats_visual_render == 1 ? "pui3" : "pui2") + "\n";
   b += "\n";
   b += "[app_jailbreak]\n";
   b += "# enabled controls the App lifecycle and sandbox event listeners. "

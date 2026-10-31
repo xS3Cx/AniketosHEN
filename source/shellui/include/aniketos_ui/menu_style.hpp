@@ -37,7 +37,9 @@ struct AkariLayout {
   float border = 0.0f;
   float outer_width = 0.0f;
   float row = 0.0f;
+  float font = 0.0f;
   float padding = 0.0f;
+  float body_padding = 0.0f;
   float body_height = 0.0f;
   float header_y = 0.0f;
   float header_bottom = 0.0f;

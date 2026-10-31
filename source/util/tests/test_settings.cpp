@@ -113,6 +113,8 @@ static int test_full_schema_roundtrip(void) {
   onion::Settings in{};
   in.startup_open_after_load = onion::kStartupOpenHomeMenu;
   in.cheats_mirror = onion::kCheatsMirrorCnb;
+  in.cheats_visual_menu = true;
+  in.cheats_visual_render = 1;
   in.app_jailbreak_enabled = false;
   in.debug_app_jb_msg = true;
   in.display_tids = true;
@@ -178,6 +180,8 @@ static int test_full_schema_roundtrip(void) {
   TEST_ASSERT_EQ_INT(in.toolbox_shortcut_opt, out.toolbox_shortcut_opt);
   TEST_ASSERT_EQ_INT(in.ui_lang, out.ui_lang);
   TEST_ASSERT_EQ_INT(in.cheats_mirror, out.cheats_mirror);
+  TEST_ASSERT_TRUE(out.cheats_visual_menu == in.cheats_visual_menu);
+  TEST_ASSERT_EQ_INT(in.cheats_visual_render, out.cheats_visual_render);
   TEST_ASSERT_TRUE(out.kstuff_autoload == in.kstuff_autoload);
   TEST_ASSERT_EQ_U64(
       in.app_jailbreak_allowlist.exact_title_id_count,
@@ -217,6 +221,8 @@ static int test_partial_ini_keeps_defaults(void) {
   TEST_ASSERT_TRUE(out.kstuff_autoload);
   TEST_ASSERT_EQ_U64(10, out.rest_mode_delay_seconds);
   TEST_ASSERT_EQ_INT(onion::kCheatsMirrorAuto, out.cheats_mirror);
+  TEST_ASSERT_TRUE(!out.cheats_visual_menu);
+  TEST_ASSERT_EQ_INT(0, out.cheats_visual_render);
   TEST_ASSERT_EQ_U64(5, out.app_jailbreak_allowlist.exact_title_id_count);
   TEST_ASSERT_STREQ("ITEM00001",
                     out.app_jailbreak_allowlist.exact_title_ids[0].c_str());

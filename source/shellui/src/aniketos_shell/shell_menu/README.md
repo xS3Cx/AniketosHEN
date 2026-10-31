@@ -1,6 +1,6 @@
-# Akari menu implementation partitions
+# Shell Menu implementation partitions
 
-`akari_menu.cpp` owns the frontend state and public lifecycle. The files in
+`shell_menu.cpp` owns the frontend state and public lifecycle. The files in
 this directory group the private implementation by responsibility while they
 remain part of the same C++ translation unit:
 

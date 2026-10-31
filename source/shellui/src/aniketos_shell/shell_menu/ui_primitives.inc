@@ -24,7 +24,7 @@ bool retain_widget(MonoObject *object) {
     return false;
   const uint32_t handle = mono_gchandle_new(object, /*pinned=*/1);
   if (!handle) {
-    LOG_ERROR("[ANIVSH:AKARI] failed to pin managed widget=%p",
+    LOG_ERROR("[ANIVSH:MENU] failed to pin managed widget=%p",
               static_cast<void *>(object));
     return false;
   }
@@ -81,7 +81,7 @@ void replace_font(int size) {
   if (s_font && mono_gchandle_new) {
     s_font_handle = mono_gchandle_new(s_font, /*pinned=*/1);
     if (!s_font_handle) {
-      LOG_ERROR("[ANIVSH:AKARI] failed to pin font=%p",
+      LOG_ERROR("[ANIVSH:MENU] failed to pin font=%p",
                 static_cast<void *>(s_font));
       s_font = nullptr;
     }
@@ -475,7 +475,47 @@ float menu_border() {
   return AniketosUI::Border(active_menu_style());
 }
 
+/* Akari opening and closing (update_animations): how far the body has grown
+   from its middle and how far the text has faded in, 0..1. */
+float s_akari_body_reveal = 1.0f;
+float s_akari_text_reveal = 1.0f;
+
+/* The Akari look (theme 0; the retired ids 1, 3 and 4 fall back to it). */
+bool akari_theme() {
+  const int theme = active_menu_theme();
+  return theme != 2 && theme != 5 && theme != kThemeSweety;
+}
+
+/* While the global theme colours the console, Akari keeps its own frame:
+   yellow on the left fading to cyan on the right, as on the PS3. */
+bool akari_own_palette() {
+  return akari_theme() && AniketosTheme::GlobalTheme::Active();
+}
+
+/* Anomaly likewise keeps its purple (#5933F2; orange #F25933 on the left
+   only with two colours), one colour as it ships. */
+bool anomaly_own_palette() {
+  return active_menu_theme() == 2 && AniketosTheme::GlobalTheme::Active();
+}
+
+/* The two PS3 looks draw in the right colour when there is one colour. */
+bool ps3_theme() { return akari_theme() || active_menu_theme() == 2; }
+
+bool menu_dual_color() {
+  if (akari_own_palette())
+    return true;
+  if (anomaly_own_palette())
+    return false;
+  return active_menu_style().dual_color;
+}
+
 Color animated_menu_color(bool right, float alpha) {
+  if (akari_own_palette())
+    return right ? Color{0.0f, 1.0f, 1.0f, alpha}
+                 : Color{1.0f, 1.0f, 0.0f, alpha};
+  if (anomaly_own_palette())
+    return right ? Color{0.35f, 0.20f, 0.95f, alpha}
+                 : Color{0.95f, 0.35f, 0.20f, alpha};
   // Global Customization is the one palette owner for the whole ShellUI.
   // Menu, background, clock, focus and Aura must not each animate their own
   // left/right endpoints.  GlobalTheme::Color is sampled from the same
@@ -520,6 +560,11 @@ Color mix(Color left, Color right, float t, float alpha) {
 }
 
 Color gradient_edge_color(bool right_edge, float alpha = 1.0f) {
+  if (akari_own_palette())
+    return right_edge ? right_color(alpha) : animated_menu_color(false, alpha);
+  /* one colour: Akari and Anomaly draw everything in the right one */
+  if (ps3_theme() && !menu_dual_color())
+    return right_color(alpha);
   if (AniketosTheme::GlobalTheme::Active())
     return right_color(alpha);
   const uint64_t frame_ms = s_menu_color_frame_valid

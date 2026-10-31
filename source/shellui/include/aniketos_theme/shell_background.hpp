@@ -8,13 +8,19 @@ struct MonoObject;
 
 namespace AniketosTheme::NativeShellBackground {
 
+/* Sony's particle layer as it is, or none. (Its "bottom" and "spread"
+   states looked the same as the default and were dropped.) */
 enum class ParticleMode : int {
   Default = 0,
-  Bottom,
-  Spread,
   Off,
   Count,
 };
+
+/* The setting as saved: 1 (and 3, Off before the other states went) is Off,
+   anything else the default. */
+constexpr ParticleMode ParticleModeFromSetting(int value) {
+  return value == 1 || value == 3 ? ParticleMode::Off : ParticleMode::Default;
+}
 
 enum class ImageTransition : int {
   Ripple = 0,

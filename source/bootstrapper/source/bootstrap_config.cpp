@@ -32,6 +32,8 @@ int sceKernelSendNotificationRequest(int32_t device,
                                      OrbisNotificationRequest *request,
                                      size_t size, int32_t blocking);
 int sceNotificationSend(int user_id, bool is_logged, const char *payload);
+int sceUserServiceInitialize(const int *priority);
+int sceUserServiceGetForegroundUser(int *user_id);
 int sceSystemServiceParamGetInt(int param_id, int *value);
 int sceKernelGetProsperoSystemSwVersion(OrbisKernelSwVersion *version);
 int sceKernelIsGenuineDevKit();
@@ -120,6 +122,18 @@ bool bootstrap_config_load(BootstrapConfig *config) {
       sceKernelSendNotificationRequest));
   onion_notify_set_rich_send(reinterpret_cast<onion_notify_rich_send_fn>(
       sceNotificationSend));
+  /* toast-only notifications go to the user at the console */
+  onion_notify_set_toast_user([]() -> int32_t {
+    static const bool ready = [] {
+      const int priority = 256;
+      const int result = sceUserServiceInitialize(&priority);
+      /* already initialized in this process is fine as well */
+      return result == 0 || result == static_cast<int>(0x80960003);
+    }();
+    int user_id = -1;
+    return ready && sceUserServiceGetForegroundUser(&user_id) == 0 ? user_id
+                                                                    : -1;
+  });
 
   onion::Settings settings{};
   (void)onion::settings_load(&settings);

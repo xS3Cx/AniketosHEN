@@ -1351,10 +1351,8 @@ void patch_homeui_top_nav(unsigned char *buffer, int *size_ptr,
       profile && top_nav_byte_patches(hbc, *profile, false, &top_nav_change);
 
   /* Rounded tiles: the user's rounding, up to a full circle, with the
-     artwork clipped to it. The case-mockup frame draws on the stock
-     rectangular surface, so the two are never combined. A rounded frame
-     around square artwork would look broken, so the tiles change only when
-     both sites are found. */
+     artwork clipped to it. A rounded frame around square artwork would look
+     broken, so the tiles change only when both sites are found. */
   const int tile_rounding = AniketosTheme::TileRoundingPercent();
   HomeTileShapePatch tile_shape{};
   HomeTileContentClipPatch tile_clip{};

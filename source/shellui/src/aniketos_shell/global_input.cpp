@@ -60,6 +60,7 @@ struct ScePadData {
 };
 static_assert(sizeof(ScePadData) == 120, "unexpected ScePadData ABI");
 
+constexpr uint32_t kNativeL3 = 0x00000002u;
 constexpr uint32_t kNativeR3 = 0x00000004u;
 constexpr uint32_t kNativeOption = 0x00000008u;
 constexpr uint32_t kNativeUp = 0x00000010u;
@@ -72,9 +73,23 @@ constexpr uint32_t kNativeTriangle = 0x00001000u;
 constexpr uint32_t kNativeCircle = 0x00002000u;
 constexpr uint32_t kNativeCross = 0x00004000u;
 constexpr uint32_t kNativeSquare = 0x00008000u;
+/* Set by libScePad when the system has taken the controller from this
+   process; the other bits are then empty. */
+constexpr uint32_t kNativeIntercepted = 0x80000000u;
+constexpr uint32_t kShellCombo = kNativeL1 | kNativeR3;
+constexpr uint32_t kCheatsCombo = kNativeL1 | kNativeL3 | kNativeR3;
+/* L1+R3 is part of L1+L3+R3, and the three buttons never land in the same
+   read: L1+R3 opens the Shell Menu once this long has passed without L3, or
+   when it is let go sooner (a quick click of R3 is shorter than this) and
+   L3 never came. */
+constexpr uint64_t kComboSettleMs = 120;
+/* Only against a bouncing contact: one press of the chord toggles once. */
+constexpr uint64_t kToggleDebounceMs = 250;
 
 std::atomic<bool> s_started{false};
 std::atomic<bool> s_toggle_requested{false};
+std::atomic<bool> s_cheats_toggle_requested{false};
+std::atomic<bool> s_intercepted{false};
 std::atomic<bool> s_capturing{false};
 /* The buttons held as last read, and whether ShellUI is still kept from
    seeing them after the menu let go: the press that closed it (Cross on an
@@ -152,10 +167,13 @@ void *reader_thread(void *) {
   int pad = -1;
   uint32_t previous = 0;
   bool shortcut_latched = false;
+  uint64_t shortcut_pending_ms = 0;
+  bool cheats_latched = false;
   uint64_t last_toggle_ms = 0;
   RepeatState repeat[4]{};
   uint32_t previous_stick = 0;
-  LOG_INFO("[ANIVSH:INPUT] started backend=libScePad shortcut=L1+R3");
+  LOG_INFO("[ANIVSH:INPUT] started backend=libScePad shortcut=L1+R3 "
+           "cheats=L1+L3+R3");
 
   for (;;) {
     if (pad < 0) {
@@ -180,6 +198,8 @@ void *reader_thread(void *) {
       s_held.store(0, std::memory_order_release);
       s_release_guard.store(false, std::memory_order_release);
       shortcut_latched = false;
+      shortcut_pending_ms = 0;
+      cheats_latched = false;
       s_left_stick_x.store(0, std::memory_order_release);
       s_left_stick_y.store(0, std::memory_order_release);
       for (RepeatState &item : repeat)
@@ -188,6 +208,10 @@ void *reader_thread(void *) {
       continue;
     }
 
+    const bool intercepted = (state.buttons & kNativeIntercepted) != 0;
+    if (intercepted != s_intercepted.exchange(intercepted,
+                                              std::memory_order_acq_rel))
+      LOG_INFO("[ANIVSH:INPUT] controller intercepted=%d", intercepted ? 1 : 0);
     const uint32_t native_down = state.buttons & ~previous;
     /* Pushing the left stick moves focus in the system UI just like the
        D-pad does, so for whoever watches direction presses passively it
@@ -205,18 +229,41 @@ void *reader_thread(void *) {
     previous_stick = stick;
     if (!s_capturing.load(std::memory_order_acquire))
       queue_game_button_presses(to_managed_buttons(native_down | stick_down));
-    const bool shortcut =
-        (state.buttons & (kNativeL1 | kNativeR3)) == (kNativeL1 | kNativeR3);
+    const bool shortcut = (state.buttons & kShellCombo) == kShellCombo;
+    const bool cheats = (state.buttons & kCheatsCombo) == kCheatsCombo;
+    bool shortcut_fire = false;
     if (shortcut && !shortcut_latched) {
       shortcut_latched = true;
+      shortcut_pending_ms = monotonic_millis();
+    } else if (!shortcut) {
+      shortcut_latched = false;
+      /* let go before the settle time: still a press of L1+R3 */
+      shortcut_fire = shortcut_pending_ms != 0;
+      shortcut_pending_ms = 0;
+    }
+    if (state.buttons & kNativeL3) {
+      shortcut_pending_ms = 0;
+      shortcut_fire = false;
+    }
+    if (shortcut_pending_ms &&
+        monotonic_millis() - shortcut_pending_ms >= kComboSettleMs) {
+      shortcut_pending_ms = 0;
+      shortcut_fire = true;
+    }
+    if (shortcut_fire) {
       const uint64_t now = monotonic_millis();
-      if (now - last_toggle_ms >= 700) {
+      if (now - last_toggle_ms >= kToggleDebounceMs) {
         last_toggle_ms = now;
         s_toggle_requested.store(true, std::memory_order_release);
         LOG_INFO("[ANIVSH:INPUT] shortcut edge L1+R3");
       }
-    } else if (!shortcut) {
-      shortcut_latched = false;
+    }
+    if (cheats && !cheats_latched) {
+      cheats_latched = true;
+      s_cheats_toggle_requested.store(true, std::memory_order_release);
+      LOG_INFO("[ANIVSH:INPUT] shortcut edge L1+L3+R3");
+    } else if (!cheats) {
+      cheats_latched = false;
     }
 
     if (s_capturing.load(std::memory_order_acquire) && !shortcut) {
@@ -301,6 +348,16 @@ bool Start() {
 
 bool ConsumeToggleRequest() {
   return s_toggle_requested.exchange(false, std::memory_order_acq_rel);
+}
+
+bool ConsumeCheatsToggleRequest() {
+  return s_cheats_toggle_requested.exchange(false, std::memory_order_acq_rel);
+}
+
+bool IsIntercepted() { return s_intercepted.load(std::memory_order_acquire); }
+
+uint32_t HeldButtons() {
+  return s_held.load(std::memory_order_acquire) & ~kNativeIntercepted;
 }
 
 uint32_t ConsumeRepeatedButtons() {

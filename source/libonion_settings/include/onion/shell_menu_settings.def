@@ -7,7 +7,7 @@
  * Out of the box the menu uses the Apparition skin and the red global theme:
  * the colour, background, outline, panel and clock defaults below are what
  * the global theme writes for red, 255 10 20 (apply_global_theme() in
- * akari_menu/settings_actions.inc). */
+ * shell_menu/settings_actions.inc). */
 
 ONION_SHELL_SETTING_INT(controller_custom_a_b, 0xff)
 ONION_SHELL_SETTING_INT(controller_custom_a_g, 0x60)
@@ -17,6 +17,13 @@ ONION_SHELL_SETTING_INT(controller_custom_b_g, 0x30)
 ONION_SHELL_SETTING_INT(controller_custom_b_r, 0xff)
 /* strength of the Shell Menu's rumble tests, percent */
 ONION_SHELL_SETTING_INT(controller_vibration_strength, 80)
+/* the user's font in place of the system's Latin font (aniketos_theme/custom_font) */
+ONION_SHELL_SETTING_BOOL(custom_font_enabled, false)
+/* the console's sound on the DualSense speaker as well (aniketos_shell/pad_speaker) */
+ONION_SHELL_SETTING_BOOL(pad_speaker_mirror, false)
+/* its loudness, percent */
+ONION_SHELL_SETTING_INT(pad_speaker_volume, 100)
+ONION_SHELL_SETTING_STRING(custom_font_path, "")
 ONION_SHELL_SETTING_INT(overlay_display_mode, 0)
 ONION_SHELL_SETTING_BOOL(overlay_firmware, true)
 ONION_SHELL_SETTING_INT(overlay_fps_precision, 1)
@@ -47,6 +54,8 @@ ONION_SHELL_SETTING_INT(shell_background_image_transition, 3)
 ONION_SHELL_SETTING_INT(shell_background_particles, 0)
 ONION_SHELL_SETTING_INT(shell_background_preset, 9)
 ONION_SHELL_SETTING_BOOL(shell_background_wave_enabled, false)
+/* the PS3 XMB wave drawn as the Home background (aniketos_theme/ps3_waves) */
+ONION_SHELL_SETTING_BOOL(shell_background_ps3_waves, false)
 ONION_SHELL_SETTING_INT(shell_clock_date_b, 20)
 ONION_SHELL_SETTING_INT(shell_clock_date_font_size, 17)
 ONION_SHELL_SETTING_INT(shell_clock_date_g, 10)
@@ -76,7 +85,6 @@ ONION_SHELL_SETTING_INT(shell_tiles_outline_g, 10)
 ONION_SHELL_SETTING_INT(shell_tiles_outline_preset, 10)
 ONION_SHELL_SETTING_INT(shell_tiles_outline_r, 255)
 ONION_SHELL_SETTING_BOOL(shell_tiles_outline_sync_background, true)
-ONION_SHELL_SETTING_BOOL(shell_tiles_ps5_case_mockup, false)
 ONION_SHELL_SETTING_INT(shell_ui_panels_animation, 0)
 ONION_SHELL_SETTING_INT(shell_ui_panels_animation_speed, 100)
 ONION_SHELL_SETTING_INT(shell_ui_panels_b, 20)
@@ -135,7 +143,21 @@ ONION_SHELL_SETTING_BOOL(home_video_sound, false)
 ONION_SHELL_SETTING_INT(home_video_volume, 100)
 /* A still image in the same place, shown when no video is. */
 ONION_SHELL_SETTING_BOOL(home_image_enabled, false)
+/* the video or picture also behind Settings and the other system apps, in
+ * place of their own background; off keeps it to Home */
+ONION_SHELL_SETTING_BOOL(home_background_global, false)
 ONION_SHELL_SETTING_STRING(home_image_path, "")
+/* the signed-in user's picture replaced by a file of theirs (account_avatar) */
+ONION_SHELL_SETTING_BOOL(account_avatar_enabled, false)
+ONION_SHELL_SETTING_STRING(account_avatar_path, "")
+/* whose picture it replaces: the user id (hex) of who chose it; empty:
+   whoever is signed in. Text, as user ids are past the INT range here. */
+ONION_SHELL_SETTING_STRING(account_avatar_user, "")
+/* the DevKit/TestKit overlays on Home, drawn by the system's own widget
+   (shellui: aniketos_shell/devkit_overlay): the System Info panel and the
+   red "DevKit/TestKit is Expired" banner */
+ONION_SHELL_SETTING_BOOL(devkit_overlay_info, false)
+ONION_SHELL_SETTING_BOOL(devkit_overlay_expired, false)
 /* Layers over the video or picture, each 0 (none) to 100 (shellui:
  * aniketos_shell/home_video): dimming, haze, vignette and shading of the
  * top and bottom. */
@@ -168,6 +190,8 @@ ONION_SHELL_SETTING_BOOL(osk_glyph_key, true)
 /* The system keyboard's own emoji key and panel in every field but a
  * password one (shellui: aniketos_shell/osk_glyphs). */
 ONION_SHELL_SETTING_BOOL(osk_emoji, true)
+/* a USB mouse drives the interface, with a pointer (aniketos_shell/mouse_control) */
+ONION_SHELL_SETTING_BOOL(mouse_control_enabled, true)
 /* The look of the system's on/off switches: 0 the system's own, 1 and up
  * the styles of shellui's aniketos_theme/toggle_styles. */
 ONION_SHELL_SETTING_INT(shell_toggle_style, 0)
@@ -176,7 +200,3 @@ ONION_SHELL_SETTING_INT(shell_toggle_style, 0)
  * (shellui: aniketos_theme/customization.hpp). The HEN button and the
  * Emulators tab stay either way. */
 ONION_SHELL_SETTING_BOOL(shell_customization_enabled, true)
-
-/* The shape ShellUI is laid out for: 0 is the console's 16:9, the others are
- * the ultrawide formats of aniketos_shell/screen_rotation (by index). */
-ONION_SHELL_SETTING_INT(screen_format, 0)

@@ -82,23 +82,32 @@ AkariLayout CalculateAkariLayout(const MenuStyle &style, float viewport_width,
                                  float viewport_height,
                                  std::size_t option_count,
                                  std::size_t max_visible) {
+  /* Akari (the PS3 VSH menu) draws in a 1280x720 space shown at 1.5x on a
+     1080p screen: a 20-unit row (30 px) with text at 0.8 of it, a 2-unit
+     border (3 px), 5 units (7.5 px) of inset beside the text and 10 units
+     (15 px) above and below the rows. The settings' default text size 18
+     and border 4 come out as exactly those. */
   AkariLayout out{};
   out.width = Width(style);
-  out.border = Border(style);
+  out.border = style.border_enabled
+                   ? std::max(1.0f, std::round(Border(style) * 0.75f))
+                   : 0.0f;
   out.outer_width = out.width + out.border * 2.0f;
-  out.row = TextSize(style);
-  out.padding = out.row * 0.5f;
+  out.row = std::round(TextSize(style) * 5.0f / 3.0f);
+  out.font = std::round(out.row * 0.8f);
+  out.padding = out.row * 0.25f;
+  out.body_padding = out.row * 0.5f;
   out.visible = std::min(max_visible, option_count);
   out.body_height =
-      std::max(out.row, out.row * static_cast<float>(out.visible));
+      std::max(out.row, out.row * static_cast<float>(out.visible)) +
+      out.body_padding * 2.0f;
   out.header_y = out.border;
   out.header_bottom = out.header_y + out.row;
   out.body_y = out.header_bottom + out.border;
   out.body_bottom = out.body_y + out.body_height;
-  // Akari's footer is a separate framed block below the option body. Keep a
-  // small visible gap between both complete frames instead of sharing the
-  // body's bottom line.
-  out.footer_gap = std::round(4.0f * Scale(style));
+  // Akari's footer is a separate framed block below the option body, one
+  // border apart.
+  out.footer_gap = out.border;
   out.footer_y =
       out.body_bottom + out.border + out.footer_gap + out.border;
   out.total_height = out.footer_y + out.row + out.border;

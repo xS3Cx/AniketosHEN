@@ -1,7 +1,8 @@
 #include "aniketos_shell/shell_manager.hpp"
 
 #include "hooked_funcs.hpp"
-#include "aniketos_shell/akari_menu.hpp"
+#include "aniketos_shell/shell_menu.hpp"
+#include "aniketos_shell/cheats_menu.hpp"
 #include "aniketos_shell/diagnostics.hpp"
 #include "aniketos_shell/frame_profile.hpp"
 #include "aniketos_shell/global_input.hpp"
@@ -63,18 +64,22 @@ void refresh_process_diagnostics() {
   s_diagnostics.scene = reinterpret_cast<uintptr_t>(s_host.scene);
   s_diagnostics.root_widget = reinterpret_cast<uintptr_t>(s_host.root);
   s_diagnostics.root_domain = reinterpret_cast<uintptr_t>(Root_Domain);
-  s_diagnostics.host_generation = AkariMenu::HostGeneration();
-  AkariMenu::UpdateDiagnostics(s_diagnostics);
+  s_diagnostics.host_generation = ShellMenu::HostGeneration();
+  ShellMenu::UpdateDiagnostics(s_diagnostics);
 }
 
 bool tick_foreground_title(const std::string &title_id) {
   /* The Shell Menu belongs to the home screen. While a game or application
-     is in the foreground it stays closed and the L1+R3 shortcut is ignored,
-     so nothing here can take input away from the title. */
+     is in the foreground it stays closed and the L1+R3 shortcut is ignored.
+     The controller is only taken while the cheats menu (L1+L3+R3) is open
+     over the game. */
   (void)title_id;
   (void)Input::ConsumeToggleRequest();
-  (void)Input::ConsumeButtonsDown();
-  Input::SetMenuCapturing(false);
+  const bool cheats_requested = Input::ConsumeCheatsToggleRequest();
+  const uint32_t buttons_down = Input::ConsumeButtonsDown();
+  const uint32_t buttons_repeated = Input::ConsumeRepeatedButtons();
+  Input::SetMenuCapturing(
+      CheatsMenu::Tick(cheats_requested, buttons_down, buttons_repeated));
   return true;
 }
 
@@ -89,7 +94,7 @@ void publish_host(const HostSnapshot &next) {
   MonoObject *old_root = s_host.root;
   s_host = next;
   s_attached = false;
-  AkariMenu::BindHost(s_host.root);
+  ShellMenu::BindHost(s_host.root);
   s_diagnostics.host_backend = s_host.path ? s_host.path : "unresolved";
   s_diagnostics.last_resolve = s_host.root ? "host changed" : "no host";
   LOG_INFO("[ANIVSH:LIFE] host changed old=%s/%p new=%s/%p scene=%p type=%s.%s",
@@ -99,7 +104,7 @@ void publish_host(const HostSnapshot &next) {
            s_host.scene_namespace ? s_host.scene_namespace : "",
            s_host.scene_type ? s_host.scene_type : "");
 
-  if (AkariMenu::IsVisible())
+  if (ShellMenu::IsVisible())
     s_attached = AttachMenu();
 }
 
@@ -111,7 +116,7 @@ bool Initialize(MonoImage *app_system, MonoImage *pui) {
   if (s_initialized)
     return true;
   Profile::Initialize();
-  AkariMenu::Initialize();
+  ShellMenu::Initialize();
   if (!s_context.Initialize(app_system, pui))
     return false;
 
@@ -138,7 +143,7 @@ bool ResolveSystemHost() {
                s_host.path ? s_host.path : "none",
                static_cast<void *>(s_host.root));
       publish_host({});
-      AkariMenu::UnbindHost();
+      ShellMenu::UnbindHost();
     }
     s_diagnostics.last_resolve = "no selectable root";
     return false;
@@ -151,8 +156,8 @@ bool ResolveSystemHost() {
 bool AttachMenu() {
   if (!s_host.root)
     return false;
-  AkariMenu::Show();
-  s_attached = AkariMenu::IsAttached();
+  ShellMenu::Show();
+  s_attached = ShellMenu::IsAttached();
   LOG_INFO("[ANIVSH:PUI] attach backend=%s scene=%p root=%p attached=%d",
            s_host.path ? s_host.path : "none", static_cast<void *>(s_host.scene),
            static_cast<void *>(s_host.root), s_attached ? 1 : 0);
@@ -160,14 +165,14 @@ bool AttachMenu() {
 }
 
 void DetachMenu() {
-  AkariMenu::Hide();
+  ShellMenu::Hide();
   s_attached = false;
 }
 
 void HandleInput(uint32_t buttons_down) {
   if (!buttons_down)
     return;
-  AkariMenu::HandleInput(buttons_down);
+  ShellMenu::HandleInput(buttons_down);
 }
 
 void RequestToggle() {
@@ -180,10 +185,10 @@ void RequestToggle() {
   }
   if (!s_host.root)
     (void)ResolveSystemHost();
-  AkariMenu::Toggle();
-  s_attached = AkariMenu::IsAttached();
+  ShellMenu::Toggle();
+  s_attached = ShellMenu::IsAttached();
   LOG_INFO("[ANIVSH:INPUT] toggle visible=%d attached=%d backend=%s",
-           AkariMenu::IsVisible() ? 1 : 0, s_attached ? 1 : 0,
+           ShellMenu::IsVisible() ? 1 : 0, s_attached ? 1 : 0,
            s_host.path ? s_host.path : "none");
 }
 
@@ -211,7 +216,7 @@ void Tick() {
   if (big_app_running) {
     (void)running_app_id;
     if (!s_game_session_active) {
-      AkariMenu::EnterGameSession();
+      ShellMenu::EnterGameSession();
       s_game_session_active = true;
       s_attached = false;
       Input::SetMenuCapturing(false);
@@ -223,8 +228,10 @@ void Tick() {
     return;
   }
 
+  (void)Input::ConsumeCheatsToggleRequest();
   if (s_game_session_active) {
-    AkariMenu::LeaveGameSession();
+    CheatsMenu::Close();
+    ShellMenu::LeaveGameSession();
     s_game_session_active = false;
     // Invalidate the independent resolver cache. Without this, an unchanged
     // HomeUI root is treated as already published and the Shell Menu never
@@ -260,7 +267,7 @@ void Tick() {
       Input::ConsumeRepeatedButtons() | Profile::ConsumeScriptRepeated();
   if (buttons_down) {
     const uint64_t input_start = Profile::g_enabled ? Profile::NowNs() : 0;
-    AkariMenu::HandleInput(buttons_down, buttons_repeated);
+    ShellMenu::HandleInput(buttons_down, buttons_repeated);
     if (input_start) {
       const uint64_t elapsed = Profile::NowNs() - input_start;
       Profile::Add(Profile::kMenuInput, elapsed);
@@ -273,10 +280,10 @@ void Tick() {
 
   {
     Profile::Scope scope(Profile::kMenuTick);
-    AkariMenu::Tick();
+    ShellMenu::Tick();
   }
-  s_attached = AkariMenu::IsAttached();
-  Input::SetMenuCapturing(AkariMenu::IsVisible());
+  s_attached = ShellMenu::IsAttached();
+  Input::SetMenuCapturing(ShellMenu::IsVisible());
 
   if (s_diagnostics.tick_count - s_last_diagnostics_tick >=
       kDiagnosticsIntervalFrames) {

@@ -6,8 +6,12 @@
 /* A looping video behind Home.
  *
  * The console's own player (Sce.Vsh.Video.VideoPlayer drawn by a PUI
- * VideoView) is put under Home's React tree, in Home's scene, so the video
- * fades and moves with Home like everything else in it. The player's core
+ * VideoView) is put into the system's own background scene (BGLayer), which
+ * stays up under Home, Settings and the other system screens while they
+ * fade and slide over it, so the video plays on through every change of
+ * screen; it fades out only when a game takes the screen (and, unless
+ * home_background_global, under the system apps), and goes on from where
+ * it was when Home is back. The player's core
  * runs outside ShellUI and cannot open files from our folder, but it can
  * stream, so the file is handed to it over a loopback-only HTTP server that
  * lives here. Everything is found by name at run time.

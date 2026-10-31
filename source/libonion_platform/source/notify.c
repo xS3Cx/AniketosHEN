@@ -41,12 +41,15 @@ _Static_assert(sizeof(OrbisNotificationRequest) == 0xC30,
 
 static onion_notify_send_fn g_send = NULL;
 static onion_notify_rich_send_fn g_rich_send = NULL;
+static onion_notify_user_fn g_toast_user = NULL;
 
 void onion_notify_set_send(onion_notify_send_fn fn) { g_send = fn; }
 
 void onion_notify_set_rich_send(onion_notify_rich_send_fn fn) {
   g_rich_send = fn;
 }
+
+void onion_notify_set_toast_user(onion_notify_user_fn fn) { g_toast_user = fn; }
 
 void onion_notify_format(char *out, size_t out_sz, int show_watermark,
                          const char *fmt, va_list ap) {
@@ -122,12 +125,42 @@ void onion_notify_debug(const char *fmt, ...) {
   va_end(args);
 }
 
+/* A toast-only notification is not stored, so the overlay reads the toast
+   itself (viewTemplateType, viewData, ...) from the payload's top level,
+   where a logged one carries it under rawData for the list to keep: the
+   logged shape sent toast-only is dropped as "unknown viewTemplateType".
+   Returns the rawData object as its own payload (free with cJSON_free), or
+   NULL when the payload has none. */
+static char *onion_notify_toast_payload(const char *payload) {
+  cJSON *root = cJSON_Parse(payload);
+  cJSON *raw = root ? cJSON_DetachItemFromObjectCaseSensitive(root, "rawData")
+                    : NULL;
+  char *toast = cJSON_IsObject(raw) ? cJSON_PrintUnformatted(raw) : NULL;
+  cJSON_Delete(raw);
+  cJSON_Delete(root);
+  return toast;
+}
+
 static int onion_notify_send_rich_payload(const char *payload, bool logged) {
   if (!payload || payload[0] == '\0' || !g_rich_send) {
     return -1;
   }
-  /* logged: kept in the notification list after the toast */
-  return g_rich_send(0xFE, logged, payload);
+  if (logged) {
+    /* kept in the notification list after the toast; the system files it
+       for each user */
+    return g_rich_send(0xFE, true, payload);
+  }
+  /* a toast only: shown to the user it names, so the user at the console */
+  int32_t user_id = 0xFE;
+  if (g_toast_user) {
+    const int32_t user = g_toast_user();
+    if (user >= 0)
+      user_id = user;
+  }
+  char *toast = onion_notify_toast_payload(payload);
+  const int result = g_rich_send(user_id, false, toast ? toast : payload);
+  cJSON_free(toast);
+  return result;
 }
 
 static void onion_notify_try_rich_logged(const char *payload,

@@ -1,14 +1,20 @@
 /* Copyright (C) 2025 OnionHEN / LightningMods — P0 split. */
 
 
+#include "aniketos_theme/custom_font.hpp"
+#include "aniketos_shell/mouse_control.hpp"
+#include "aniketos_shell/kbm_capture.hpp"
+#include "kbm_toolbox.hpp"
+#include "aniketos_shell/pad_speaker.hpp"
 #include "aniketos_theme/toggle_styles.hpp"
 #include "aniketos_shell/home_tabs.hpp"
 #include "aniketos_shell/home_bookmark.hpp"
 #include "aniketos_shell/osk_glyphs.hpp"
 #include "aniketos_shell/home_particles.hpp"
 #include "aniketos_shell/home_video.hpp"
+#include "aniketos_shell/account_avatar.hpp"
+#include "aniketos_shell/devkit_overlay.hpp"
 #include "aniketos_shell/trophy_tools.hpp"
-#include "aniketos_shell/screen_rotation.hpp"
 #include "aniketos_shell/migration_notice.hpp"
 #include "aniketos_shell/home_menu.hpp"
 #include "aniketos_shell/frame_profile.hpp"
@@ -630,8 +636,12 @@ void OnRender_Hook(MonoObject* instance) {
   HomeBookmark::Tick();
   OskGlyphs::Tick();
   HomeVideo::Tick();
+  AccountAvatar::Tick();
+  DevkitOverlay::Tick();
   HomeParticles::Tick();
   TrophyTools::Tick();
+  AniketosTheme::CustomFont::Tick();
+  PadSpeaker::Tick();
   {
     Profile::Scope scope(Profile::kSharedUi);
     AniketosTheme::SharedUI::Tick();
@@ -644,6 +654,9 @@ void OnRender_Hook(MonoObject* instance) {
     Profile::Scope scope(Profile::kShellManager);
     AniketosShell::Tick();
   }
+  KbmCapture::Tick();
+  kbm_toolbox::Tick();
+  MouseControl::Tick();
   /* Sony rewrites the tile focus settings while it renders Home. Run the tile
      pass after the native frame, on every exit path of this hook, so ours is
      the value the outline renderer finally consumes. */

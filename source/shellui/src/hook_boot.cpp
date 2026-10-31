@@ -6,6 +6,7 @@
 #include "aniketos_shell/shell_manager.hpp"
 #include "aniketos_shell/trophy_tools.hpp"
 #include "aniketos_shell/home_bookmark.hpp"
+#include "aniketos_shell/mouse_control.hpp"
 #include <onion/distribution.h>
 #include "hooked_funcs.hpp"
 #include "debug_settings_route_runtime.hpp"
@@ -207,7 +208,10 @@ bool handle_uri_boot_common(MonoString* uri, int opt, MonoString* titleIdForBoot
   
       switch (g_settings.cheats_shortcut_opt) {
       case R3_L3:
-        cheats_buttons_held = (result.Buttons & R3) && (result.Buttons & L3);
+        /* With L1 as well it is the in-game cheats menu's L1+L3+R3. */
+        cheats_buttons_held =
+            (result.Buttons & R3) && (result.Buttons & L3) &&
+            !(g_settings.cheats_visual_menu && (result.Buttons & L1));
         break;
       case L2_TRIANGLE:
         cheats_buttons_held = (result.Buttons & L2) && (result.Buttons & Triangle);
@@ -327,6 +331,8 @@ bool handle_uri_boot_common(MonoString* uri, int opt, MonoString* titleIdForBoot
       LOG_DEBUG("Option button pressed");
     }
 #endif
-  
+
+    /* after the HEN's own shortcuts: a mouse press never sets one off */
+    MouseControl::FilterPad(result);
     return result;
   }

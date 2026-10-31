@@ -262,6 +262,10 @@ int main() {
       sceKernelSendNotificationRequest));
   onion_notify_set_rich_send(reinterpret_cast<onion_notify_rich_send_fn>(
       sceNotificationSend));
+  onion_notify_set_toast_user([]() -> int32_t {
+    int user_id = -1;
+    return sceUserServiceGetForegroundUser(&user_id) == 0 ? user_id : -1;
+  });
 
   char buz[255];
   pthread_t app_jailbreak_thr = nullptr;

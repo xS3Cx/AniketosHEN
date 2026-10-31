@@ -71,6 +71,8 @@ RouteResult resolve_resource(const RouteInput &in) {
     out.page = Page::PluginProgress;
   } else if (out.flags.is_remote_play) {
     out.page = Page::RemotePlay;
+  } else if (is_kbm_resource(in.resource)) {
+    out.page = Page::Kbm;
   } else if (out.flags.is_su_menu) {
     out.page = Page::SuperuserPass;
   } else {

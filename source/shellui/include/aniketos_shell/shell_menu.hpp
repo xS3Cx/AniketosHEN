@@ -7,7 +7,7 @@
 
 struct MonoObject;
 
-namespace AniketosShell::AkariMenu {
+namespace AniketosShell::ShellMenu {
 
 void Initialize();
 void BindHost(MonoObject *root);
@@ -29,4 +29,4 @@ bool IsVisible();
 bool IsAttached();
 uint64_t HostGeneration();
 
-} // namespace AniketosShell::AkariMenu
+} // namespace AniketosShell::ShellMenu

@@ -67,6 +67,20 @@ int home_video_index() {
   return found == videos.end() ? 0 : static_cast<int>(found - videos.begin());
 }
 
+int custom_font_index() {
+  const std::vector<std::string> &files = AniketosTheme::CustomFont::Files();
+  const auto found =
+      std::find(files.begin(), files.end(), g_settings.custom_font_path);
+  return found == files.end() ? 0 : static_cast<int>(found - files.begin());
+}
+
+int account_avatar_index() {
+  const std::vector<std::string> &files = AccountAvatar::Files();
+  const auto found = std::find(files.begin(), files.end(),
+                               g_settings.account_avatar_path);
+  return found == files.end() ? 0 : static_cast<int>(found - files.begin());
+}
+
 int home_image_index() {
   const std::vector<std::string> &images = HomeVideo::Images();
   const auto found = std::find(images.begin(), images.end(),

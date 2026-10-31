@@ -15,6 +15,7 @@ along with this program; see the file COPYING. If not, see
 <http://www.gnu.org/licenses/>.  */
 
 #include "controller/controller_manager.hpp"
+#include "aniketos_theme/custom_font.hpp"
 #include "aniketos_theme/customization.hpp"
 #include "aniketos_shell/power_indicator.hpp"
 #include "aniketos_shell/shell_buzzer.hpp"
@@ -27,8 +28,9 @@ along with this program; see the file COPYING. If not, see
 #include "aniketos_shell/home_tabs.hpp"
 #include "aniketos_shell/home_bookmark.hpp"
 #include "aniketos_shell/osk_glyphs.hpp"
-#include "aniketos_shell/screen_rotation.hpp"
 #include "aniketos_shell/home_js.hpp"
+#include "aniketos_shell/account_avatar.hpp"
+#include "aniketos_shell/devkit_overlay.hpp"
 #include <onion/distribution.h>
 #include "aniketos_shell/global_input.hpp"
 #include "aniketos_shell/shell_manager.hpp"
@@ -716,6 +718,9 @@ bool install_hooks(const ShellImages& img) {
   HomeBookmark::Install();
   OskGlyphs::Install();
   HomeJs::Install(img.react_pui);
+  AccountAvatar::Install(img.pui);
+  DevkitOverlay::Install();
+  AniketosTheme::CustomFont::Install();
 
   (void)install_optional_diag(
       "[DBG-GETMODEL] GetModel", img.rn_shell, "ReactNative.Modules.ShellUI.Settings",

@@ -98,6 +98,11 @@ void create_widgets() {
   s_widgets.version = create_label(s_widgets.content, "id_anivsh_version", 0);
   s_widgets.page_title = create_label(s_widgets.content, "id_anivsh_page", 0);
   s_widgets.counter = create_label(s_widgets.content, "id_anivsh_counter", 2);
+  /* Header and footer text appear with their bars: PUI otherwise renders a
+     label's text on its text thread and shows it frames later. Two short
+     labels cost little on the UI thread. */
+  for (MonoObject *label : {s_widgets.title, s_widgets.page_title})
+    Set_Property(cls(label), label, "RenderSync", true);
 
   for (size_t i = 0; i < kMaxVisibleOptions; ++i) {
     char name[64];
@@ -180,6 +185,7 @@ void create_widgets() {
   panel_hide(s_widgets.anomaly_controls);
   const char *anomaly_control_assets[kAnomalyControlIconCount] = {
       kKeyGuideDpad, kKeyGuideL3, kKeyGuideCross, kKeyGuideCircle,
+      kKeyGuideDpad,
   };
   for (int i = 0; i < kAnomalyControlIconCount; ++i) {
     char name[64];
@@ -221,7 +227,7 @@ void create_widgets() {
   s_attached = s_widgets.master && s_widgets.controls &&
                s_widgets.anomaly_controls && s_widgets.overlay;
   s_dirty = true;
-  LOG_INFO("[ANIVSH:AKARI] widgets created attached=%d pinned=%zu generation=%lu",
+  LOG_INFO("[ANIVSH:MENU] widgets created attached=%d pinned=%zu generation=%lu",
            s_attached ? 1 : 0, s_widget_handles.size(),
            static_cast<unsigned long>(s_host_generation));
 }
@@ -238,8 +244,9 @@ void set_master_geometry(float x, float y, float width, float height) {
   panel_geometry(s_widgets.scroll_clip, 0.0f, 0.0f, width, height);
 }
 
-void apply_font() {
-  const int size = static_cast<int>(std::lround(menu_text_size()));
+void apply_font(float font_size = 0.0f) {
+  const int size = static_cast<int>(
+      std::lround(font_size > 0.0f ? font_size : menu_text_size()));
   replace_font(size);
   label_font(s_widgets.title);
   label_font(s_widgets.version);
@@ -275,9 +282,9 @@ void horizontal_border_gradient(int line, float y, float width, float border,
                     static_cast<float>(kFrameGradientSlices);
     MonoObject *slice = s_widgets.horizontal_borders[line][i];
     panel_geometry(slice, x0, y, x1 - x0, border);
-    panel_color(slice, active_menu_style().dual_color
+    panel_color(slice, menu_dual_color()
                            ? mix(left_color(), right_color(), gradient_t(t), 1.0f)
-                           : left_color());
+                           : akari_theme() ? right_color() : left_color());
   }
 }
 
@@ -336,6 +343,26 @@ void update_auxiliary_frame(
   panel_color(right, gradient_edge_color(/*right_edge=*/true));
 }
 
+/* Frames update_controls still runs from Tick after the legend's text or
+   font changed: a label lays its text out asynchronously, so its real width
+   and baseline only show a few frames later. */
+int s_controls_settle_frames = 0;
+
+/* A parameterless float method of a label (GetTextWidth,
+   GetBottomBaselineY); NaN when it is missing or throws. */
+float label_metric(MonoObject *label, const char *method) {
+  MonoMethod *found = nullptr;
+  for (MonoClass *klass = label ? mono_object_get_class(label) : nullptr;
+       klass && !found; klass = mono_class_get_parent(klass))
+    found = mono_class_get_method_from_name(klass, method, 0);
+  MonoObject *exception = nullptr;
+  MonoObject *boxed =
+      found ? mono_runtime_invoke(found, label, nullptr, &exception) : nullptr;
+  return boxed && !exception
+             ? *static_cast<float *>(mono_object_unbox(boxed))
+             : NAN;
+}
+
 void update_controls() {
   if (!s_widgets.controls)
     return;
@@ -347,20 +374,34 @@ void update_controls() {
   // Keep the compact open/close hint close to the physical bottom-left edge.
   constexpr float kOuterMargin = 4.0f;
   constexpr float kHorizontalPadding = 6.0f;
-  constexpr float kItemGap = 0.0f;
   constexpr float kChordGap = 3.0f;
   constexpr float kGlyphTextGap = 5.0f;
   constexpr float kIconHeight = 16.0f;
-  constexpr float kIconY = 6.0f;
+  constexpr float kIconY = (kHeight - kIconHeight) / 2.0f;
   constexpr float kControlTextSize = 14.0f;
-  struct TextWidthCache {
+  // Text and glyphs share the row's centre line: the baseline sits half a
+  // cap height (about 0.7 em in any Latin font) below it.
+  constexpr float kBaselineY = kHeight / 2.0f + kControlTextSize * 0.35f;
+  constexpr int kSettleFrames = 90;
+  constexpr int kStableReads = 3;
+  struct LabelMetrics {
     MonoObject *label = nullptr;
     MonoObject *font = nullptr;
     uint64_t host_generation = 0;
+    int font_generation = 0;
     std::string text;
-    float width = 0.0f;
+    float box = 0.0f;   // the label's width, roomier than its text
+    float width = 0.0f; // the text's advance: the estimate until measured
+    float baseline = kControlTextSize; // below the label's top
+    float read_width = 0.0f;
+    float read_baseline = 0.0f;
+    int stable_reads = 0;
+    float x = -1.0f;
+    float y = -1.0f;
   };
-  static TextWidthCache width_cache[kControlLabelCount];
+  static LabelMetrics metrics[kControlLabelCount];
+  const int font_generation = AniketosTheme::CustomFont::Generation();
+  const bool settling = s_controls_settle_frames > 0;
   float x = kHorizontalPadding;
   int next_label = 0;
   auto text_item = [&](const char *text) {
@@ -368,41 +409,62 @@ void update_controls() {
       return;
     const int label_index = next_label++;
     MonoObject *label = s_widgets.control_labels[label_index];
-    TextWidthCache &cache = width_cache[label_index];
+    LabelMetrics &m = metrics[label_index];
     const std::string value = text ? text : "";
-    if (cache.label != label || cache.font != s_control_font ||
-        cache.host_generation != s_host_generation ||
-        cache.text != value) {
+    if (m.label != label || m.font != s_control_font ||
+        m.host_generation != s_host_generation ||
+        m.font_generation != font_generation || m.text != value) {
       label_text(label, value);
       if (s_control_font)
         Set_Property_Invoke(cls(label), label, "Font", s_control_font);
       Set_Property(cls(label), label, "MaxLineCount", 1);
       Set_Property(cls(label), label, "TextTrimming", 0);
-      // A centred label exposes half of its safety width before/after the
-      // painted text. In a compact icon chord that looked like an arbitrary
-      // gap around "Press", "+" and the action. Anchor the text at the exact
-      // cursor position; spacing between items is owned only by the constants
-      // below.
+      // Text starts at the label's left edge and the line at its top; the
+      // row places both from the measured width and baseline.
       Set_Property(cls(label), label, "HorizontalAlignment", 0);
-      // UI2.VerticalAlignment is Top=0, Bottom=1, Center=2 on 11.40.
-      // Bottom was the reason the instruction text sat visibly below the
-      // centre of its 34 px container.
-      Set_Property(cls(label), label, "VerticalAlignment", 2);
-      const float fallback =
-          approximate_text_width(value.c_str(), kControlTextSize);
-      cache.label = label;
-      cache.font = s_control_font;
-      cache.host_generation = s_host_generation;
-      cache.text = value;
-      // GetTextWidth is asynchronous in this injected UI tree and can report
-      // the previous label's (much wider) layout immediately after a text
-      // change. That stale width created the visible gap before L1. The
-      // deterministic UTF-8-aware estimate keeps the glyph flush to "Press".
-      cache.width = std::max(2.0f, std::ceil(fallback));
+      Set_Property(cls(label), label, "VerticalAlignment", 0);
+      m = {};
+      m.label = label;
+      m.font = s_control_font;
+      m.host_generation = s_host_generation;
+      m.font_generation = font_generation;
+      m.text = value;
+      // The SST-tuned estimate holds the first frames only.
+      m.width = std::max(
+          2.0f,
+          std::ceil(approximate_text_width(value.c_str(), kControlTextSize)));
+      m.box = m.width * 2.0f + 32.0f;
+      s_controls_settle_frames = kSettleFrames;
+    } else if (settling) {
+      // Right after a text or font change GetTextWidth still answers for the
+      // previous layout (or with the box): a reading counts once it repeats.
+      // GetBottomBaselineY is in the parent's coordinates.
+      const float width = label_metric(label, "GetTextWidth");
+      const float baseline =
+          label_metric(label, "GetBottomBaselineY") -
+          Get_Property<float>(cls(label), label, "Y");
+      const bool valid = std::isfinite(width) && width > 0.5f &&
+                         width < m.box - 0.5f && std::isfinite(baseline) &&
+                         baseline > 0.0f && baseline < kHeight;
+      if (valid && std::fabs(width - m.read_width) < 0.25f &&
+          std::fabs(baseline - m.read_baseline) < 0.25f) {
+        if (++m.stable_reads == kStableReads) {
+          m.width = std::ceil(width);
+          m.baseline = baseline;
+        }
+      } else {
+        m.stable_reads = 0;
+      }
+      m.read_width = width;
+      m.read_baseline = baseline;
     }
-    const float width = cache.width;
-    label_geometry(label, x, 2.0f, width, kHeight);
-    x += width;
+    const float y = std::round(kBaselineY - m.baseline);
+    if (m.x != x || m.y != y) {
+      label_geometry(label, x, y, m.box, kHeight);
+      m.x = x;
+      m.y = y;
+    }
+    x += m.width;
   };
   auto icon_item = [&](MonoObject *icon, float width) {
     image_geometry(icon, x, kIconY, width, kIconHeight);
@@ -410,7 +472,7 @@ void update_controls() {
   };
   auto shortcut = [&](const char *action) {
     text_item(tr("vsh.ctrl.press"));
-    x += kItemGap;
+    x += kGlyphTextGap;
     icon_item(s_widgets.control_icon_l1, 27.0f);
     x += kChordGap;
     text_item("+");
@@ -448,7 +510,7 @@ void update_controls() {
   for (int i = next_label; i < kControlLabelCount; ++i) {
     label_text(s_widgets.control_labels[i], "");
     label_geometry(s_widgets.control_labels[i], 0, 0, 0, 0);
-    width_cache[i] = {};
+    metrics[i] = {};
   }
 }
 
@@ -576,12 +638,19 @@ void update_menu_widgets() {
   const float outer_width = layout.outer_width;
   const float row = layout.row;
   const float padding = layout.padding;
-  const float body_height = layout.body_height;
-  const float header_y = layout.header_y;
-  const float header_bottom = layout.header_bottom;
-  const float body_y = layout.body_y;
-  const float body_bottom = layout.body_bottom;
-  const float footer_y = layout.footer_y;
+  /* opening and closing grow and shrink the body about its middle, the
+     header and footer travelling with its edges */
+  const float body_height =
+      std::round(layout.body_height * std::clamp(s_akari_body_reveal, 0.0f, 1.0f));
+  const float shift = std::round((layout.body_height - body_height) * 0.5f);
+  const float header_y = layout.header_y + shift;
+  const float header_bottom = layout.header_bottom + shift;
+  const float body_y = layout.body_y + shift;
+  const float body_bottom = body_y + body_height;
+  const float footer_y = layout.footer_y - shift;
+  /* the rows start this far into the body (Akari's 10-unit margin) */
+  const float rows_y = body_y + layout.body_padding;
+  const float text_opacity = std::clamp(s_akari_text_reveal, 0.0f, 1.0f);
   const float total_height = layout.total_height;
   const float x = layout.x;
   const float y = layout.y;
@@ -621,7 +690,7 @@ void update_menu_widgets() {
   horizontal_border_gradient(3, footer_y - border, outer_width, border);
   horizontal_border_gradient(4, footer_y + row, outer_width, border);
 
-  apply_font();
+  apply_font(layout.font);
   Set_Property(s_label_class, s_widgets.title, "HorizontalAlignment", 1);
   Set_Property(s_label_class, s_widgets.page_title, "HorizontalAlignment", 0);
   Set_Property(s_label_class, s_widgets.counter, "HorizontalAlignment", 2);
@@ -633,17 +702,26 @@ void update_menu_widgets() {
             Color{1.0f, 1.0f, 1.0f, 1.0f});
   label_text(s_widgets.title, kMenuBrandName);
   label_geometry(s_widgets.title, 0.0f, header_y, outer_width, row);
-  label_text(s_widgets.page_title, "");
-  label_geometry(s_widgets.page_title, 0.0f, 0.0f, 0.0f, 0.0f);
+  for (MonoObject *label :
+       {s_widgets.title, s_widgets.page_title, s_widgets.counter})
+    Set_Property(s_label_class, label, "Opacity", text_opacity);
+  /* the footer: the page's name on the left, the position on the right,
+     2.5 units (3.75 px) in from the frame */
+  const float footer_inset = row * 0.125f;
+  set_color(s_label_class, s_widgets.page_title, "TextColor",
+            Color{1.0f, 1.0f, 1.0f, 1.0f});
+  label_text(s_widgets.page_title, page_title(state.page));
+  label_geometry(s_widgets.page_title, border + footer_inset, footer_y,
+                 width * 0.7f - footer_inset, row);
   char counter[32];
   std::snprintf(counter, sizeof(counter), "[%zu/%zu]",
                 options.empty() ? 0 : state.selected + 1, options.size());
   label_text(s_widgets.counter, counter);
   label_geometry(s_widgets.counter, border + width * 0.7f, footer_y,
-                 width * 0.3f, row);
+                 width * 0.3f - footer_inset, row);
 
   const float target_highlight =
-      body_y + static_cast<float>(state.selected - state.scroll) * row;
+      rows_y + static_cast<float>(state.selected - state.scroll) * row;
   update_highlight_target(state, target_highlight);
   panel_geometry(s_widgets.highlight, border, s_highlight_y, width, row);
   for (int i = 0; i < kGradientSlices; ++i) {
@@ -657,9 +735,10 @@ void update_menu_widgets() {
                     static_cast<float>(kGradientSlices);
     panel_geometry(s_widgets.highlight_slices[i], x0, 0, x1 - x0, row);
     panel_color(s_widgets.highlight_slices[i],
-                active_menu_style().dual_color
-                    ? mix(left_color(), right_color(), gradient_t(t), 0.4f)
-                    : right_color(0.4f));
+                menu_dual_color()
+                    ? mix(left_color(), right_color(), gradient_t(t),
+                          0.4f * text_opacity)
+                    : right_color(0.4f * text_opacity));
   }
 
   const float text_x = border + padding;
@@ -671,8 +750,8 @@ void update_menu_widgets() {
        ++visible_index) {
     const size_t option_index = state.scroll + visible_index;
     const bool exists = option_index < options.size();
-    const float row_y = body_y + visible_index * row;
-    if (!exists) {
+    const float row_y = rows_y + visible_index * row;
+    if (!exists || text_opacity <= 0.0f) {
       label_text(s_widgets.rows[visible_index], "");
       label_text(s_widgets.values[visible_index], "");
       Set_Property(s_label_class, s_widgets.rows[visible_index], "Opacity", 0.0f);
@@ -694,8 +773,10 @@ void update_menu_widgets() {
     // complete native row state before another theme reuses the same widgets;
     // otherwise only the previously selected row remains visible after a
     // theme switch.
-    Set_Property(s_label_class, s_widgets.rows[visible_index], "Opacity", 1.0f);
-    Set_Property(s_label_class, s_widgets.values[visible_index], "Opacity", 1.0f);
+    Set_Property(s_label_class, s_widgets.rows[visible_index], "Opacity",
+                 text_opacity);
+    Set_Property(s_label_class, s_widgets.values[visible_index], "Opacity",
+                 text_opacity);
     label_angle(s_widgets.rows[visible_index], 0.0f);
     label_angle(s_widgets.values[visible_index], 0.0f);
     const AppendumControlLayout control =
@@ -724,8 +805,16 @@ void update_menu_widgets() {
       display_value = option.value;
     const bool selector = option.type == OptionType::Strings ||
                           option.type == OptionType::ThemeChoice;
-    if (selector)
-      display_value = selector_display_value(option);
+    if (selector) {
+      /* Akari: the plain choice, and "< choice >" on the row the cursor is
+         on, without the arrow that has nothing beyond it */
+      const bool first = option.string_index <= 0;
+      const bool last = option.string_index + 1 >= option.string_count;
+      display_value = !selected
+                          ? option.value
+                          : std::string(first ? "  " : "< ") + option.value +
+                                (last ? "  " : " >");
+    }
     label_text(s_widgets.values[visible_index], display_value);
     const SelectorMarkerLayout selector_layout = update_selector_markers(
         visible_index, selector, option.string_index, option.string_count,
@@ -1328,7 +1417,9 @@ void begin_page_transition(PageTransitionAction action,
     } else if (action == PageTransitionAction::Pop) {
       s_stack.pop_back();
     }
-    if (!s_stack.empty())
+    /* a new page starts at its first row; going back finds the row it was
+       left from, as on the PS3 menus */
+    if (!s_stack.empty() && action == PageTransitionAction::Push)
       reset_page_selection(s_stack.back());
     s_page_transition = PageTransitionState::Idle;
     s_page_transition_started_ms = 0;
@@ -1572,10 +1663,23 @@ void update_animations() {
       (s_animation == AnimationState::Opening ||
        s_animation == AnimationState::Closing);
   float menu_reveal = 1.0f;
+  const bool anomaly = active_menu_theme() == 2;
+  /* Akari: 200 ms for the frame to fade in and the body to grow, then
+     200 ms for the text; closing the other way round */
+  const bool akari = akari_theme();
+  constexpr float kAkariPhaseMs = 200.0f;
+  const bool anomaly_open_close =
+      anomaly && (s_animation == AnimationState::Opening ||
+                  s_animation == AnimationState::Closing);
+  const bool anomaly_opening = s_animation == AnimationState::Opening;
+  const float animation_elapsed =
+      static_cast<float>(now - s_animation_started_ms);
   if (s_animation == AnimationState::Opening) {
     const float duration = active_menu_theme() == 5
                                ? kApparitionOpenDurationMs
-                               : kOpenDurationMs;
+                           : anomaly ? kAnomalySlideMs
+                           : akari   ? kAkariPhaseMs * 2.0f
+                                     : kOpenDurationMs;
     const float t = std::min(1.0f, (now - s_animation_started_ms) /
                                       duration);
     menu_reveal = Easing::Apply(active_menu_animation(), t);
@@ -1584,7 +1688,9 @@ void update_animations() {
   } else if (s_animation == AnimationState::Closing) {
     const float duration = active_menu_theme() == 5
                                ? kApparitionCloseDurationMs
-                               : kCloseDurationMs;
+                           : anomaly ? kAnomalySlideMs
+                           : akari   ? kAkariPhaseMs * 2.0f
+                                     : kCloseDurationMs;
     const float t = std::min(1.0f, (now - s_animation_started_ms) /
                                       duration);
     menu_reveal = 1.0f - Easing::Apply(active_menu_animation(), t);
@@ -1596,10 +1702,37 @@ void update_animations() {
     menu_reveal = 0.0f;
   }
   menu_reveal = std::clamp(menu_reveal, 0.0f, 1.0f);
+  if (akari) {
+    float body = 1.0f, text = 1.0f, frame = menu_reveal;
+    const float first = std::clamp(animation_elapsed / kAkariPhaseMs, 0.0f, 1.0f);
+    const float second = std::clamp(
+        (animation_elapsed - kAkariPhaseMs) / kAkariPhaseMs, 0.0f, 1.0f);
+    if (s_animation == AnimationState::Opening) {
+      body = Easing::Apply(active_menu_animation(), first);
+      text = second;
+      frame = first;
+    } else if (s_animation == AnimationState::Closing) {
+      text = 1.0f - first;
+      body = 1.0f - Easing::Apply(active_menu_animation(), second);
+      frame = 1.0f - second;
+    }
+    menu_reveal = frame;
+    if (body != s_akari_body_reveal || text != s_akari_text_reveal) {
+      s_akari_body_reveal = body;
+      s_akari_text_reveal = text;
+      s_dirty = true;
+    }
+  } else {
+    s_akari_body_reveal = 1.0f;
+    s_akari_text_reveal = 1.0f;
+  }
   const bool page_transition_was_active = page_transition_active();
   const float page_reveal = update_page_transition(now);
   if (apparition_open_close) {
     update_apparition_open_close_animation(menu_reveal);
+  } else if (anomaly_open_close && s_animation != AnimationState::Hidden &&
+             s_animation != AnimationState::Visible) {
+    update_anomaly_open_close(animation_elapsed, anomaly_opening);
   } else {
   // Non-Apparition themes keep a fixed geometry. The old centre-growing clip
   // changed the master width/height during every open and page repaint, which
@@ -1612,9 +1745,13 @@ void update_animations() {
   const float opacity = menu_reveal;
   Set_Property(s_panel_class, s_widgets.master, "Opacity",
                opacity);
-  if (s_widgets.anomaly_controls)
+  if (s_widgets.anomaly_controls) {
     Set_Property(s_panel_class, s_widgets.anomaly_controls, "Opacity",
                  opacity);
+    if (anomaly)
+      AniketosUI::Pui::PanelY(s_pui, s_widgets.anomaly_controls,
+                              s_anomaly_controls_y);
+  }
   }
 
   if (page_transition_was_active || page_transition_active() ||

@@ -413,7 +413,7 @@ bool IPC_Client::Remount(const char *src, const char *dest) {
 bool IPC_Client::GetGameCheats(const std::string &tid, std::string &cheats,
                                const std::string &mode, int pid, int appid,
                                const std::string &process,
-                               uint64_t generation) {
+                               uint64_t generation, bool quiet) {
   if (!require_util("GetGameCheats")) {
     return false;
   }
@@ -432,6 +432,9 @@ bool IPC_Client::GetGameCheats(const std::string &tid, std::string &cheats,
   if (generation != 0) {
     cJSON_AddStringToObject(request, "generation",
                             std::to_string(generation).c_str());
+  }
+  if (quiet) {
+    cJSON_AddBoolToObject(request, "quiet", true);
   }
   std::string json = json_object_str(request);
   if (!IPCSendCommand(BREW_UTIL_GET_GAME_CHEAT, cheats, json)) {

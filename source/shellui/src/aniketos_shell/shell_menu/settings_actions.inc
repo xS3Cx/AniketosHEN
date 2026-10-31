@@ -117,6 +117,25 @@ bool is_system_animation_option(OptionId id) {
          id == OptionId::GlobalThemeAnimationSpeed;
 }
 
+/* Shows the system's pop-up asking to show data that singles this console
+   out. The menu steps aside for it and comes back when it is answered
+   (Tick, by s_confirming); false when there is no dialog: nothing shown. */
+bool ask_reveal(const char *title, const char *message) {
+  SystemDialogs::AlertOptions dialog;
+  dialog.style = SystemDialogs::AlertStyle::Popup;
+  dialog.title = tr(title);
+  dialog.message = tr(message);
+  dialog.positive = tr("vsh.info.reveal.show");
+  dialog.negative = tr("vsh.info.reveal.cancel");
+  std::string failure;
+  Hide();
+  if (SystemDialogs::ShowAlert(dialog, &failure))
+    return true;
+  LOG_WARN("[ANIVSH] reveal dialog: %s", failure.c_str());
+  Show();
+  return false;
+}
+
 bool &toggle_target(OptionId id) {
   switch (id) {
   case OptionId::GlobalThemeEnabled:
@@ -145,28 +164,40 @@ bool &toggle_target(OptionId id) {
   case OptionId::PerformanceOverlayGpu: return g_settings.overlay_gpu;
   case OptionId::PerformanceOverlayRam: return g_settings.overlay_ram;
   case OptionId::PerformanceOverlayIp: return g_settings.overlay_ip;
+  case OptionId::PerformanceOverlayFps: return g_settings.overlay_fps;
+  case OptionId::PerformanceOverlayFan: return g_settings.overlay_fan;
   case OptionId::ShellBackgroundEnabled:
     return g_settings.shell_background_enabled;
   case OptionId::ShellBackgroundForceHome:
     return g_settings.shell_background_force_home;
   case OptionId::ShellBackgroundImageEnabled:
     return g_settings.shell_background_image_enabled;
+  case OptionId::ShellBackgroundPs3Waves:
+    return g_settings.shell_background_ps3_waves;
   case OptionId::ShellTilesCircular: return g_settings.shell_tiles_circular;
-  case OptionId::ShellTilesPS5CaseMockup:
-    return g_settings.shell_tiles_ps5_case_mockup;
   case OptionId::HomeEmulatorsTab: return g_settings.home_tab_emulators;
   case OptionId::HomeTabIcons: return g_settings.home_tab_icons;
   case OptionId::HomeBookmark: return g_settings.home_bookmark;
   case OptionId::OskGlyphKey: return g_settings.osk_glyph_key;
   case OptionId::OskEmoji: return g_settings.osk_emoji;
+  case OptionId::MouseControl: return g_settings.mouse_control_enabled;
   case OptionId::ShellTilesOutlineEnabled:
     return g_settings.shell_tiles_outline_enabled;
   case OptionId::ShellTilesOutlineSyncBackground:
     return g_settings.shell_tiles_outline_sync_background;
   case OptionId::ShellClockEnabled: return g_settings.shell_clock_enabled;
   case OptionId::HomeVideoEnabled: return g_settings.home_video_enabled;
+  case OptionId::HomeBackgroundGlobal:
+    return g_settings.home_background_global;
   case OptionId::HomeVideoSound: return g_settings.home_video_sound;
   case OptionId::HomeImageEnabled: return g_settings.home_image_enabled;
+  case OptionId::CustomFontEnabled: return g_settings.custom_font_enabled;
+  case OptionId::PadSpeakerMirror: return g_settings.pad_speaker_mirror;
+  case OptionId::AccountAvatarEnabled:
+    return g_settings.account_avatar_enabled;
+  case OptionId::DevkitOverlayInfo: return g_settings.devkit_overlay_info;
+  case OptionId::DevkitOverlayExpired:
+    return g_settings.devkit_overlay_expired;
   case OptionId::HomeParticlesEnabled:
     return g_settings.home_particles_enabled;
   case OptionId::ShellClockSeconds:
@@ -229,6 +260,10 @@ int &int_target(OptionId id) {
   case OptionId::ShellBackgroundImageTransition:
     return g_settings.shell_background_image_transition;
   case OptionId::ShellBackgroundParticles:
+    /* a value saved before Bottom/Spread went, read as what it now means */
+    g_settings.shell_background_particles = static_cast<int>(
+        AniketosTheme::NativeShellBackground::ParticleModeFromSetting(
+            g_settings.shell_background_particles));
     return g_settings.shell_background_particles;
   case OptionId::ShellTilesOutlineAnimation:
     return g_settings.shell_tiles_outline_animation;
@@ -236,6 +271,7 @@ int &int_target(OptionId id) {
     return g_settings.shell_tiles_outline_animation_speed;
   case OptionId::HomeParticlesCount: return g_settings.home_particles_count;
   case OptionId::HomeVideoVolume: return g_settings.home_video_volume;
+  case OptionId::PadSpeakerVolume: return g_settings.pad_speaker_volume;
   case OptionId::HomeBackgroundDim: return g_settings.home_bg_dim;
   case OptionId::HomeBackgroundHaze: return g_settings.home_bg_haze;
   case OptionId::HomeBackgroundVignette: return g_settings.home_bg_vignette;
@@ -288,8 +324,12 @@ int selector_index_for(OptionId id) {
     return std::max(0, current_background_index());
   case OptionId::HomeVideoFile:
     return home_video_index();
+  case OptionId::CustomFontFile:
+    return custom_font_index();
   case OptionId::HomeImageFile:
     return home_image_index();
+  case OptionId::AccountAvatarFile:
+    return account_avatar_index();
   case OptionId::OverlayPosition:
     return g_settings.overlay_pos == 2 ? 1 : 0;
   case OptionId::PerformanceOverlayPosition:
@@ -318,6 +358,7 @@ bool is_shell_background_option(OptionId id) {
   case OptionId::ShellBackgroundAnimation:
   case OptionId::ShellBackgroundAnimationSpeed:
   case OptionId::ShellBackgroundImageEnabled:
+  case OptionId::ShellBackgroundPs3Waves:
   case OptionId::ShellBackgroundImageTransition:
   case OptionId::ShellBackgroundReloadImage:
   case OptionId::ShellBackgroundParticles:
@@ -334,7 +375,6 @@ bool is_shell_background_option(OptionId id) {
 bool is_shell_tile_option(OptionId id) {
   switch (id) {
   case OptionId::ShellTilesCircular:
-  case OptionId::ShellTilesPS5CaseMockup:
   case OptionId::ShellTilesOutlineEnabled:
   case OptionId::ShellTilesOutlineSyncBackground:
   case OptionId::ShellTilesOutlineAnimation:
@@ -457,6 +497,8 @@ bool is_overlay_option(OptionId id) {
   case OptionId::PerformanceOverlayGpu:
   case OptionId::PerformanceOverlayRam:
   case OptionId::PerformanceOverlayIp:
+  case OptionId::PerformanceOverlayFps:
+  case OptionId::PerformanceOverlayFan:
     return true;
   case OptionId::PerformanceOverlayPosition:
     return true;
@@ -493,12 +535,16 @@ void set_color(OptionId id, int position) {
     g_settings.vsh_right_b = rgb.b;
     break;
   case OptionId::ColorController:
-    controller_set_custom_channel(false, 0, static_cast<uint8_t>(r));
-    controller_set_custom_channel(false, 1, static_cast<uint8_t>(g));
-    controller_set_custom_channel(false, 2, static_cast<uint8_t>(b));
+  case OptionId::ColorController2: {
+    /* colour 2 is the second colour of the pulse; shown while it moves */
+    const bool second = id == OptionId::ColorController2;
+    controller_set_custom_channel(second, 0, static_cast<uint8_t>(r));
+    controller_set_custom_channel(second, 1, static_cast<uint8_t>(g));
+    controller_set_custom_channel(second, 2, static_cast<uint8_t>(b));
     controller_stop_animation();
-    (void)controller_apply_custom_color(false);
+    (void)controller_apply_custom_color(second);
     break;
+  }
   case OptionId::ColorBackground:
     put(g_settings.shell_background_base_r, g_settings.shell_background_base_g,
         g_settings.shell_background_base_b, r, g, b);
@@ -579,6 +625,35 @@ void change_option(const Option &option, int direction) {
     request_save();
     s_dirty = true;
     return;
+  } else if (option.id == OptionId::AccountAvatarFile) {
+    const std::vector<std::string> &files = AccountAvatar::Files();
+    if (files.empty())
+      return;
+    const int next = std::clamp(account_avatar_index() + direction, 0,
+                                static_cast<int>(files.size()) - 1);
+    const std::string &picked = files[static_cast<size_t>(next)];
+    if (picked == g_settings.account_avatar_path)
+      return;
+    g_settings.account_avatar_path = picked;
+    g_settings.account_avatar_user = AccountAvatar::SignedInUser();
+    AccountAvatar::Refresh();
+    request_save();
+    s_dirty = true;
+    return;
+  } else if (option.id == OptionId::CustomFontFile) {
+    /* fonts copied over FTP show up without a refresh action */
+    const std::vector<std::string> &files =
+        AniketosTheme::CustomFont::Files(true);
+    if (files.empty())
+      return;
+    const int next = std::clamp(custom_font_index() + direction, 0,
+                                static_cast<int>(files.size()) - 1);
+    if (files[static_cast<size_t>(next)] == g_settings.custom_font_path)
+      return;
+    g_settings.custom_font_path = files[static_cast<size_t>(next)];
+    request_save();
+    s_dirty = true;
+    return;
   } else if (option.id == OptionId::HomeVideoFile) {
     const std::vector<std::string> &videos = HomeVideo::Videos();
     if (videos.empty())
@@ -623,16 +698,6 @@ void change_option(const Option &option, int direction) {
     shellui_request_home_reload();
     notify(g_settings.shell_tiles_circular ? "notify.vsh.tiles.circular"
                                            : "notify.vsh.tiles.stock");
-    s_dirty = true;
-    return;
-  } else if (option.id == OptionId::ShellTilesPS5CaseMockup) {
-    g_settings.shell_tiles_ps5_case_mockup =
-        !g_settings.shell_tiles_ps5_case_mockup;
-    request_save();
-    shellui_request_home_reload();
-    notify(g_settings.shell_tiles_ps5_case_mockup
-               ? "notify.vsh.tiles.ps5_case_mockup"
-               : "notify.vsh.tiles.ps5_case_stock");
     s_dirty = true;
     return;
   } else if (option.type == OptionType::ColorSlider) {
@@ -747,8 +812,10 @@ void change_option(const Option &option, int direction) {
   if (is_shell_ui_panel_option(option.id))
     g_settings.shell_ui_panels_enabled = true;
   if (g_settings.vsh_global_theme_enabled &&
-      is_global_theme_owned_option(option.id))
+      is_global_theme_owned_option(option.id)) {
     g_settings.vsh_global_theme_enabled = false;
+    notify("notify.vsh.global_theme.off");
+  }
   Telemetry::SetRefreshSeconds(g_settings.overlay_refresh_seconds);
   if (is_overlay_option(option.id))
     s_overlay_dirty = true;
@@ -773,11 +840,10 @@ void reapply_customization() {
   shellui_request_presence_reload(1500, false);
 }
 
-/* Back to the defaults: every [shell_menu] setting (but the screen format,
-   which the menu does not offer) and the overlay settings the menu edits. */
+/* Back to the defaults: every [shell_menu] setting and the overlay settings
+   the menu edits. */
 void reset_vsh_settings() {
   const onion::Settings defaults{};
-  const int screen_format = g_settings.screen_format;
 #define ONION_SHELL_SETTING_BOOL(name, def) g_settings.name = defaults.name;
 #define ONION_SHELL_SETTING_INT(name, def) g_settings.name = defaults.name;
 #define ONION_SHELL_SETTING_FLOAT(name, def) g_settings.name = defaults.name;
@@ -787,7 +853,6 @@ void reset_vsh_settings() {
 #undef ONION_SHELL_SETTING_INT
 #undef ONION_SHELL_SETTING_FLOAT
 #undef ONION_SHELL_SETTING_STRING
-  g_settings.screen_format = screen_format;
   g_settings.overlay_background = defaults.overlay_background;
   g_settings.all_cpu_usage = defaults.all_cpu_usage;
   g_settings.overlay_enabled = defaults.overlay_enabled;
@@ -803,6 +868,18 @@ void reset_vsh_settings() {
   reapply_customization();
   Telemetry::SetRefreshSeconds(g_settings.overlay_refresh_seconds);
   s_dirty = true;
+}
+
+/* The first press of an action that cannot be taken back only asks for a
+   second one. */
+bool confirmed(const Option &option) {
+  if (s_armed_option == option.id) {
+    s_armed_option = OptionId::None;
+    return true;
+  }
+  s_armed_option = option.id;
+  notify("notify.vsh.confirm_again", option.title.c_str());
+  return false;
 }
 
 void activate(const Option &option) {
@@ -821,21 +898,28 @@ void activate(const Option &option) {
                theme_display_name(selected_theme));
     }
   } else if (option.type == OptionType::Toggle) {
+    /* The DevKit info panel stays on screen with the IP and MAC addresses,
+       host name and serial number: switched on only once that is said. */
+    if (option.id == OptionId::DevkitOverlayInfo &&
+        !g_settings.devkit_overlay_info) {
+      if (ask_reveal("vsh.devkit.reveal.title", "vsh.devkit.reveal.message"))
+        s_confirming = OptionId::DevkitOverlayInfo;
+      return;
+    }
     bool &target = toggle_target(option.id);
     target = !target;
-    if (option.id == OptionId::ShellTilesCircular ||
-        option.id == OptionId::ShellTilesPS5CaseMockup) {
+    /* the game bar shows the average or every core, not both */
+    if (target && option.id == OptionId::PerformanceOverlayCpu)
+      g_settings.all_cpu_usage = false;
+    if (target && option.id == OptionId::PerformanceOverlayAllCpuUsage)
+      g_settings.overlay_cpu = false;
+    if (option.id == OptionId::ShellTilesCircular) {
       // The toggle path is used by Cross/Activate.  The old implementation
       // only reloaded HomeUI from change_option(), so the setting changed in
       // memory while the already-mounted game tiles stayed circular.
       request_save();
       shellui_request_home_reload();
-      if (option.id == OptionId::ShellTilesPS5CaseMockup) {
-        notify(target ? "notify.vsh.tiles.ps5_case_mockup"
-                      : "notify.vsh.tiles.ps5_case_stock");
-      } else {
-        notify(target ? "notify.vsh.tiles.circular" : "notify.vsh.tiles.stock");
-      }
+      notify(target ? "notify.vsh.tiles.circular" : "notify.vsh.tiles.stock");
       s_dirty = true;
       return;
     }
@@ -876,6 +960,11 @@ void activate(const Option &option) {
       request_save();
       LOG_INFO("[OSK] emoji enabled=%d", target ? 1 : 0);
     }
+    if (option.id == OptionId::MouseControl) {
+      /* MouseControl::Tick follows the setting */
+      request_save();
+      LOG_INFO("[MOUSE] enabled=%d", target ? 1 : 0);
+    }
     if (option.id == OptionId::CustomizationEnabled) {
       request_save();
       reapply_customization();
@@ -897,6 +986,23 @@ void activate(const Option &option) {
       if (target && HomeVideo::Images(true).empty())
         notify("notify.vsh.home_image.none");
     }
+    if (option.id == OptionId::AccountAvatarEnabled) {
+      /* The first file is the one shown until another is chosen. */
+      const std::vector<std::string> &files = AccountAvatar::Files(true);
+      if (target && g_settings.account_avatar_path.empty() && !files.empty())
+        g_settings.account_avatar_path = files.front();
+      if (target)
+        g_settings.account_avatar_user = AccountAvatar::SignedInUser();
+      if (target && files.empty())
+        notify("notify.vsh.account_avatar.none");
+      AccountAvatar::Refresh();
+    }
+    if (option.id == OptionId::DevkitOverlayInfo ||
+        option.id == OptionId::DevkitOverlayExpired)
+      DevkitOverlay::Refresh();
+    if (option.id == OptionId::CustomFontEnabled && target &&
+        AniketosTheme::CustomFont::Files(true).empty())
+      notify("notify.vsh.font.none");
     if (option.id == OptionId::HomeVideoEnabled) {
       /* An explicit switch-on also retries after a failure or a crash. */
       HomeVideo::Restart();
@@ -931,8 +1037,10 @@ void activate(const Option &option) {
     }
     if (option.id != OptionId::GlobalThemeEnabled &&
         g_settings.vsh_global_theme_enabled &&
-        is_global_theme_owned_option(option.id))
+        is_global_theme_owned_option(option.id)) {
       g_settings.vsh_global_theme_enabled = false;
+      notify("notify.vsh.global_theme.off");
+    }
   } else if (option.type == OptionType::Strings ||
              option.type == OptionType::SliderInt ||
              option.type == OptionType::SliderFloat ||
@@ -972,6 +1080,11 @@ void activate(const Option &option) {
              HomeVideo::Images(true).size());
       s_dirty = true;
       break;
+    case OptionId::AccountAvatarRefresh:
+      notify("notify.vsh.account_avatar.found_count",
+             AccountAvatar::Files(true).size());
+      s_dirty = true;
+      break;
     case OptionId::HomeVideoRefresh:
       notify("notify.vsh.home_video.found_count",
              HomeVideo::Videos(true).size());
@@ -1006,26 +1119,11 @@ void activate(const Option &option) {
         s_show_serial = false;
         break;
       }
-      {
-        /* Asked every time: the serial number and the two identifiers single
-           this console out, and are not to end up in a screenshot or a
-           stream by accident. The menu steps aside for the system's dialog
-           and comes back when it is answered (Tick). */
-        SystemDialogs::AlertOptions dialog;
-        dialog.style = SystemDialogs::AlertStyle::Popup;
-        dialog.title = tr("vsh.info.reveal.title");
-        dialog.message = tr("vsh.info.reveal.message");
-        dialog.positive = tr("vsh.info.reveal.show");
-        dialog.negative = tr("vsh.info.reveal.cancel");
-        std::string failure;
-        Hide();
-        if (SystemDialogs::ShowAlert(dialog, &failure)) {
-          s_confirming_reveal = true;
-        } else {
-          LOG_WARN("[ANIVSH] reveal dialog: %s", failure.c_str());
-          Show(); /* no dialog, no reveal */
-        }
-      }
+      /* Asked every time: the serial number and the two identifiers single
+         this console out, and are not to end up in a screenshot or a
+         stream by accident. */
+      if (ask_reveal("vsh.info.reveal.title", "vsh.info.reveal.message"))
+        s_confirming = OptionId::RevealSerialNumber;
       return;
     case OptionId::ControllerRestore:
       controller_stop_animation();
@@ -1082,6 +1180,8 @@ void activate(const Option &option) {
         notify("notify.controller.leds_failed");
       break;
     case OptionId::ResetConfig:
+      if (!confirmed(option))
+        break;
       reset_vsh_settings();
       s_overlay_dirty = true;
       (void)flush_save();
@@ -1136,26 +1236,27 @@ void activate(const Option &option) {
         notify("notify.vsh.power.failed");
       break;
     case OptionId::RebootConsole:
+      if (!confirmed(option))
+        break;
       (void)flush_save();
       Hide();
       if (sceSystemServiceRequestReboot() != 0)
         notify("notify.vsh.power.failed");
       break;
     case OptionId::PowerOff:
+      if (!confirmed(option))
+        break;
       (void)flush_save();
       Hide();
       if (sceSystemServiceRequestPowerOff() != 0)
         notify("notify.vsh.power.failed");
       break;
     case OptionId::UnloadStack:
-      if (!s_unload_armed) {
-        s_unload_armed = true;
-        notify("notify.vsh.unload.confirm");
-      } else {
-        LOG_INFO("[ANIVSH:AKARI] confirmed stack shutdown");
-        if (AniketosRuntime::service_available(false, "stack-shutdown"))
-          IPC_Client::getInstance(false).ShutdownStack();
-      }
+      if (!confirmed(option))
+        break;
+      LOG_INFO("[ANIVSH:MENU] confirmed stack shutdown");
+      if (AniketosRuntime::service_available(false, "stack-shutdown"))
+        IPC_Client::getInstance(false).ShutdownStack();
       break;
     default:
       break;
@@ -1168,7 +1269,7 @@ void activate(const Option &option) {
   if (option.type != OptionType::Submenu)
     request_save();
   s_dirty = true;
-  LOG_INFO("[ANIVSH:AKARI] select page=%s option=%s",
+  LOG_INFO("[ANIVSH:MENU] select page=%s option=%s",
            page_title(s_stack.back().page), option.title.c_str());
 }
 

@@ -107,7 +107,8 @@ public:
   bool Remount(const char *src, const char *dest);
   bool GetGameCheats(const std::string &tid, std::string &cheats,
                      const std::string &mode, int pid = 0, int appid = 0,
-                     const std::string &process = {}, uint64_t generation = 0);
+                     const std::string &process = {}, uint64_t generation = 0,
+                     bool quiet = false);
   bool ToggleGameCheat(const std::string &session_id,
                        const std::string &cheat_key, bool enabled,
                        std::string &cheat_status);

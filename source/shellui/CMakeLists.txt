@@ -73,9 +73,10 @@ set(CMAKE_C_FLAGS_RELEASE "-Os -DNDEBUG")
 set(CMAKE_CXX_FLAGS_RELEASE "-Os -DNDEBUG")
 
 target_sources(${PROJECT_NAME} PRIVATE ${SrcFiles} ${ShellMenuSrc} "${ANIKETOS_ICON_ASSEMBLY}")
-add_dependencies(${PROJECT_NAME} shellui_i18n_catalog onion_version onion_ipc onion_settings onion_detour onion_proc onion_platform onion_ready onion_plugin_ui onion_plugin_bridge)
+add_dependencies(${PROJECT_NAME} shellui_i18n_catalog onion_version onion_ipc onion_settings onion_detour onion_proc onion_platform onion_ready onion_plugin_ui onion_plugin_bridge onion_kbm onion_kbm_profile)
 onion_target_debug_define(${PROJECT_NAME})
 target_include_directories(${PROJECT_NAME} PRIVATE
+	"${PROJECT_ROOT}/libonion_kbm/include"
 	"${D_CWD}/include"
 	"${I18N_GENERATED_DIR}"
 	"${ONIONHEN_THIRD_PARTY_DIR}/cjson"
@@ -91,7 +92,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 	"${PROJECT_ROOT}/include"
 )
 target_link_directories	(${PROJECT_NAME} PUBLIC "${ONIONHEN_PS5_STUB_DIR}")
-target_link_libraries	(${PROJECT_NAME} PUBLIC onion_payload onion_detour onion_proc onion_platform onion_ipc onion_settings onion_ready onion_plugin_ui onion_plugin_bridge SceRegMgr SceSystemService SceSysCore SceUserService SceNet SceNetCtl ScePad)
+target_link_libraries	(${PROJECT_NAME} PUBLIC onion_kbm_profile onion_kbm onion_payload onion_detour onion_proc onion_platform onion_ipc onion_settings onion_ready onion_plugin_ui onion_plugin_bridge SceRegMgr SceSystemService SceSysCore SceUserService SceNet SceNetCtl ScePad)
 
 # Add post-build command
 onion_strip_debug(${PROJECT_NAME})

@@ -9,6 +9,12 @@ inline constexpr unsigned kListRepeatMs = 125;
 
 bool Start();
 bool ConsumeToggleRequest();
+/** L1+L3+R3 was pressed (the in-game cheats menu). */
+bool ConsumeCheatsToggleRequest();
+/** The last read came back with the controller taken by the system. */
+bool IsIntercepted();
+/** Buttons held as last read (native libScePad bits). */
+uint32_t HeldButtons();
 uint32_t ConsumeButtonsDown();
 /** Which of the buttons just consumed came from holding a direction rather
  * than a new press. Call right after ConsumeButtonsDown(). */

@@ -9,6 +9,7 @@
 #include "ps5/kernel.h"
 
 #include <onion/distribution.h>
+#include <onion/detour.h>
 #include <onion/log.h>
 #include <onion/settings.hpp>
 
@@ -427,6 +428,15 @@ bool enum_value(MonoClass *type, const char *member, int32_t *value) {
   return true;
 }
 
+struct UIColor {
+  float r, g, b, a;
+  int32_t color_space;
+};
+static_assert(sizeof(UIColor) == 20);
+
+uint32_t s_image_widget = 0; /* strong: the still image (below) */
+/* put the layers in again above the video (see watch()) */
+bool s_raise_effects = false;
 enum class State { Idle, Waiting, Playing, Failed, Off, Hidden };
 State s_state = State::Idle;
 uint32_t s_player = 0; /* strong handles */
@@ -437,10 +447,15 @@ int s_failures = 0;
 int s_played_checks = 0;
 int s_start_checks = 0; /* checks in Playing before the player played */
 int s_hidden_checks = 0;
-int s_no_root_since = -1; /* frame Home's root went missing, or -1 */
-bool s_no_root_noted = false;
 int32_t s_last_status = -1;
 std::string s_current;      /* the file being played */
+/* Where the video was when Home went out of sight, in the player's own
+   units; the player built when Home returns starts there, so the video goes
+   on instead of starting over. 0 to start from the beginning. */
+uint64_t s_resume_at = 0;
+/* The last position read while playing, kept for when the player goes with
+   its scene before it can be asked (Settings closed). */
+uint64_t s_last_position = 0;
 bool s_sound_applied = false;
 int s_volume_applied = -1;
 std::vector<std::string> s_videos;
@@ -451,6 +466,9 @@ int32_t s_status_error = -1;
 int32_t s_status_playing = -1;
 int32_t s_status_at_end = -1;
 int32_t s_status_stopped = -1;
+int32_t s_status_paused = -1;
+/* checks the player has stayed paused while the stage is in sight */
+int s_paused_checks = 0;
 
 MonoObject *target(uint32_t handle) {
   return handle ? mono_gchandle_get_target(handle) : nullptr;
@@ -482,6 +500,14 @@ void teardown() {
   release(s_player);
   s_last_status = -1;
   s_hidden_checks = 0;
+}
+
+/* The playing position, or 0 when the player does not say. */
+uint64_t player_position(MonoObject *player) {
+  MonoObject *value = nullptr;
+  if (!call(player, "GetPosition", 0, nullptr, &value) || !value)
+    return 0;
+  return *static_cast<uint64_t *>(mono_object_unbox(value));
 }
 
 int32_t player_status(MonoObject *player) {
@@ -629,6 +655,7 @@ bool build(MonoObject *root) {
   enum_value(status_class, "Playing", &s_status_playing);
   enum_value(status_class, "PausedAtEnd", &s_status_at_end);
   enum_value(status_class, "Stopped", &s_status_stopped);
+  enum_value(status_class, "Paused", &s_status_paused);
 
   /* Everything but the address is left as Sony's defaults. */
   char uri[96];
@@ -654,6 +681,14 @@ bool build(MonoObject *root) {
   const bool uhd = sized && (video_width > 1920 || video_height > 1080);
   set_option(create, player_class, "coreResourceType", "CoreResourceType",
              uhd ? "UHD" : "FullHD");
+  /* Paused while its scene is out of sight and going on when it is back,
+     so the player can stay through a visit to Settings or a game instead of
+     being built anew (which takes a moment, with Home's own background
+     showing meanwhile). */
+  set_option(create, player_class, "behaviorTypeOnInactive",
+             "BehaviorTypeOnInactive", "Pause");
+  set_option(create, player_class, "behaviorTypeOnActive",
+             "BehaviorTypeOnActive", "Play");
   LOG_INFO("[HOMEVIDEO] video %dx%d%s; decoder share %s", video_width,
            video_height, sized ? "" : " (size unknown)", uhd ? "UHD" : "FullHD");
 
@@ -684,6 +719,10 @@ bool build(MonoObject *root) {
   float height = 1080.0f;
   float_property(root, "get_Width", &width);
   float_property(root, "get_Height", &height);
+  if (width < 1.0f || height < 1.0f) { /* a layer may not say */
+    width = 1920.0f;
+    height = 1080.0f;
+  }
   void *width_arguments[1] = {&width};
   void *height_arguments[1] = {&height};
   call(view, "set_Width", 1, width_arguments);
@@ -710,14 +749,24 @@ bool build(MonoObject *root) {
     return false;
   call(player, "SetLoop", 1, yes_arguments);
   apply_sound(player, g_settings.home_video_sound);
-  if (!put_first(root, view) || !call(view, "Play", 0))
+  /* from where it was when Home went away, if it did */
+  uint64_t position = s_resume_at;
+  s_resume_at = 0;
+  s_last_position = position;
+  void *position_arguments[1] = {&position};
+  if (!put_first(root, view) ||
+      !(position ? call(view, "Play", 1, position_arguments)
+                 : call(view, "Play", 0)))
     return false;
-  LOG_INFO("[HOMEVIDEO] started uri=%s size=%.0fx%.0f", uri, width, height);
+  LOG_INFO("[HOMEVIDEO] started uri=%s size=%.0fx%.0f at %llu", uri, width,
+           height, static_cast<unsigned long long>(position));
   return true;
 }
 
 void fail(const char *why) {
   teardown();
+  s_resume_at = 0; /* perhaps the position it failed at */
+  s_last_position = 0;
   ++s_failures;
   LOG_ERROR("[HOMEVIDEO] %s (failure %d)", why, s_failures);
   /* it failed without taking ShellUI down */
@@ -730,46 +779,214 @@ void fail(const char *why) {
   s_retry_at = s_frame + 300 * s_failures;
 }
 
-/* Home's root, or null. The video and the picture both hang there and wait
-   for it without a word; it is found through the system clock, so a clock
-   ShellClock does not recognise leaves it unknown. Said in the log once it
-   has been missing for about 10 s. */
-MonoObject *home_root() {
-  MonoObject *root = ShellClock::GetHomeRoot();
-  if (root && ShellClock::IsWidgetDisposed(root))
-    root = nullptr;
-  if (root) {
-    if (s_no_root_noted)
-      LOG_INFO("[HOMEVIDEO] Home's root found");
-    s_no_root_since = -1;
-    s_no_root_noted = false;
-    return root;
-  }
-  if (s_no_root_since < 0) {
-    s_no_root_since = s_frame;
-  } else if (!s_no_root_noted && s_frame - s_no_root_since >= 600) {
-    float opacity = 0.0f;
-    LOG_WARN("[HOMEVIDEO] Home's root not found for 10 s; the video and the "
-             "picture wait for it (system clock known=%d)",
-             ShellClock::GetNativeClockOpacity(&opacity) ? 1 : 0);
-    s_no_root_noted = true;
-  }
-  return nullptr;
+/* ---- the stage ---------------------------------------------------------
+   The video and the picture are not in Home's scene. The system draws the
+   background of Home and of the system apps (Settings and the others) in a
+   scene of its own, BGLayerPlugin (Sce.Vsh.ShellUI.BGLayer), which stays
+   up while those screens fade and slide over it. A panel of ours appended
+   to its root holds the video, the picture and the effects, above the
+   system's own images, so the video plays on through every change of
+   screen instead of going with Home. (That is where LiveShell puts its
+   video too.) ShellUI outlives a reload of this module, so a panel an
+   earlier instance left is removed first. */
+constexpr const char *kStageName = "id_aniketos_home_stage";
+uint32_t s_stage = 0; /* strong: the panel */
+int s_stage_retry_at = 0;
+
+MonoObject *background_root() {
+  MonoImage *image = getDLLimage("Sce.Vsh.ShellUI.BGLayer.dll");
+  MonoClass *plugin_class =
+      image ? mono_class_from_name(image, "Sce.Vsh.ShellUI.BGLayer",
+                                   "BGLayerPlugin")
+            : nullptr;
+  MonoObject *plugin =
+      plugin_class ? Get_Property<MonoObject *>(plugin_class, nullptr, "Instance")
+                   : nullptr;
+  MonoObject *root = object_property(plugin, "get_RootWidget");
+  return root && !ShellClock::IsWidgetDisposed(root) ? root : nullptr;
 }
 
-/* Home's scene fades out when something else takes the screen. */
-bool home_shown(MonoObject *root) {
-  float opacity = 1.0f;
-  return !float_property(root, "get_FinalOpacity", &opacity) ||
-         opacity > 0.05f;
+void remove_stale(MonoObject *root) {
+  MonoObject *child = object_property(root, "get_FirstChild");
+  for (int guard = 0; child && guard < 64; ++guard) {
+    MonoObject *next = object_property(child, "get_NextSibling");
+    if (ShellClock::DebugPropText(child, "Name") == kStageName) {
+      call(child, "RemoveFromParent", 0);
+      call(child, "Dispose", 0);
+      LOG_INFO("[HOMEVIDEO] a stage of an earlier instance removed");
+    }
+    child = next;
+  }
 }
+
+MonoObject *stage() {
+  MonoObject *panel = target(s_stage);
+  if (panel && !ShellClock::IsWidgetDisposed(panel))
+    return panel;
+  if (panel)
+    AniketosUI::Pui::Disown(panel);
+  release(s_stage);
+  if (s_frame < s_stage_retry_at)
+    return nullptr;
+  MonoObject *root = background_root();
+  MonoImage *pui = getDLLimage("Sce.PlayStation.PUI.dll");
+  MonoClass *panel_class =
+      pui ? mono_class_from_name(pui, "Sce.PlayStation.PUI.UI3", "Panel")
+          : nullptr;
+  if (!root || !panel_class)
+    return nullptr; /* ShellUI still starting */
+  remove_stale(root);
+  panel = make(panel_class);
+  float width = 0.0f, height = 0.0f;
+  float_property(root, "get_Width", &width);
+  float_property(root, "get_Height", &height);
+  if (width < 1.0f || height < 1.0f) {
+    width = 1920.0f;
+    height = 1080.0f;
+  }
+  void *width_arguments[1] = {&width};
+  void *height_arguments[1] = {&height};
+  void *name_arguments[1] = {mono_string_new(mono_domain_get(), kStageName)};
+  bool no = false;
+  void *focus_arguments[1] = {&no};
+  void *panel_arguments[1] = {panel};
+  if (!panel || !call(panel, "set_Width", 1, width_arguments) ||
+      !call(panel, "set_Height", 1, height_arguments) ||
+      !call(panel, "set_Name", 1, name_arguments) ||
+      (method_of(panel_class, "set_Focusable", 1) &&
+       !call(panel, "set_Focusable", 1, focus_arguments)) ||
+      !call(root, "AppendChild", 1, panel_arguments)) {
+    LOG_ERROR("[HOMEVIDEO] no stage in the background layer");
+    s_stage_retry_at = s_frame + 600;
+    return nullptr;
+  }
+  /* nothing of its own on screen: the video and the picture are its
+     children */
+  UIColor clear{0.0f, 0.0f, 0.0f, 0.0f, 0};
+  void *color_arguments[1] = {&clear};
+  call(panel, "set_BackgroundColor", 1, color_arguments);
+  AniketosUI::Pui::Adopt(panel); /* ours: not for the system-panel theme */
+  s_stage = mono_gchandle_new(panel, /*pinned=*/1);
+  LOG_INFO("[HOMEVIDEO] stage added to the background layer (%.0fx%.0f)",
+           width, height);
+  return panel;
+}
+
+/* The stage shows while the focus is on Home (the TopMenu layer), and with
+   home_background_global on a system app (the ShellApp layer: Settings and
+   the others) as well; a game in front (the Game layer, or none) must
+   never have our video over it. The focus is the layer manager's own
+   (LayerManager.s_curFocusLayer), read by name. The stage fades: out over
+   about a second (quicker for a game), in over half a second, as Home's
+   own screens do, so nothing cuts. Hidden all the way it is made
+   invisible as well, which pauses the player with it. */
+enum class Focus { Unknown, Game, TopMenu, ShellApp };
+MonoClassField *s_focus_field = nullptr;
+MonoVTable *s_focus_vtable = nullptr;
+int32_t s_focus_game = -1, s_focus_top_menu = -1, s_focus_shell_app = -1;
+bool s_focus_resolved = false;
+
+Focus focus_layer() {
+  if (!s_focus_resolved) {
+    s_focus_resolved = true;
+    MonoImage *app_system = getDLLimage("Sce.Vsh.ShellUI.AppSystem.dll");
+    MonoClass *manager =
+        app_system ? mono_class_from_name(app_system, "Sce.Vsh.ShellUI.AppSystem",
+                                          "LayerManager")
+                   : nullptr;
+    MonoClass *layers = nested(manager, "FocusLayer");
+    s_focus_field =
+        manager ? mono_class_get_field_from_name(manager, "s_curFocusLayer")
+                : nullptr;
+    s_focus_vtable =
+        s_focus_field ? mono_class_vtable(mono_domain_get(), manager) : nullptr;
+    const bool ok = s_focus_vtable &&
+                    enum_value(layers, "Game", &s_focus_game) &&
+                    enum_value(layers, "TopMenu", &s_focus_top_menu) &&
+                    enum_value(layers, "ShellApp", &s_focus_shell_app);
+    LOG_INFO("[HOMEVIDEO] focus layer field=%d values=%d", s_focus_field ? 1 : 0,
+             ok ? 1 : 0);
+    if (!ok)
+      s_focus_vtable = nullptr;
+  }
+  if (!s_focus_vtable)
+    return Focus::Unknown;
+  int32_t value = -1;
+  mono_field_static_get_value(s_focus_vtable, s_focus_field, &value);
+  if (value == s_focus_top_menu)
+    return Focus::TopMenu;
+  if (value == s_focus_shell_app)
+    return Focus::ShellApp;
+  if (value == s_focus_game)
+    return Focus::Game;
+  return Focus::Unknown;
+}
+
+bool s_shown = true;      /* the stage is (or is on its way to be) on screen */
+float s_stage_opacity = 1.0f;
+bool s_stage_visible = true;
+Focus s_focus = Focus::Unknown;
+int s_focus_frame = 0;    /* frame the focus last changed */
+
+/* Every frame. */
+void tick_stage() {
+  MonoObject *panel = target(s_stage);
+  if (!panel || ShellClock::IsWidgetDisposed(panel))
+    return;
+  const Focus focus = focus_layer();
+  if (focus != s_focus) {
+    LOG_INFO("[HOMEVIDEO] focus layer %d -> %d", static_cast<int>(s_focus),
+             static_cast<int>(focus));
+    s_focus = focus;
+    s_focus_frame = s_frame;
+  }
+  /* Unknown (the field not found) shows nowhere but Home... with no field
+     at all, Home only, as before */
+  const bool wanted =
+      focus == Focus::TopMenu ||
+      (focus == Focus::ShellApp && AniketosTheme::CustomizationOn() &&
+       g_settings.home_background_global) ||
+      (focus == Focus::Unknown && !s_focus_vtable &&
+       [] { MonoObject *home = ShellClock::GetHomeRoot();
+            float opacity = 1.0f;
+            return home && (!float_property(home, "get_FinalOpacity", &opacity) ||
+                            opacity > 0.05f); }());
+  s_shown = wanted;
+  float opacity = s_stage_opacity;
+  if (wanted) {
+    opacity = std::min(1.0f, opacity + 1.0f / 30.0f);
+  } else if (focus == Focus::ShellApp) {
+    /* Settings is drawn a few frames after the focus moves */
+    if (s_frame - s_focus_frame >= 9)
+      opacity = std::max(0.0f, opacity - 1.0f / 60.0f);
+  } else {
+    opacity = std::max(0.0f, opacity - 1.0f / 45.0f);
+  }
+  if (opacity == s_stage_opacity && (opacity > 0.0f) == s_stage_visible)
+    return;
+  bool visible = opacity > 0.0f;
+  if (visible != s_stage_visible) {
+    void *arguments[1] = {&visible};
+    call(panel, "set_Visible", 1, arguments);
+    s_stage_visible = visible;
+    LOG_INFO("[HOMEVIDEO] stage %s", visible ? "shown" : "hidden");
+  }
+  void *arguments[1] = {&opacity};
+  call(panel, "set_Opacity", 1, arguments);
+  s_stage_opacity = opacity;
+}
+
+/* Checks (twice a second) out of sight before the player is let go. */
+constexpr int kReleaseAfterChecks = 40;
 
 void watch(MonoObject *root) {
   MonoObject *view = target(s_view);
   MonoObject *player = target(s_player);
   if (!view || !player || ShellClock::IsWidgetDisposed(view)) {
     /* Home rebuilt its scene and took the widget with it */
-    LOG_INFO("[HOMEVIDEO] the view is gone; building it again");
+    LOG_INFO("[HOMEVIDEO] the view is gone; building it again at %llu",
+             static_cast<unsigned long long>(s_last_position));
+    s_resume_at = s_last_position;
     teardown();
     s_state = State::Waiting;
     s_retry_at = s_frame + 30;
@@ -787,6 +1004,11 @@ void watch(MonoObject *root) {
   if (status != s_last_status) {
     LOG_INFO("[HOMEVIDEO] status %d -> %d requests=%d", s_last_status, status,
              s_requests.load());
+    /* Once the picture is on, the view is drawn on top of its siblings
+       until they are put in again (LiveShell's dim panel is raised the
+       same way): the effects go back above it. */
+    if (status == s_status_playing)
+      s_raise_effects = true;
     s_last_status = status;
   }
   if (status >= 0 && status == s_status_error) {
@@ -794,19 +1016,27 @@ void watch(MonoObject *root) {
     return;
   }
 
-  /* Not while Home is out of sight. The decoder is a shared resource, and a
-     view that sat through its scene being hidden (Settings, a game) comes
-     back playing but without a picture; so the player is dropped when Home
-     goes away and built anew when it returns, which is the start-up path. */
-  const bool shown = home_shown(root);
-  s_hidden_checks = shown ? 0 : s_hidden_checks + 1;
-  if (!shown && s_hidden_checks >= 3) {
-    LOG_INFO("[HOMEVIDEO] Home is hidden; player released");
+  if (status == s_status_playing)
+    s_last_position = player_position(player);
+  /* Hidden (a game in front), it pauses with the stage and goes on when
+     that shows again. Hidden for long, it is let go, as the decoder is a
+     shared resource, and built anew from where it was when the stage shows. */
+  if (s_shown && s_hidden_checks > 0)
+    LOG_INFO("[HOMEVIDEO] in sight again (status %d)", status);
+  s_hidden_checks = s_shown ? 0 : s_hidden_checks + 1;
+  if (s_hidden_checks == 1)
+    LOG_INFO("[HOMEVIDEO] out of sight at %llu (status %d)",
+             static_cast<unsigned long long>(s_last_position), status);
+  if (s_hidden_checks >= kReleaseAfterChecks) {
+    s_resume_at = s_last_position;
+    LOG_INFO("[HOMEVIDEO] out of sight for a while; player released at %llu",
+             static_cast<unsigned long long>(s_resume_at));
     teardown();
     unlink(kPending); /* an interrupted start, not a failed one */
     s_state = State::Hidden;
     return;
   }
+  const bool shown = s_shown;
   /* A player that never gets as far as playing (a file its decoder will not
      take, a decoder another app holds, a stream it never asks for) has failed
      too, without an error, so the picture can show. */
@@ -826,6 +1056,21 @@ void watch(MonoObject *root) {
     uint64_t start = 0;
     void *arguments[1] = {&start};
     call(player, "Play", 1, arguments);
+  }
+
+  /* In sight but paused by the system: the user selection screen makes
+     ShellUI's players inactive (BehaviorTypeOnInactive has no "go on").
+     Play on from where it stopped, after a second, then every 4 s. */
+  if (shown && status >= 0 && status == s_status_paused) {
+    if (++s_paused_checks % 8 == 2) {
+      uint64_t position = s_last_position;
+      void *arguments[1] = {&position};
+      LOG_INFO("[HOMEVIDEO] paused while in sight; playing on at %llu",
+               static_cast<unsigned long long>(position));
+      call(view, "Play", 1, arguments);
+    }
+  } else {
+    s_paused_checks = 0;
   }
 
   if (status == s_status_playing && s_played_checks >= 0 &&
@@ -926,7 +1171,6 @@ std::vector<std::string> s_images;
 bool s_images_scanned = false;
 int s_images_scanned_frame = 0;
 std::string s_image_current; /* the file on screen */
-uint32_t s_image_widget = 0; /* strong handle */
 
 void scan_images() {
   (void)mkdir(ONION_DIST_USER_DATA_ROOT "/ShellUI", 0777);
@@ -1019,6 +1263,10 @@ bool build_image(MonoObject *root, const std::string &path) {
   float height = 1080.0f;
   float_property(root, "get_Width", &width);
   float_property(root, "get_Height", &height);
+  if (width < 1.0f || height < 1.0f) { /* a layer may not say */
+    width = 1920.0f;
+    height = 1080.0f;
+  }
   void *width_arguments[1] = {&width};
   void *height_arguments[1] = {&height};
   void *name_arguments[1] = {
@@ -1057,7 +1305,7 @@ void tick_image(bool video_shown) {
     drop_image();
     if (file.empty())
       return;
-    MonoObject *root = home_root();
+    MonoObject *root = stage();
     if (!root)
       return;
     /* remembered even when it fails, so a bad file is not retried forever */
@@ -1075,7 +1323,8 @@ void tick_image(bool video_shown) {
   }
   if (!widget)
     return;
-  MonoObject *root = home_root();
+  /* follows the screen it belongs to, as the video does */
+  MonoObject *root = stage();
   if (root && (object_property(widget, "get_Parent") != root ||
        object_property(root, "get_FirstChild") != widget))
     put_first(root, widget);
@@ -1096,11 +1345,6 @@ constexpr const char *kEffectNames[kEffectCount] = {"dim", "haze", "vignette",
 constexpr float kDimOpacity = 0.85f;
 constexpr float kHazeOpacity = 0.5f;
 
-struct UIColor {
-  float r, g, b, a;
-  int32_t color_space;
-};
-static_assert(sizeof(UIColor) == 20);
 
 struct EffectLayer {
   uint32_t widget = 0; /* strong handle */
@@ -1148,6 +1392,10 @@ MonoObject *build_effect(MonoObject *root, int effect) {
   float height = 1080.0f;
   float_property(root, "get_Width", &width);
   float_property(root, "get_Height", &height);
+  if (width < 1.0f || height < 1.0f) { /* a layer may not say */
+    width = 1920.0f;
+    height = 1080.0f;
+  }
   void *width_arguments[1] = {&width};
   void *height_arguments[1] = {&height};
   char name[48];
@@ -1217,7 +1465,7 @@ void place_above(MonoObject *root, MonoObject *below, MonoObject *widget) {
 /* Twice a second: a layer for each effect turned up, in order right above
    `base`, the video or the picture; none without one. */
 void tick_effects(MonoObject *base) {
-  MonoObject *root = ShellClock::GetHomeRoot();
+  MonoObject *root = base ? object_property(base, "get_Parent") : nullptr;
   const bool shown = base && root && !ShellClock::IsWidgetDisposed(root) &&
                      !ShellClock::IsWidgetDisposed(base) &&
                      object_property(base, "get_Parent") == root;
@@ -1256,9 +1504,14 @@ void tick_effects(MonoObject *base) {
       LOG_INFO("[HOMEFX] %s %d%%", kEffectNames[effect], strength);
       layer.applied = strength;
     }
+    if (s_raise_effects && object_property(widget, "get_Parent"))
+      call(widget, "RemoveFromParent", 0);
     place_above(root, below, widget);
     below = widget;
   }
+  if (s_raise_effects)
+    LOG_INFO("[HOMEFX] layers put back above the video");
+  s_raise_effects = false;
 }
 
 } // namespace
@@ -1294,6 +1547,8 @@ void Restart() {
   s_played_checks = 0;
   s_start_checks = 0;
   s_current.clear();
+  s_resume_at = 0;
+  s_last_position = 0;
   unlink(kPending);
   s_state = State::Idle;
 }
@@ -1347,6 +1602,8 @@ void tick_playback() {
     teardown();
     s_failures = 0;
     s_current.clear();
+    s_resume_at = 0;
+    s_last_position = 0;
     s_state = State::Idle;
   }
   if (file.empty())
@@ -1375,8 +1632,8 @@ void tick_playback() {
     s_retry_at = s_frame;
     break;
   case State::Waiting: {
-    MonoObject *root = home_root();
-    if (!root || s_frame < s_retry_at || !home_shown(root))
+    MonoObject *root = stage();
+    if (!root || s_frame < s_retry_at || !s_shown)
       return;
     mark_pending();
     if (build(root)) {
@@ -1389,17 +1646,25 @@ void tick_playback() {
     break;
   }
   case State::Hidden: {
-    MonoObject *root = home_root();
-    if (root && home_shown(root)) {
-      LOG_INFO("[HOMEVIDEO] Home is back");
+    if (s_shown && stage()) {
+      LOG_INFO("[HOMEVIDEO] the stage shows again");
       s_state = State::Waiting;
       s_retry_at = s_frame;
     }
     break;
   }
   case State::Playing: {
-    if (MonoObject *root = home_root())
+    if (MonoObject *root = stage()) {
       watch(root);
+    } else {
+      /* the layer went away with the stage and the player in it */
+      LOG_INFO("[HOMEVIDEO] the stage is gone; at %llu",
+               static_cast<unsigned long long>(s_last_position));
+      s_resume_at = s_last_position;
+      teardown();
+      s_state = State::Waiting;
+      s_retry_at = s_frame + 30;
+    }
     break;
   }
   default:
@@ -1411,6 +1676,7 @@ void tick_playback() {
 
 void Tick() {
   ++s_frame;
+  tick_stage(); /* the fades run every frame */
   /* twice a second is plenty for everything below */
   if (s_frame % 30 != 0)
     return;

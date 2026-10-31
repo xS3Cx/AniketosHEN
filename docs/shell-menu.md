@@ -23,7 +23,7 @@ own addition to the OnionHEN tree it is forked from.
 
 | Path | Content |
 |---|---|
-| `source/shellui/src/aniketos_shell/` | menu lifecycle, input, telemetry, the menu frontend (`akari_menu*`) |
+| `source/shellui/src/aniketos_shell/` | menu lifecycle, input, telemetry, the menu frontend (`shell_menu*`) |
 | `source/shellui/src/aniketos_ui/` | PUI primitives and menu style |
 | `source/shellui/src/aniketos_theme/` | native shell appearance (background, tiles, notifications, panels) |
 | `source/shellui/src/controller/`, `controller_tools.cpp` | DualSense reader and light-bar control |
@@ -179,8 +179,8 @@ holding a direction reloads it once; moving the slider also turns the
 rounded tiles on.
 
 - **Settings:** `shell_tiles_circular` (on/off) and
-  `shell_tiles_corner_radius` (percent) in `[shell_menu]`. The PS5 case
-  mockup, or the customization switch off, keeps the stock shape.
+  `shell_tiles_corner_radius` (percent) in `[shell_menu]`. The
+  customization switch off keeps the stock shape.
 - **How it works:** `homeui_home_tiles.inc` edits two constants in HomeUI's
   Hermes bytecode as the bundle loads: the 106px icon's corner radius and
   the 168px focus frame's, scaled by Sony's own factor, and clips the

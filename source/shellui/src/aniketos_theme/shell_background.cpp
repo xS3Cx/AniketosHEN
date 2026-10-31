@@ -469,10 +469,6 @@ int32_t particle_state(ParticleMode mode) {
   // preserving whichever stock state ShellUI currently owns.
   case ParticleMode::Default:
     return 10;
-  case ParticleMode::Bottom:
-    return 9;
-  case ParticleMode::Spread:
-    return 10;
   case ParticleMode::Off:
     return 11;
   case ParticleMode::Count:
@@ -732,10 +728,6 @@ const char *ParticleModeName(ParticleMode mode) {
   switch (mode) {
   case ParticleMode::Default:
     return "PS5 Default";
-  case ParticleMode::Bottom:
-    return "Bottom";
-  case ParticleMode::Spread:
-    return "Spread";
   case ParticleMode::Off:
     return "Off";
   case ParticleMode::Count:

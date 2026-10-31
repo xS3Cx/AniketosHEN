@@ -13,6 +13,7 @@
 #include "dynamic_ui_runtime.hpp"
 #include "external_plugin_ui.hpp"
 #include "external_sprx_ui.hpp"
+#include "kbm_toolbox.hpp"
 #include <onion/platform.h>
 #include <string>
 
@@ -187,6 +188,9 @@ uint64_t GetManifestResourceStream_Hook(uint64_t inst, MonoString *FileName) {
     break;
   case toolbox::Page::PluginProgress:
     generate_plugin_progress_xml(new_xml_string);
+    break;
+  case toolbox::Page::Kbm:
+    kbm_toolbox::generate_xml(new_xml_string, resourceName);
     break;
   case toolbox::Page::RemotePlay:
     generate_remote_play_xml(new_xml_string);

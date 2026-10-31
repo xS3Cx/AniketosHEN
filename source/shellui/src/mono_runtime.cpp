@@ -7,6 +7,7 @@
 #include "external_symbols.hpp"
 #include "defs.h"
 #include "ipc.hpp" // shellui_log
+#include "aniketos_shell/home_js.hpp"
 #include <chrono>
 #include <atomic>
 #include <string>
@@ -388,6 +389,7 @@ void ReloadRNPSApp(const char* title_id){
     void (*ReloadApp)(MonoString* tid) = (void(*)(MonoString*))Get_Address_of_Method(react_common_img, "ReactNative.Vsh.Common", "ReactApplicationSceneManager", "ReloadApp", 1);
     if (ReloadApp) {
         LOG_DEBUG("Reloading %s scenes", title_id);
+        HomeJs::NoteRequestedReload(title_id);
         ReloadApp(mono_string_new(Root_Domain, title_id));
     } else {
         LOG_ERROR("Failed to find reload method, not reloading scene");

@@ -3,7 +3,6 @@
 #include "aniketos_shell/home_bookmark.hpp"
 #include "aniketos_shell/home_tabs.hpp"
 #include "aniketos_theme/customization.hpp"
-#include <onion/distribution.h>
 #include "aniketos_theme/home_tiles.hpp"
 
 #include "external_symbols.hpp"
@@ -14,7 +13,6 @@
 #include "aniketos_theme/global_theme.hpp"
 #include "aniketos_theme/shared_ui.hpp"
 #include "aniketos_theme/theme_config.hpp"
-#include "aniketos_ui/pui_primitives.hpp"
 
 #include <onion/detour.h>
 #include <onion/settings.hpp>
@@ -24,33 +22,20 @@
 #include <cstdint>
 #include <cstring>
 #include <deque>
-#include <fcntl.h>
 #include <string>
-#include <sys/stat.h>
 #include <time.h>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
-#include <unistd.h>
 
 extern onion::Settings g_settings;
-extern MonoObject *Game;
-extern MonoObject *rootWidget;
-
-extern const unsigned char aniketos_tile_frame_start[];
-extern const unsigned char aniketos_tile_frame_end[];
-extern const unsigned int aniketos_tile_frame_size;
 
 namespace AniketosTheme::HomeTiles {
 namespace {
 
 constexpr const char *kReactNamespace = "ReactNative.Views.UI3.View";
 constexpr const char *kTileFocusTestId = "tile-item-focus-layer";
-// The experimental PS5-case frame feature is retired.  Keep the old state
-// fields readable for settings-file compatibility, but make every runtime
-// path a no-op so a stale persisted value can never draw a frame.
-constexpr bool kTileFramesRemoved = true;
 constexpr uint64_t kFrameIntervalMs = 50;
 constexpr size_t kMaxTrackedLayers = 1024;
 constexpr size_t kMaxArcNodes = 4096;
@@ -150,245 +135,6 @@ std::vector<uint32_t> s_space_switcher_focus_handles;
 std::vector<uint32_t> s_space_switcher_label_handles;
 std::vector<SpaceTabLabelLayout> s_space_tab_label_layouts;
 std::vector<SpaceTabFocusPadding> s_space_tab_focus_paddings;
-
-// The tile frame is a native PUI2 overlay attached to the established
-// ShellUI root and positioned from each tile's live UI3 layout coordinates.
-// PUI2 is the renderer already used by our working ShellUI overlays;
-// attaching a UI2 image directly to a UI3 React focus node is not reliable on
-// all firmware builds.
-struct TileFrameSurface {
-  MonoObject *tile = nullptr;
-  MonoObject *host = nullptr;
-  uint32_t tile_handle = 0;
-  std::string name;
-  MonoObject *root = nullptr; // UI2.ImageBox containing the frame bitmap
-};
-
-MonoObject *parent_of(MonoObject *object);
-bool derives_from(MonoObject *object, MonoClass *base);
-
-AniketosUI::Pui::Runtime s_tile_frame_pui{};
-std::vector<TileFrameSurface> s_tile_frame_surfaces;
-std::vector<uint32_t> s_tile_frame_widget_handles;
-std::vector<MonoObject *> s_tile_widgets;
-std::vector<uint32_t> s_tile_widget_handles;
-bool s_tile_frame_runtime_ready = false;
-bool s_tile_frame_asset_ready = false;
-
-[[maybe_unused]] bool retain_tile_frame_widget(MonoObject *object, void *) {
-  if (!object || !mono_gchandle_new)
-    return false;
-  const uint32_t handle = mono_gchandle_new(object, /*pinned=*/1);
-  if (!handle)
-    return false;
-  s_tile_frame_widget_handles.push_back(handle);
-  return true;
-}
-
-void release_tile_frame_widgets() {
-  if (mono_gchandle_free) {
-    for (uint32_t handle : s_tile_frame_widget_handles)
-      if (handle)
-        mono_gchandle_free(handle);
-  }
-  s_tile_frame_widget_handles.clear();
-}
-
-bool ensure_tile_frame_asset() {
-  if (s_tile_frame_asset_ready)
-    return true;
-  const size_t size = static_cast<size_t>(aniketos_tile_frame_size);
-  if (size == 0)
-    return false;
-  (void)mkdir("/user/data/" HEN_FOLDER, 0777);
-  (void)mkdir("/user/data/" HEN_FOLDER "/assets", 0777);
-  constexpr const char *path =
-      "/user/data/" HEN_FOLDER "/assets/tile_frame_black.png";
-  constexpr const char *temp_path =
-      "/user/data/" HEN_FOLDER "/assets/.tile_frame_black.png.tmp";
-  const int fd = open(temp_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-  if (fd < 0)
-    return false;
-  size_t written = 0;
-  while (written < size) {
-    const ssize_t count = write(fd, aniketos_tile_frame_start + written,
-                                size - written);
-    if (count <= 0) {
-      close(fd);
-      unlink(temp_path);
-      return false;
-    }
-    written += static_cast<size_t>(count);
-  }
-  close(fd);
-  if (rename(temp_path, path) != 0) {
-    unlink(temp_path);
-    return false;
-  }
-  // Remove the previous PS5-case asset from earlier builds. The frame system
-  // is intentionally a clean replacement, so the old cover cannot linger in
-  // the persistent user-data asset directory after this HEN starts.
-  (void)unlink("/user/data/" HEN_FOLDER "/assets/ps5_case_frame.png");
-  (void)unlink("/user/data/" HEN_FOLDER "/assets/.ps5_case_frame.png.tmp");
-  s_tile_frame_asset_ready = true;
-  LOG_INFO("[HOME-TILES:FRAME] bitmap installed path=%s bytes=%zu", path,
-           size);
-  return true;
-}
-
-void tile_frame_geometry(TileFrameSurface &surface) {
-  if (!surface.tile || !surface.host || !surface.root ||
-      !s_pui_widget_class)
-    return;
-  float width = Get_Property<float>(s_pui_widget_class, surface.tile, "Width");
-  float height = Get_Property<float>(s_pui_widget_class, surface.tile, "Height");
-  if (!std::isfinite(width) || !std::isfinite(height) || width < 80.0f ||
-      height < 80.0f || width > 600.0f || height > 600.0f) {
-    width = 168.0f;
-    height = 168.0f;
-  }
-
-  float x = 0.0f;
-  float y = 0.0f;
-  MonoObject *node = surface.tile;
-  bool reached_host = false;
-  for (unsigned depth = 0; node && depth < 32; ++depth) {
-    if (!derives_from(node, s_pui_widget_class))
-      break;
-    const float node_x =
-        Get_Property<float>(s_pui_widget_class, node, "X");
-    const float node_y =
-        Get_Property<float>(s_pui_widget_class, node, "Y");
-    if (std::isfinite(node_x))
-      x += node_x;
-    if (std::isfinite(node_y))
-      y += node_y;
-    MonoObject *parent = parent_of(node);
-    if (!parent || parent == node)
-      break;
-    if (parent == surface.host) {
-      reached_host = true;
-      break;
-    }
-    node = parent;
-  }
-
-  // Do not guess (0,0) while HomeUI is still building the layout chain.
-  // Tick() retries after the next UI update instead.
-  if (!reached_host || !std::isfinite(x) || !std::isfinite(y)) {
-    AniketosUI::Pui::ImageGeometry(s_tile_frame_pui, surface.root, 0.0f, 0.0f,
-                                  0.0f, 0.0f, false);
-    return;
-  }
-  AniketosUI::Pui::ImageGeometry(s_tile_frame_pui, surface.root, x, y, width,
-                                height, true);
-}
-
-void clear_tile_frame_state() {
-  if (s_tile_frame_runtime_ready) {
-    for (TileFrameSurface &surface : s_tile_frame_surfaces) {
-      if (surface.root && surface.host)
-        AniketosUI::Pui::RemoveNamed(s_tile_frame_pui, surface.host,
-                                    surface.name.c_str());
-      if (surface.tile_handle && mono_gchandle_free)
-        mono_gchandle_free(surface.tile_handle);
-    }
-  }
-  s_tile_frame_surfaces.clear();
-  release_tile_frame_widgets();
-}
-
-MonoObject *tile_frame_host() {
-  if (rootWidget)
-    return rootWidget;
-  if (!Game || !pui_img)
-    return nullptr;
-  return Get_Property<MonoObject *>(
-      pui_img, "Sce.PlayStation.PUI.UI2", "Scene", Game, "RootWidget");
-}
-
-void remember_tile_widget(MonoObject *tile) {
-  if (!tile || std::find(s_tile_widgets.begin(), s_tile_widgets.end(), tile) !=
-                  s_tile_widgets.end())
-    return;
-  s_tile_widgets.push_back(tile);
-  if (mono_gchandle_new) {
-    const uint32_t handle = mono_gchandle_new(tile, /*pinned=*/1);
-    if (handle)
-      s_tile_widget_handles.push_back(handle);
-  }
-}
-
-TileFrameSurface *find_tile_frame_surface(MonoObject *tile) {
-  for (TileFrameSurface &surface : s_tile_frame_surfaces)
-    if (surface.tile == tile)
-      return &surface;
-  return nullptr;
-}
-
-void render_tile_frame(MonoObject *tile) {
-  if (kTileFramesRemoved || !tile || !g_settings.shell_tiles_ps5_case_mockup ||
-      !s_tile_frame_runtime_ready || !ensure_tile_frame_asset() ||
-      find_tile_frame_surface(tile))
-    return;
-  MonoObject *host = tile_frame_host();
-  if (!host)
-    return;
-  TileFrameSurface surface{};
-  surface.tile = tile;
-  surface.host = host;
-  if (mono_gchandle_new)
-    surface.tile_handle = mono_gchandle_new(tile, /*pinned=*/1);
-  if (mono_gchandle_new && !surface.tile_handle)
-    return;
-  surface.name = "AniketosTileFrame_" +
-                 std::to_string(static_cast<unsigned long long>(
-                     surface.tile_handle
-                         ? surface.tile_handle
-                         : reinterpret_cast<uintptr_t>(tile)));
-  surface.root = AniketosUI::Pui::CreateSystemImage(
-      s_tile_frame_pui, host, surface.name.c_str(),
-      "/user/data/" HEN_FOLDER "/assets/tile_frame_black.png");
-  if (!surface.root) {
-    if (surface.tile_handle && mono_gchandle_free)
-      mono_gchandle_free(surface.tile_handle);
-    AniketosUI::Pui::RemoveNamed(s_tile_frame_pui, host, surface.name.c_str());
-    return;
-  }
-  tile_frame_geometry(surface);
-  s_tile_frame_surfaces.push_back(surface);
-  LOG_INFO("[HOME-TILES:FRAME] attached-to-shell-root host=%p tile=%p name=%s",
-           static_cast<void *>(host), static_cast<void *>(tile),
-           surface.name.c_str());
-}
-
-void update_tile_frame_surfaces() {
-  if (kTileFramesRemoved) {
-    if (!s_tile_frame_surfaces.empty())
-      clear_tile_frame_state();
-    return;
-  }
-  if (!g_settings.shell_tiles_ps5_case_mockup) {
-    if (!s_tile_frame_surfaces.empty())
-      clear_tile_frame_state();
-    return;
-  }
-  if (!s_tile_frame_runtime_ready) {
-    static bool logged_unavailable = false;
-    if (!logged_unavailable) {
-      LOG_ERROR("[HOME-TILES:FRAME] PUI2 runtime unavailable; keeping stock tiles");
-      logged_unavailable = true;
-    }
-    return;
-  }
-  // A settings change can happen after HomeUI has already created its tile
-  // focus layers. Revisit the live layers here so enabling the frame does
-  // not require a console restart or a second HomeUI navigation pass.
-  for (MonoObject *tile : s_tile_widgets)
-    render_tile_frame(tile);
-  for (TileFrameSurface &surface : s_tile_frame_surfaces)
-    tile_frame_geometry(surface);
-}
 
 MonoObject *parent_of(MonoObject *object) {
   if (!object || !mono_object_get_class || !mono_class_get_method_from_name ||
@@ -680,7 +426,7 @@ MonoObject *create_arc_glyph(MonoObject *parent, char glyph, float x, float y,
                            std::to_string(index);
   const char text[2] = {glyph, '\0'};
   Set_Property(s_label_class, label, "Name", managed_string(name));
-  // Match the proven Akari UI2 path used elsewhere in this process.
+  // Match the proven Shell Menu UI2 path used elsewhere in this process.
   Set_Property(s_label_class, label, "PositionType", 0);
   Set_Property(s_label_class, label, "X", x);
   Set_Property(s_label_class, label, "Y", y);
@@ -964,13 +710,8 @@ void register_layer(MonoObject *react_layer) {
     remember_space_switcher_root(widget);
   SharedUI::ApplyFocusHierarchy(widget, test_id);
   const bool tile = test_id == kTileFocusTestId;
-  if (tile) {
-    remember_tile_widget(react_layer);
-    if (g_settings.shell_tiles_ps5_case_mockup)
-      render_tile_frame(react_layer);
-    else
-      render_arc_badge(react_layer);
-  }
+  if (tile)
+    render_arc_badge(react_layer);
   MonoObject *settings = s_get_focus_settings(widget);
   if (test_id == "experience-switcher-focus-layer")
     remember_space_tab_focus_padding(settings);
@@ -1048,10 +789,6 @@ void verify_color(MonoObject *settings, uint64_t signature) {
 void Install(MonoImage *react_pui, MonoImage *pui) {
   if (s_installed || !react_pui || !pui)
     return;
-  // Do not allow an old settings file to re-enable the retired frame system.
-  g_settings.shell_tiles_ps5_case_mockup = false;
-  s_tile_frame_runtime_ready = false;
-  LOG_INFO("[HOME-TILES:FRAME] retired; stock tile artwork is active");
   s_react_focus_class =
       mono_class_from_name(react_pui, kReactNamespace, "ReactFocusLayer");
   s_pui_widget_class =
@@ -1194,7 +931,6 @@ void Install(MonoImage *react_pui, MonoImage *pui) {
 }
 
 void Tick() {
-  update_tile_frame_surfaces();
   if (!s_installed || s_layers.empty())
     return;
   const uint64_t now = monotonic_millis();
@@ -1498,7 +1234,6 @@ void UpdateSpaceSwitcherFocusBounds(MonoObject *label,
 }
 
 void ClearTrackedLayers() {
-  clear_tile_frame_state();
   if (mono_gchandle_free) {
     for (uint32_t handle : s_handles)
       if (handle)
@@ -1525,13 +1260,6 @@ void ClearTrackedLayers() {
   s_handles.clear();
   s_layers.clear();
   s_tile_layers.clear();
-  if (mono_gchandle_free) {
-    for (uint32_t handle : s_tile_widget_handles)
-      if (handle)
-        mono_gchandle_free(handle);
-  }
-  s_tile_widgets.clear();
-  s_tile_widget_handles.clear();
   s_arc_badges.clear();
   s_arc_rendered.clear();
   s_pending_arc_badges.clear();

@@ -242,7 +242,10 @@ void handleIPC(clientArgs *client, std::string &inputStr,
     if (cheats.exportList(request, shm_path) == 0) {
       reply(sender_app, false, shm_path);
     } else {
-      onion_notify(true, "notify.cheats.none", title_id.c_str());
+      /* A quiet request (the in-game cheats menu probing the title) leaves
+         the "no cheats" banner out. */
+      if (!onion_cjson::bool_item(my_json.get(), "quiet"))
+        onion_notify(true, "notify.cheats.none", title_id.c_str());
       reply(sender_app, true);
     }
     break;

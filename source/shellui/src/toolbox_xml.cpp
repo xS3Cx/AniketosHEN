@@ -690,6 +690,32 @@ void append_toolbox_payloads_group(ps5ui::Group& g) {
 void append_toolbox_game_group(ps5ui::Group& g) {
   g.link("id_cheats", toolbox_i18n::tr("cheats.link"), "cheats.xml",
          toolbox_i18n::tr("cheats.link.sub"), kIconCheats)
+      .link("id_kbm", toolbox_i18n::tr("kbm.link"), "kbm.xml",
+            toolbox_i18n::tr("kbm.link.sub"), kIconGame)
+      .group(
+          "id_cheats_visual_opts", toolbox_i18n::tr("cheats.visual_menu"),
+          [](ps5ui::Group& o) {
+            o.label("id_cheats_visual_about",
+                    toolbox_i18n::tr("cheats.visual_menu.about"))
+                .toggle("id_cheats_visual_menu",
+                        toolbox_i18n::tr("cheats.visual_menu.enabled"),
+                        toolbox_on("id_cheats_visual_menu"), std::nullopt,
+                        toolbox_i18n::tr("cheats.visual_menu.enabled.desc"))
+                .list("id_cheats_visual_render",
+                      toolbox_i18n::tr("cheats.visual_menu.render"),
+                      [](ps5ui::ListBuilder& L) {
+                        L.item("id_cheats_visual_render_pui2",
+                               toolbox_i18n::tr("cheats.visual_menu.render.pui2"),
+                               "0")
+                            .item("id_cheats_visual_render_pui3",
+                                  toolbox_i18n::tr(
+                                      "cheats.visual_menu.render.pui3"),
+                                  "1");
+                      },
+                      toolbox_i18n::tr("cheats.visual_menu.render.sub"),
+                      toolbox_val("id_cheats_visual_render"));
+          },
+          toolbox_i18n::tr("cheats.visual_menu.sub"), kIconCheats)
       .button("id_download_cheats", toolbox_i18n::tr("cheats.repo.download"),
               toolbox_i18n::tr("cheats.repo.download.desc"), std::nullopt,
               kIconDownload, ps5ui::Style::None,

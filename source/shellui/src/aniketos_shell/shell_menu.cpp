@@ -1,13 +1,18 @@
 /*
- * AniketosHEN Akari-style frontend.
+ * The AniketosHEN Shell Menu (L1+R3 on Home).
  *
- * Visual proportions and interaction semantics are derived from Akari
- * (kernaltrap8/Akari, d264e8b). This is a PS5/PUI reimplementation; no PS3
- * PAF objects, syscall numbers, offsets, or platform assumptions are copied.
+ * One page model and input, drawn in one of four looks: Akari, Anomaly,
+ * Apparition (shell_menu/view.inc and the *_theme.inc files there) or
+ * Sweety, the console's own pop-up menu. The Akari and Anomaly looks follow
+ * the PS3 VSH menus of those names (Akari: kernaltrap8/Akari, d264e8b); this
+ * is a PS5/PUI reimplementation, and no PS3 PAF objects, syscall numbers,
+ * offsets or platform assumptions are copied.
  */
 
 #include <onion/distribution.h>
-#include "aniketos_shell/akari_menu.hpp"
+#include "aniketos_shell/shell_menu.hpp"
+#include "aniketos_shell/account_avatar.hpp"
+#include "aniketos_shell/devkit_overlay.hpp"
 #include "aniketos_shell/home_bookmark.hpp"
 #include "aniketos_shell/home_menu.hpp"
 #include "aniketos_shell/home_tabs.hpp"
@@ -20,6 +25,7 @@
 #include "aniketos_runtime.hpp"
 #include "shell_clock.hpp"
 #include "aniketos_theme/color.hpp"
+#include "aniketos_theme/custom_font.hpp"
 #include "aniketos_theme/global_theme.hpp"
 #include "aniketos_theme/home_tiles.hpp"
 #include "aniketos_theme/shell_background.hpp"
@@ -33,7 +39,6 @@
 #include "aniketos_shell/home_particles.hpp"
 #include "aniketos_theme/toggle_styles.hpp"
 #include "aniketos_shell/home_video.hpp"
-#include "aniketos_shell/screen_rotation.hpp"
 #include "aniketos_shell/shell_buzzer.hpp"
 #include "aniketos_shell/system_dialogs.hpp"
 #include "aniketos_shell/power_indicator.hpp"
@@ -77,20 +82,20 @@ void Widget_Append_Child(MonoObject *widget, MonoObject *child);
 void notify(const char *text, ...);
 extern onion::Settings g_settings;
 
-namespace AniketosShell::AkariMenu {
+namespace AniketosShell::ShellMenu {
 namespace {
 
-constexpr const char *kMenuName = "id_anivsh_akari_menu";
+constexpr const char *kMenuName = "id_anivsh_shell_menu";
 constexpr const char *kMenuBrandName = "Aniketos";
-constexpr const char *kOverlayName = "id_anivsh_akari_overlay";
-constexpr const char *kControlsName = "id_anivsh_akari_controls";
+constexpr const char *kOverlayName = "id_anivsh_shell_overlay";
+constexpr const char *kControlsName = "id_anivsh_shell_controls";
 constexpr const char *kAnomalyControlsName = "id_anivsh_anomaly_controls";
 constexpr const char *kClockDateName = "id_anivsh_shell_clock_date";
 constexpr const char *kBackgroundDirectory =
     "/user/data/" HEN_FOLDER "/ShellUI/background";
 constexpr size_t kMaxVisibleOptions = 10;
 /* Sweety (vsh_menu_theme 6): the menu's pages shown as the console's own
-   pop-up menus, see akari_menu/sweety_native.inc. */
+   pop-up menus, see shell_menu/sweety_native.inc. */
 constexpr int kThemeSweety = 6;
 constexpr int kGradientSlices = 32;
 constexpr int kFrameGradientSlices = 24;
@@ -104,8 +109,8 @@ constexpr int kColorLevels = 20;
 constexpr int kControlBorderGradientSlices = kFrameGradientSlices;
 constexpr int kBorderLines = 5;
 constexpr int kControlLabelCount = 6;
-constexpr int kAnomalyControlIconCount = 4;
-constexpr int kAnomalyControlLabelCount = 3;
+constexpr int kAnomalyControlIconCount = 5;
+constexpr int kAnomalyControlLabelCount = 4;
 constexpr float kReferenceWidth = 1920.0f;
 constexpr float kReferenceHeight = 1080.0f;
 constexpr float kOpenDurationMs = 200.0f;
@@ -122,40 +127,48 @@ enum class PageTransitionState { Idle, Collapsing, Expanding };
 enum class PageTransitionAction { None, Push, Pop };
 enum class Page {
   Main,
-  Information,
+  /* the console: information, power, fan, power light, buzzer */
   ConsoleManagement,
+  Information,
   Power,
-  Buzzer,
-  PowerIndicator,
   Fan,
+  PowerIndicator,
+  Buzzer,
+  /* the controller */
   Controller,
   ControllerAnimations,
   ControllerVibration,
   ControllerLeds,
+  /* the Home screen: background, clock, tabs, tiles, profile */
+  HomeScreen,
+  HomeVideo,
+  HomeBgVideo,
+  HomeBgImage,
+  HomeBgEffects,
+  HomeParticles,
+  ShellClock,
+  HomeTabs,
+  ShellTiles,
+  HomeProfile,
+  /* the look of the console's own interface */
+  SystemCustomize,
+  GlobalCustomization,
+  ShellBackground,
+  ShellOutline,
+  ShellUIPanels,
+  /* overlays on Home and in games */
   OSD,
   HomeScreenOSD,
   HomeScreenOSDSettings,
   PerformanceOSD,
-  Appearance,
-  GlobalCustomization,
-  SystemAnimations,
-  MenuGradientAnimationColors,
-  SystemCustomize,
+  /* the look of this menu */
   Customize,
-  ThemeMenu,
   Colors,
-  Gradients,
-  Animations,
-  Borders,
   ScalePosition,
-  Text,
-  ShellBackground,
-  ShellTiles,
-  ShellOutline,
-  ShellClock,
-  HomeVideo,
-  ShellToggles,
-  ShellUIPanels,
+  Keyboard,
+  /* what a DevKit/TestKit shows on Home */
+  Debug,
+  /* AniketosHEN itself */
   Settings,
 };
 enum class OptionType {
@@ -211,6 +224,8 @@ enum class OptionId {
   PerformanceOverlayGpu,
   PerformanceOverlayRam,
   PerformanceOverlayIp,
+  PerformanceOverlayFps,
+  PerformanceOverlayFan,
   RevealSerialNumber,
   BuzzerVolume,
   BuzzerNormal,
@@ -249,14 +264,25 @@ enum class OptionId {
   ShellBackgroundAnimation,
   ShellBackgroundAnimationSpeed,
   ShellBackgroundImageEnabled,
+  ShellBackgroundPs3Waves,
   ShellBackgroundImageTransition,
   ShellBackgroundImageFile,
   ShellBackgroundRefreshImages,
   HomeVideoEnabled,
+  HomeBackgroundGlobal,
   HomeVideoFile,
   HomeVideoSound,
   HomeVideoVolume,
   HomeVideoRefresh,
+  AccountAvatarEnabled,
+  AccountAvatarFile,
+  AccountAvatarRefresh,
+  CustomFontEnabled,
+  PadSpeakerMirror,
+  PadSpeakerVolume,
+  CustomFontFile,
+  DevkitOverlayInfo,
+  DevkitOverlayExpired,
   HomeImageEnabled,
   HomeImageFile,
   HomeImageRefresh,
@@ -276,12 +302,12 @@ enum class OptionId {
   HomeBookmarkRename,
   OskGlyphKey,
   OskEmoji,
+  MouseControl,
   ShellToggleStyle,
   ShellBackgroundReloadImage,
   ShellBackgroundParticles,
   ShellTilesCircular,
   ShellTilesCornerRadius,
-  ShellTilesPS5CaseMockup,
   ShellTilesOutlineEnabled,
   ShellTilesOutlineSyncBackground,
   ShellTilesOutlineAnimation,
@@ -310,6 +336,7 @@ enum class OptionId {
   /* one gradient slider per colour (OptionType::ColorSlider) */
   ColorGlobal,
   ColorController,
+  ColorController2,
   ColorBackground,
   ColorGlow,
   ColorOutline,
@@ -348,6 +375,8 @@ enum AnomalyControlIcon : int {
   AnomalyControlL3,
   AnomalyControlCross,
   AnomalyControlCircle,
+  /* the D-pad again, for "Increment" beside "Scroll" */
+  AnomalyControlDpad2,
 };
 
 // Direct PS5 UI3 resource URIs recovered from the 11.40 PUI assembly's
@@ -586,12 +615,8 @@ SliderMotion s_slider_motion[kMaxVisibleOptions]{};
 float s_viewport_width = kReferenceWidth;
 float s_viewport_height = kReferenceHeight;
 
-/* Width of the layout the widgets hung in Home's scene are placed in: the
-   menu's own host keeps the console's 16:9, Home follows the screen format. */
-float home_layout_width() {
-  const float width = ScreenRotation::LayoutWidth();
-  return width > s_viewport_width ? width : s_viewport_width;
-}
+/* Width of the layout the widgets hung in Home's scene are placed in. */
+float home_layout_width() { return s_viewport_width; }
 float s_menu_target_x = 0.0f;
 float s_menu_target_y = 0.0f;
 float s_menu_target_width = 1.0f;
@@ -615,14 +640,17 @@ uint64_t s_highlight_page_epoch = 0;
 // the overlay appear to jump.
 bool s_overlay_dirty = true;
 bool s_moving = false;
-bool s_unload_armed = false;
+/* An action that asks to be pressed twice (power off, reset, unload): the one
+   pressed once, until the cursor or the page moves on. */
+OptionId s_armed_option{};
 bool s_show_serial = false;
 /* The player LEDs and light brightness last chosen on the LEDs page (not
    saved: the system keeps its own, and "restore" returns to it). */
 int s_player_leds = 0;
 int s_light_brightness = 0;
-/* The "show the identifiers?" dialog is open; Tick waits for the answer. */
-bool s_confirming_reveal = false;
+/* The option whose "show the identifiers?" dialog is open (serial number,
+   DevKit info panel); Tick waits for the answer. */
+OptionId s_confirming = OptionId::None;
 std::vector<uint32_t> s_widget_handles;
 uint64_t s_host_generation = 0;
 uint64_t s_last_overlay_sample = 0;
@@ -670,12 +698,12 @@ bool flush_save() {
   return SaveSettings();
 }
 
-#include "akari_menu/background_catalog.inc"
-#include "akari_menu/ui_primitives.inc"
-#include "akari_menu/page_model.inc"
-#include "akari_menu/view.inc"
-#include "akari_menu/settings_actions.inc"
-#include "akari_menu/sweety_native.inc"
+#include "shell_menu/background_catalog.inc"
+#include "shell_menu/ui_primitives.inc"
+#include "shell_menu/page_model.inc"
+#include "shell_menu/view.inc"
+#include "shell_menu/settings_actions.inc"
+#include "shell_menu/sweety_native.inc"
 
 void Initialize() {
   ensure_background_directory();
@@ -713,7 +741,7 @@ void Initialize() {
       ? mono_class_from_name(pui_img, "Sce.PlayStation.PUI", "Transform")
       : nullptr;
   Telemetry::SetRefreshSeconds(g_settings.overlay_refresh_seconds);
-  LOG_INFO("[ANIVSH:AKARI] frontend initialized source=Akari-d264e8b "
+  LOG_INFO("[ANIVSH:MENU] frontend initialized "
            "branding=" ONION_DIST_NAME " native_glyphs=%d "
            "glyph_set=UI3.KeyGuide uri_mode=direct transform=%d",
            s_image_box_class ? 1 : 0,
@@ -729,7 +757,7 @@ void BindHost(MonoObject *root) {
   if (root && mono_gchandle_new) {
     s_host_handle = mono_gchandle_new(root, /*pinned=*/1);
     if (!s_host_handle) {
-      LOG_ERROR("[ANIVSH:AKARI] failed to pin host root=%p",
+      LOG_ERROR("[ANIVSH:MENU] failed to pin host root=%p",
                 static_cast<void *>(root));
       return;
     }
@@ -737,7 +765,7 @@ void BindHost(MonoObject *root) {
   s_host = root;
   ++s_host_generation;
   if (s_host && s_widget_class) {
-    LOG_INFO("[ANIVSH:AKARI] host bind begin root=%p generation=%lu",
+    LOG_INFO("[ANIVSH:MENU] host bind begin root=%p generation=%lu",
              static_cast<void *>(s_host),
              static_cast<unsigned long>(s_host_generation));
     const float width = Get_Property<float>(s_widget_class, s_host, "Width");
@@ -747,11 +775,11 @@ void BindHost(MonoObject *root) {
       s_viewport_width = width;
       s_viewport_height = height;
     }
-    LOG_INFO("[ANIVSH:AKARI] host bind root=%p viewport=%.0fx%.0f valid=%d generation=%lu",
+    LOG_INFO("[ANIVSH:MENU] host bind root=%p viewport=%.0fx%.0f valid=%d generation=%lu",
              static_cast<void *>(s_host), s_viewport_width, s_viewport_height,
              s_viewport_valid ? 1 : 0,
              static_cast<unsigned long>(s_host_generation));
-    LOG_INFO("[ANIVSH:AKARI] host ready; widgets deferred to first UI tick");
+    LOG_INFO("[ANIVSH:MENU] host ready; widgets deferred to first UI tick");
   }
 }
 
@@ -928,7 +956,7 @@ void Hide() {
   s_animation_started_ms = monotonic_millis();
   s_moving = false;
   s_last_move_tick_ms = 0;
-  s_unload_armed = false;
+  s_armed_option = OptionId::None;
   s_show_serial = false;
   request_save();
   s_dirty = true;
@@ -954,12 +982,19 @@ void Tick() {
     Hide();
     SweetyNative::Show();
   }
-  if (s_confirming_reveal) {
+  if (s_confirming != OptionId::None) {
     int button = -1;
     if (SystemDialogs::PollAlert(&button)) {
-      s_confirming_reveal = false;
+      const bool agreed = button == 0; /* only on the "show" button */
+      if (s_confirming == OptionId::RevealSerialNumber) {
+        s_show_serial = agreed;
+      } else if (s_confirming == OptionId::DevkitOverlayInfo && agreed) {
+        g_settings.devkit_overlay_info = true;
+        request_save();
+        DevkitOverlay::Refresh();
+      }
+      s_confirming = OptionId::None;
       Show();
-      s_show_serial = button == 0; /* only on the "show" button */
       s_dirty = true;
     }
   }
@@ -967,6 +1002,10 @@ void Tick() {
     sync_clock_layer();
     update_clock_date();
     update_overlay_fade();
+    if (s_controls_settle_frames > 0) {
+      --s_controls_settle_frames;
+      update_controls();
+    }
   } else
     hide_game_shell_extras();
   const uint64_t now = monotonic_millis();
@@ -1151,10 +1190,19 @@ void HandleInput(uint32_t buttons_down, uint32_t repeated) {
     commit_selection(state, options, state.selected - 1);
   if ((buttons_down & Down) && state.selected + 1 < options.size())
     commit_selection(state, options, state.selected + 1);
+  if (buttons_down & (Up | Down))
+    s_armed_option = OptionId::None;
 
-  if (buttons_down & Left)
+  /* Left/Right change a value; on a switch, an action or a link they do
+     nothing (they used to run the row's side effects). */
+  const OptionType type = options[state.selected].type;
+  const bool adjustable =
+      type == OptionType::SliderInt || type == OptionType::SliderFloat ||
+      type == OptionType::Strings || type == OptionType::ColorSlider ||
+      type == OptionType::ThemeChoice;
+  if (adjustable && (buttons_down & Left))
     change_option(options[state.selected], -1);
-  if (buttons_down & Right)
+  if (adjustable && (buttons_down & Right))
     change_option(options[state.selected], 1);
   if (buttons_down & Cross)
     activate(options[state.selected]);
@@ -1167,7 +1215,7 @@ void HandleInput(uint32_t buttons_down, uint32_t repeated) {
     s_dirty = true;
   }
   if (buttons_down & Circle) {
-    s_unload_armed = false;
+    s_armed_option = OptionId::None;
     if (s_stack.size() > 1)
       begin_page_transition(PageTransitionAction::Pop);
     else
@@ -1206,4 +1254,4 @@ bool IsAttached() { return s_attached; }
 
 uint64_t HostGeneration() { return s_host_generation; }
 
-} // namespace AniketosShell::AkariMenu
+} // namespace AniketosShell::ShellMenu

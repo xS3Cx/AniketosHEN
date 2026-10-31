@@ -306,6 +306,54 @@ AppendumControlLayout update_appendum_option_control(
   if (!layout.toggle && !layout.slider)
     return layout;
 
+  if (ps3_theme()) {
+    /* The PS3 looks' own controls, in their 20-unit row: a solid square of
+       0.7 row (on: Akari's right colour, Anomaly's white; off: dark grey)
+       and a quarter-width line with a white knob, both 5 units (a quarter
+       row) from the right edge. */
+    const bool anomaly = active_menu_theme() == 2;
+    const Color on = anomaly ? Color{1.0f, 1.0f, 1.0f, 1.0f}
+                             : gradient_edge_color(true);
+    const float inset = row * 0.25f;
+    const Color dark{0.15f, 0.15f, 0.15f, 1.0f};
+    if (layout.toggle) {
+      const float box = std::round(row * 0.7f);
+      const float x = std::round(content_right - inset - box);
+      const float y = std::round(row_y + (row - box) * 0.5f);
+      panel_geometry(s_widgets.toggles[index], x, y, box, box);
+      panel_color(s_widgets.toggles[index], option.value == "1" ? on : dark);
+      layout.title_right = x - inset;
+      return layout;
+    }
+    const float track_w = menu_width() * (anomaly ? 4.0f / 3.0f : 1.0f) * 0.25f;
+    const float track_h = std::max(1.0f, std::round(row * 0.1f));
+    const float x = std::round(content_right - inset - track_w);
+    const float y = std::round(row_y + (row - track_h) * 0.5f);
+    const float progress = std::clamp(slider_progress(option), 0.0f, 1.0f);
+    panel_geometry(s_widgets.slider_tracks[index], x, y, track_w, track_h);
+    panel_color(s_widgets.slider_tracks[index], dark);
+    if (progress > 0.0f) {
+      panel_geometry(s_widgets.slider_fills[index], x, y, track_w * progress,
+                     track_h);
+      panel_color(s_widgets.slider_fills[index], on);
+    }
+    const float knob_w = std::max(1.0f, std::round(row * 0.1f));
+    const float knob_h = std::round(row * 0.4f);
+    panel_geometry(s_widgets.slider_knobs[index],
+                   std::round(x + track_w * progress - knob_w * 0.5f),
+                   std::round(row_y + (row - knob_h) * 0.5f), knob_w, knob_h);
+    panel_color(s_widgets.slider_knobs[index], {1.0f, 1.0f, 1.0f, 1.0f});
+    layout.value_width = std::max(
+        row * 1.5f,
+        std::ceil(approximate_text_width(option.value.c_str(), row * 0.8f)) +
+            2.0f);
+    layout.value_x = x - inset - layout.value_width;
+    layout.title_right = layout.value_x - inset;
+    set_color(s_label_class, s_widgets.values[index], "TextColor",
+              {1.0f, 1.0f, 1.0f, 1.0f});
+    return layout;
+  }
+
   const float scale = AniketosUI::Scale(active_menu_style());
   // Keep every Appendum ratio exact at non-default menu scales. PUI accepts
   // float geometry, so rounding each inset separately would incorrectly turn

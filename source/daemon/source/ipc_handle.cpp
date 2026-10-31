@@ -10,6 +10,7 @@
 #include "globalconf.hpp"
 #include "plugin_manager_runtime.hpp"
 #include "sprx_plugin_manager_runtime.hpp"
+#include "kbm_service.hpp"
 #include <msg.hpp>
 #include <atomic>
 #include <string>
@@ -473,6 +474,10 @@ void handleIPC(clientArgs *client, std::string &inputStr,
     reply(sender_app, false);
     break;
   }
+  case BREW_KBM_RELOAD:
+    onion::daemon::kbm::request_reload();
+    reply(sender_app, false);
+    break;
   case BREW_RELOAD_SETTINGS: {
     LoadSettings(/*force=*/true);
     onion_notify(true, "notify.settings.reloaded");

@@ -3,6 +3,8 @@
  * Toolbox injection for explicit commands and SceShellUI lifecycle recovery.
  */
 
+#include <mutex>
+#include "kbm_service.hpp"
 #include "daemon_ops.hpp"
 #include "daemon_power_state.hpp"
 #include "globalconf.hpp"
@@ -213,6 +215,8 @@ bool toolbox_inject_immediate(pid_t expected_pid = 0) {
         toolbox_wait_started(pid);
         LOG_DEBUG("Injecting toolbox into SceShellUI pid=%d",
                   static_cast<int>(pid));
+        /* libNineS keeps global ptrace state: one injection at a time */
+        std::lock_guard<std::mutex> lock(onion::daemon::inject_mutex());
         return Inject_Toolbox(static_cast<int>(pid), shellui_elf_start);
       },
       /*timeout_ms=*/45 * 1000, /*poll_ms=*/250, expected_pid);

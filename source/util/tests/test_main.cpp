@@ -45,6 +45,8 @@ extern "C" int test_overlay_text_metrics_suite(void);
 extern "C" int test_overlay_layout_suite(void);
 extern "C" int test_clock_text_suite(void);
 extern "C" int test_fps_formula_suite(void);
+extern "C" int test_kbm_engine_suite(void);
+extern "C" int test_kbm_model_suite(void);
 extern "C" int test_app_lifecycle_suite(void);
 extern "C" int test_sprx_loader_suite(void);
 extern "C" int test_sprx_catalog_suite(void);
@@ -104,6 +106,8 @@ int main() {
   failures += test_overlay_layout_suite();
   failures += test_clock_text_suite();
   failures += test_fps_formula_suite();
+  failures += test_kbm_engine_suite();
+  failures += test_kbm_model_suite();
   failures += test_app_lifecycle_suite();
   failures += test_sprx_loader_suite();
   failures += test_sprx_catalog_suite();

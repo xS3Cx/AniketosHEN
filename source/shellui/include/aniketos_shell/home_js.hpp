@@ -15,6 +15,10 @@
 namespace HomeJs {
 void Install(MonoImage *react_pui);
 
+/* The HEN is about to reload this app (title id): its next start is not a
+ * restart after a fall-over, so the restart guard leaves the script in. */
+void NoteRequestedReload(const char *title_id);
+
 /* `text` (UTF-8) as a JavaScript string literal in plain ASCII. */
 std::string JsString(const std::string &text);
 }

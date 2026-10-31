@@ -34,6 +34,7 @@ COMMON_FLAGS := -Wall -Wextra -g -O0 $(DEPFLAGS) -DONION_HOST_TEST=1 -DCBC=1 \
 	-I$(REPO_ROOT)/source/libonion_detour/include \
 	-I$(REPO_ROOT)/source/libonion_ready \
 	-I$(REPO_ROOT)/source/libonion_fps/include \
+	-I$(REPO_ROOT)/source/libonion_kbm/include \
 	-I$(REPO_ROOT)/source/libonion_lifecycle/include \
 	-I$(REPO_ROOT)/source/libonion_sprx/include \
 	-I$(REPO_ROOT)/source/libonion_plugin_ui/include \
@@ -105,6 +106,11 @@ PROD_CXX_SRCS := \
 	$(REPO_ROOT)/source/shellui/src/dynamic_ui_xml.cpp \
 	$(REPO_ROOT)/source/shellui/src/dynamic_ui_runtime.cpp \
 	$(REPO_ROOT)/source/libonion_fps/source/fps_formula.cpp \
+	$(REPO_ROOT)/source/libonion_kbm/source/kbm_profile.cpp \
+	$(REPO_ROOT)/source/libonion_kbm/source/kbm_names.cpp \
+	$(REPO_ROOT)/source/libonion_kbm/source/kbm_store.cpp \
+	$(REPO_ROOT)/source/libonion_kbm/source/kbm_analog.cpp \
+	$(REPO_ROOT)/source/libonion_kbm/source/kbm_engine.cpp \
 	$(REPO_ROOT)/source/libonion_lifecycle/source/app_lifecycle.cpp \
 	$(REPO_ROOT)/source/libonion_sprx/source/sprx_loader.cpp \
 	$(REPO_ROOT)/source/libonion_sprx/source/sprx_catalog.cpp \
@@ -157,6 +163,8 @@ TEST_CXX_SRCS := \
   test_overlay_layout.cpp \
   test_clock_text.cpp \
 	test_fps_formula.cpp \
+	test_kbm_engine.cpp \
+	test_kbm_model.cpp \
 	test_app_lifecycle.cpp \
 	test_sprx_loader.cpp \
 	test_sprx_catalog.cpp \
@@ -207,6 +215,11 @@ PROD_CXX_OBJS += $(BUILD_DIR)/prod/shellui/toolbox_route.o
 PROD_CXX_OBJS += $(BUILD_DIR)/prod/shellui/toolbox_i18n.o
 PROD_CXX_OBJS += $(BUILD_DIR)/prod/shellui/plugin_sprx_pages.o
 PROD_CXX_OBJS += $(BUILD_DIR)/prod/libonion_fps/fps_formula.o
+PROD_CXX_OBJS += $(BUILD_DIR)/prod/libonion_kbm/kbm_profile.o
+PROD_CXX_OBJS += $(BUILD_DIR)/prod/libonion_kbm/kbm_names.o
+PROD_CXX_OBJS += $(BUILD_DIR)/prod/libonion_kbm/kbm_store.o
+PROD_CXX_OBJS += $(BUILD_DIR)/prod/libonion_kbm/kbm_analog.o
+PROD_CXX_OBJS += $(BUILD_DIR)/prod/libonion_kbm/kbm_engine.o
 PROD_CXX_OBJS += $(BUILD_DIR)/prod/libonion_lifecycle/app_lifecycle.o
 PROD_CXX_OBJS += $(BUILD_DIR)/prod/libonion_sprx/sprx_loader.o
 PROD_CXX_OBJS += $(BUILD_DIR)/prod/libonion_sprx/sprx_catalog.o
@@ -359,6 +372,10 @@ $(BUILD_DIR)/prod/shellui/settings_page_update.o: $(REPO_ROOT)/source/shellui/sr
 	$(HOST_CXX) $(CXXFLAGS) -c -o $@ $<
 
 $(BUILD_DIR)/prod/libonion_fps/fps_formula.o: $(REPO_ROOT)/source/libonion_fps/source/fps_formula.cpp | $(BUILD_DIR)
+	@mkdir -p $(dir $@)
+	$(HOST_CXX) $(CXXFLAGS) -c -o $@ $<
+
+$(BUILD_DIR)/prod/libonion_kbm/%.o: $(REPO_ROOT)/source/libonion_kbm/source/%.cpp | $(BUILD_DIR)
 	@mkdir -p $(dir $@)
 	$(HOST_CXX) $(CXXFLAGS) -c -o $@ $<
 

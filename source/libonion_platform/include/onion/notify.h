@@ -47,6 +47,12 @@ typedef int32_t (*onion_notify_rich_send_fn)(int32_t user_id, bool is_logged,
  */
 void onion_notify_set_send(onion_notify_send_fn fn);
 void onion_notify_set_rich_send(onion_notify_rich_send_fn fn);
+/** The user a toast-only notification is shown to, or -1 for none known.
+ *  The system files a logged notification for each user itself; a toast-only
+ *  one goes straight to the overlay and must name the user who sees it.
+ *  Without this (or while it returns -1) toasts go to everyone (0xFE). */
+typedef int32_t (*onion_notify_user_fn)(void);
+void onion_notify_set_toast_user(onion_notify_user_fn fn);
 
 void onion_notify_v(int show_watermark, const char *fmt, va_list ap);
 void onion_notify(int show_watermark, const char *fmt, ...);

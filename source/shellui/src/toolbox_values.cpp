@@ -11,6 +11,7 @@
 #include "toolbox_i18n.hpp"
 #include "dynamic_ui_runtime.hpp"
 #include "plugin_sprx_pages.hpp"
+#include "kbm_toolbox.hpp"
 
 #include <onion/platform.h>
 #include <onion/ipc_client.hpp>
@@ -89,6 +90,10 @@ const ExactValueEntry kExactValues[] = {
      }},
     {"id_custom_game_opts",
      +[]() -> std::string { return bool_str(g_settings.onionhen_game_opts); }},
+    {"id_cheats_visual_menu",
+     +[]() -> std::string { return bool_str(g_settings.cheats_visual_menu); }},
+    {"id_cheats_visual_render",
+     +[]() -> std::string { return int_str(g_settings.cheats_visual_render); }},
     {"id_overlay_change_pos",
      +[]() -> std::string { return int_str(g_settings.overlay_pos); }},
     {"id_overlay_align",
@@ -247,6 +252,8 @@ std::string resolve_toolbox_control_value(const std::string &id) {
   if (try_external_plugin_value(id, value))
     return value;
   if (try_external_sprx_value(id, value))
+    return value;
+  if (kbm_toolbox::control_value(id, value))
     return value;
   if (try_dynamic_control_value(id, value))
     return value;

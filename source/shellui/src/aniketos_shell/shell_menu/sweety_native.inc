@@ -172,7 +172,7 @@ void Hide() {
   SystemDialogs::CloseNativeMenu();
   s_active = false;
   forget_base_scene();
-  s_unload_armed = false;
+  s_armed_option = OptionId::None;
   request_save();
 }
 
@@ -265,7 +265,7 @@ void Tick() {
     break;
   case SystemDialogs::NativeMenuEvent::Closed:
     /* Circle: back a page, or out of the menu from the first one */
-    s_unload_armed = false;
+    s_armed_option = OptionId::None;
     if (s_stack.size() > 1) {
       s_stack.pop_back();
       open_page(static_cast<int>(s_stack.back().selected));

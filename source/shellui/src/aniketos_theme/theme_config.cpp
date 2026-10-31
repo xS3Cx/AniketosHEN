@@ -121,12 +121,11 @@ ThemeConfig ConfigFromSettings(const onion::Settings &settings) {
       static_cast<NativeShellBackground::ImageTransition>(std::clamp(
           settings.shell_background_image_transition, 0,
           NativeShellBackground::ImageTransitionCount() - 1));
-  config.particles = static_cast<NativeShellBackground::ParticleMode>(
-      std::clamp(settings.shell_customization_enabled
-                     ? settings.shell_background_particles
-                     : static_cast<int>(
-                           NativeShellBackground::ParticleMode::Default),
-                 0, NativeShellBackground::ParticleModeCount() - 1));
+  config.particles =
+      settings.shell_customization_enabled
+          ? NativeShellBackground::ParticleModeFromSetting(
+                settings.shell_background_particles)
+          : NativeShellBackground::ParticleMode::Default;
   return config;
 }
 
@@ -307,7 +306,7 @@ void ApplyPresetToSettings(onion::Settings &settings, Preset preset) {
     settings.shell_background_animation =
         static_cast<int>(AnimationMode::Static);
     settings.shell_background_particles =
-        static_cast<int>(NativeShellBackground::ParticleMode::Spread);
+        static_cast<int>(NativeShellBackground::ParticleMode::Default);
     break;
   case Preset::Rainbow:
     /* Keep the readable PS5 backdrop neutral.  Only LightMat (the native
@@ -319,7 +318,7 @@ void ApplyPresetToSettings(onion::Settings &settings, Preset preset) {
     settings.shell_background_animation =
         static_cast<int>(AnimationMode::Rainbow);
     settings.shell_background_particles =
-        static_cast<int>(NativeShellBackground::ParticleMode::Spread);
+        static_cast<int>(NativeShellBackground::ParticleMode::Default);
     break;
   case Preset::Count:
     break;

@@ -31,6 +31,7 @@ enum class Page : unsigned char {
   PluginProgress,    /**< external plugin start/stop progress transition page */
   SuperuserPass,      /**< recognized; still use original stream */
   RedirectOgDebug,    /**< og_debug.xml → debug_settings resource */
+  Kbm,                /**< Keyboard and Mouse pages (kbm.xml, kbm-*.xml) */
 };
 
 struct ResourceNames {
@@ -126,6 +127,14 @@ inline bool settings_plugins_relative(std::string_view resource,
   if (out)
     *out = relative;
   return true;
+}
+
+/** Keyboard and Mouse pages: kbm.xml and kbm-<path>.xml (kbm_toolbox). */
+inline bool is_kbm_resource(std::string_view resource) {
+  std::string_view relative;
+  return settings_plugins_relative(resource, &relative) &&
+         (relative == "kbm.xml" ||
+          (relative.starts_with("kbm-") && relative.ends_with(".xml")));
 }
 
 inline bool valid_external_plugin_id(std::string_view id) {

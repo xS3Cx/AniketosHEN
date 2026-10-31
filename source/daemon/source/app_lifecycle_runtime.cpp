@@ -3,6 +3,7 @@
 #include "app_lifecycle_runtime.hpp"
 #include "daemon_ops.hpp"
 #include "sprx_plugin_manager_runtime.hpp"
+#include "kbm_service.hpp"
 
 #include <onion/app_lifecycle.hpp>
 #include <onion/log.h>
@@ -65,6 +66,7 @@ struct Runtime {
   Runtime() : dispatcher(32) {
     (void)dispatcher.subscribe(app_jailbreak);
     (void)dispatcher.subscribe(sprx);
+    (void)dispatcher.subscribe(onion::daemon::kbm::subscriber());
   }
 };
 

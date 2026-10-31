@@ -39,7 +39,7 @@ endif()
 # Version shown to users (welcome notification, About page, Settings banner,
 # error reports). Bump it for every build handed out. Empty falls back to the
 # git tag, or dirty-<sha> for an untagged tree.
-set(ANIKETOSHEN_VERSION "0.04e" CACHE STRING
+set(ANIKETOSHEN_VERSION "0.04i" CACHE STRING
 	"Release version shown to users (empty: derive from git)")
 set(ONIONHEN_GENERATED_INCLUDE_DIR "${CMAKE_BINARY_DIR}/generated/include")
 set(ONIONHEN_VERSION_HEADER
@@ -92,6 +92,7 @@ add_subdirectory(libNidResolver)
 add_subdirectory(libonion_proc)
 add_subdirectory(libonion_fps)
 add_subdirectory(libonion_platform)
+add_subdirectory(libonion_kbm)
 add_subdirectory(libonion_payload)
 add_subdirectory(libonion_conflict)
 add_subdirectory(libonion_ipc)
@@ -110,6 +111,7 @@ add_subdirectory(onion_elfldr_server)
 add_subdirectory(libNineS)
 add_subdirectory(shellui)
 add_subdirectory(util)
+add_subdirectory(kbm_agent)
 add_subdirectory(daemon)
 add_subdirectory(bootstrapper)
 add_subdirectory(unpacker)

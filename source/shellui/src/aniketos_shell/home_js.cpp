@@ -16,6 +16,7 @@
 #include <onion/log.h>
 #include <onion/settings.hpp>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -37,11 +38,24 @@ constexpr const char *kPending = ONION_DIST_USER_DATA_ROOT "/js_inject_pending";
    that Home is running with it. Still there at the next start: Home did not
    get that far. It holds how many starts in a row that has happened, since
    one alone is as likely a HEN reload or a power-off inside those eight
-   seconds as a script that brings Home down. */
+   seconds as a script that brings Home down, and the pause that follows:
+   after kUnconfirmedStartsAllowed such starts the script is left out for
+   `left` ShellUI starts, then tried again, each further failure doubling
+   the pause (up to kPauseMax). So a script that keeps bringing Home down
+   costs one Home restart in many, and two restarts for some other reason
+   (a HEN reload, a power cut, another module) cost one start, not the
+   script for good. "<count> <pause> <left>"; an older file holds the count
+   alone. The daemon removes it before a restart it asks for itself. */
 constexpr const char *kUnconfirmed =
     ONION_DIST_USER_DATA_ROOT "/js_inject_unconfirmed";
 /* Starts in a row that may end unconfirmed before the script is left out. */
 constexpr int kUnconfirmedStartsAllowed = 2;
+constexpr int kPauseMax = 32;
+struct Unconfirmed {
+  int count = 0; /* starts in a row that never confirmed the script */
+  int pause = 1; /* starts to leave the script out after the next failure */
+  int left = 0;  /* starts still to leave it out now */
+};
 /* Create this file to keep the JavaScript side untouched. */
 constexpr const char *kOff = ONION_DIST_USER_DATA_ROOT "/no_home_js";
 
@@ -51,8 +65,8 @@ using ConsoleLog = void (*)(MonoString *, int, void *, void *);
 ConsoleLog s_console_log_original = nullptr;
 MonoClass *s_executor_class = nullptr;
 bool s_disabled = false;
-/* Unconfirmed starts before this one (the count kept in kUnconfirmed). */
-int s_unconfirmed_starts = 0;
+/* The record kept in kUnconfirmed, as read at this start. */
+Unconfirmed s_unconfirmed;
 /* An app (Home, the Control Center) with the script in it, not yet
    reported running. An app that falls over starts again within a second,
    inside the same ShellUI, so the markers above never see it: after
@@ -99,16 +113,34 @@ bool exists(const char *path) {
   return stat(path, &st) == 0;
 }
 
-/* The count in kUnconfirmed; a file written before it held one counts once. */
-int unconfirmed_starts() {
+/* The record in kUnconfirmed; a file written before it held one counts once. */
+Unconfirmed read_unconfirmed() {
+  Unconfirmed record;
   const int fd = open(kUnconfirmed, O_RDONLY);
   if (fd < 0)
-    return 0;
-  char text[16] = {};
+    return record;
+  char text[48] = {};
   const ssize_t length = read(fd, text, sizeof(text) - 1);
   close(fd);
-  const int count = length > 0 ? std::atoi(text) : 0;
-  return count > 0 ? count : 1;
+  int count = 0, pause = 1, left = 0;
+  const int fields =
+      length > 0 ? std::sscanf(text, "%d %d %d", &count, &pause, &left) : 0;
+  record.count = fields >= 1 && count > 0 ? count : 1;
+  record.pause = fields >= 2 ? std::clamp(pause, 1, kPauseMax) : 1;
+  record.left = fields >= 3 ? std::clamp(left, 0, kPauseMax) : 0;
+  return record;
+}
+
+bool write_unconfirmed(const Unconfirmed &record) {
+  const int fd = open(kUnconfirmed, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  if (fd < 0)
+    return false;
+  char text[48];
+  const int length = std::snprintf(text, sizeof(text), "%d %d %d\n",
+                                   record.count, record.pause, record.left);
+  const bool ok = write(fd, text, length) == length;
+  close(fd);
+  return ok;
 }
 
 /* The JS side reports through the executor's own logging hook. */
@@ -118,7 +150,7 @@ void console_log_hook(MonoString *message, int level, void *a, void *b) {
     LOG_INFO("[HOMEJS] js: %s", text.substr(0, 400).c_str());
     if (text.compare(0, 14, "ANIKETOS alive") == 0) {
       unlink(kUnconfirmed); /* Home survived with the script in it */
-      s_unconfirmed_starts = 0;
+      s_unconfirmed = {};
       AppStarts &starts = text.find("app=control-center") != std::string::npos
                               ? s_control_center_starts
                               : s_home_starts;
@@ -211,16 +243,18 @@ void run_script_hook(MonoObject *executor, MonoObject *bundle) {
   const bool bookmark = home && HomeBookmark::Shown();
   if (!s_disabled && !exists(kOff) &&
       ((home && HomeTabs::Ready()) || control_center)) {
-    const std::string starts = std::to_string(s_unconfirmed_starts + 1);
-    for (const char *marker : {kPending, kUnconfirmed}) {
-      const int fd = open(marker, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-      if (fd < 0)
-        continue;
-      if (marker == kUnconfirmed &&
-          write(fd, starts.data(), starts.size()) < 0)
-        LOG_WARN("[HOMEJS] could not record the start count");
-      close(fd);
+    /* this start counted, and the pause to follow should it fail too */
+    Unconfirmed next = s_unconfirmed;
+    ++next.count;
+    if (next.count >= kUnconfirmedStartsAllowed) {
+      next.left = next.pause;
+      next.pause = std::min(next.pause * 2, kPauseMax);
     }
+    if (!write_unconfirmed(next))
+      LOG_WARN("[HOMEJS] could not record the start count");
+    const int fd = open(kPending, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd >= 0)
+      close(fd);
     const std::string caption = HomeTabs::Caption(
         HomeTabs::kEmulatorsGlyph, toolbox_i18n::tr("home_tabs.emulators"));
     /* Games and Media as the bar shows them, for React to lay it out by */
@@ -328,6 +362,18 @@ void flush_hook(MonoString *queue, void *a, void *b) {
     s_flush_original(queue, a, b);
 }
 
+/* A reload asked for by the HEN (a setting changed, the radius slider)
+   restarts the app before the script can report it running; that start is
+   not a fall-over, so it does not count towards kRestartsAllowed. */
+void NoteRequestedReload(const char *title_id) {
+  if (!title_id)
+    return;
+  if (std::strcmp(title_id, "NPXS40002") == 0)
+    s_home_starts.unconfirmed = false;
+  else if (std::strcmp(title_id, "NPXS40003") == 0)
+    s_control_center_starts.unconfirmed = false;
+}
+
 /* A JavaScript string literal in plain ASCII. The executor sizes the source
    by characters, not bytes, so anything outside ASCII (the glyph, most
    translations) has to travel as \uXXXX escapes or the script arrives cut
@@ -373,18 +419,30 @@ void Install(MonoImage *react_pui) {
   if (!react_pui || s_run_script_original)
     return;
   /* Died inside an injection, or unconfirmed twice running: the script
-     stays out until the markers are deleted. */
-  s_unconfirmed_starts = unconfirmed_starts();
-  if (exists(kPending) ||
-      s_unconfirmed_starts >= kUnconfirmedStartsAllowed) {
+     is left out for a pause of starts, then tried again (see kUnconfirmed). */
+  s_unconfirmed = read_unconfirmed();
+  if (exists(kPending)) {
+    /* ShellUI died with the injection in flight: a failed start as well */
+    unlink(kPending);
+    if (s_unconfirmed.count < 1)
+      s_unconfirmed.count = 1;
+  }
+  if (s_unconfirmed.count >= kUnconfirmedStartsAllowed &&
+      s_unconfirmed.left > 0) {
     s_disabled = true;
-    LOG_WARN("[HOMEJS] the last injection did not finish (unconfirmed "
-             "starts %d); JavaScript left alone (delete %s and %s to try "
-             "again)", s_unconfirmed_starts, kPending, kUnconfirmed);
-  } else if (s_unconfirmed_starts > 0) {
-    LOG_WARN("[HOMEJS] the last start never confirmed the script; trying "
-             "once more (%d of %d)", s_unconfirmed_starts + 1,
-             kUnconfirmedStartsAllowed);
+    --s_unconfirmed.left;
+    write_unconfirmed(s_unconfirmed);
+    LOG_WARN("[HOMEJS] %d starts in a row never confirmed the script; left "
+             "out for this start (%d more), then tried again (delete %s to "
+             "try at once)",
+             s_unconfirmed.count, s_unconfirmed.left, kUnconfirmed);
+  } else if (s_unconfirmed.count > 0) {
+    LOG_WARN("[HOMEJS] the last %d start(s) never confirmed the script; "
+             "trying again%s",
+             s_unconfirmed.count,
+             s_unconfirmed.count >= kUnconfirmedStartsAllowed
+                 ? " after the pause"
+                 : "");
   }
   s_executor_class = mono_class_from_name(
       react_pui, "ReactNative.JavaScriptCore.Executor", "JSJavaScriptExecutor");

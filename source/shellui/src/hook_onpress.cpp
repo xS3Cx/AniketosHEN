@@ -60,6 +60,7 @@ OnPressResult dispatch_toolbox_press(toolbox::OnPressDomain domain,
     run_exact(onpress_network_exact);
     run_exact(onpress_system_exact);
     run_exact(onpress_misc_root_exact);
+    run_prefix(onpress_kbm_prefix);
     break;
   case toolbox::OnPressDomain::Payloads:
   case toolbox::OnPressDomain::PayloadConfig:

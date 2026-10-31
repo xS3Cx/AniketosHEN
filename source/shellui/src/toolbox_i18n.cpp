@@ -22,7 +22,7 @@ namespace {
 /* Key -> entry index, built on first use. The catalog holds several hundred
  * keys and the Shell Menu translates every visible row whenever it repaints,
  * so a linear strcmp scan per lookup was measurable on the UI thread. */
-constexpr size_t kIndexSlots = 2048; /* power of two, > 2x the catalog size */
+constexpr size_t kIndexSlots = 4096; /* power of two, > 2x the catalog size */
 
 uint32_t key_hash(const char *key) {
   uint32_t hash = 2166136261u;

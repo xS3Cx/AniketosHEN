@@ -253,6 +253,10 @@ struct Settings {
 
   // [cheats], [app_jailbreak]
   int cheats_mirror = kCheatsMirrorAuto;
+  // In-game cheats menu on L1+L3+R3, drawn by AniketosHEN (0, PUI2) or as
+  // PUI's own card (1, PUI3).
+  bool cheats_visual_menu = false;
+  int cheats_visual_render = 0;
   bool app_jailbreak_enabled = true;
   bool debug_app_jb_msg = false;
   AppJailbreakAllowlist app_jailbreak_allowlist{};

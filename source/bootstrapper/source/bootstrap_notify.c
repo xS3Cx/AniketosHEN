@@ -16,6 +16,6 @@ void bootstrap_notify(const char *text, ...) {
 void bootstrap_notify_starting(bool custom_icon_ready) {
   /* a toast only: start-up messages are not kept in the notification list */
   onion_notify_rich_toast("notify.brand", "notify.boot.starting",
-                    custom_icon_ready ? ONION_NOTIFY_ICON_PATH : "",
-                    "download", "588193128");
+                          custom_icon_ready ? ONION_NOTIFY_ICON_PATH : "",
+                          "download", "588193128");
 }

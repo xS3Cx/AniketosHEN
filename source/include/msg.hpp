@@ -91,6 +91,10 @@ enum DaemonCommands : unsigned int {
   BREW_SPRX_SET_ENABLED = 0x9000111u,
   BREW_SPRX_DELETE = 0x9000112u,
 
+  // Keyboard & mouse for games: the Toolbox saved a profile, rewrite it into
+  // the running game.
+  BREW_KBM_RELOAD = 0x9000120u,
+
   // Legacy: manual elfldr launch removed (embedded 9020 is bootstrapper-managed)
   BREW_UTIL_LAUNCH_ELFLDR = 0xE1F1D8u,
   BREW_RELOAD_SETTINGS = 0xC0FFEEu,

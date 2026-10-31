@@ -1,4 +1,5 @@
 #include "aniketos_shell/home_menu.hpp"
+#include "aniketos_shell/cheats_menu.hpp"
 
 #include "external_symbols.hpp"
 #include "hooked_funcs.hpp"
@@ -31,7 +32,7 @@ namespace HomeMenu {
 namespace {
 
 /* What a row of the menu is. */
-enum class Row { Toolbox, Packages, Payloads, Internet, Unload };
+enum class Row { Toolbox, Packages, Payloads, Cheats, Internet, Unload };
 struct RowInfo {
   Row kind;
   int index;
@@ -66,6 +67,9 @@ std::vector<PayloadEntry> s_payloads;
 constexpr const char *kPayloadId = "payload:";
 constexpr const char *kPayloadIcon =
     ONION_DIST_USER_DATA_ROOT "/assets/icon_xml_plugins.png";
+/* "Cheats" opens the running game's cheats as a card of switches. */
+constexpr const char *kCheatsIcon =
+    ONION_DIST_USER_DATA_ROOT "/assets/icon_xml_cheats.png";
 
 const char *tr(const char *key) { return toolbox_i18n::tr(key); }
 
@@ -395,6 +399,8 @@ std::vector<SystemDialogs::MenuEntry> build_rows() {
   payloads.children.front().header = tr("home_menu.payloads.title");
   entries.push_back(payloads);
   s_rows.push_back({Row::Payloads, 0});
+  entries.push_back({tr("home_menu.cheats"), kCheatsIcon});
+  s_rows.push_back({Row::Cheats, 0});
   s_internet_row = static_cast<int>(entries.size());
   entries.push_back({tr("home_menu.internet"), InternetIconPath(s_switch_value),
                      /*is_switch=*/s_switch_shown, s_switch_value});
@@ -513,6 +519,11 @@ void Tick() {
     case Row::Packages:
     case Row::Payloads:
       break; /* submenu rows: PUI opens their rows beside the menu */
+    case Row::Cheats:
+      SystemDialogs::ClosePopupMenu();
+      s_menu_up = false;
+      AniketosShell::CheatsMenu::OpenFromControlCenter(scene);
+      break;
     case Row::Internet:
       break; /* a switch: followed above */
     case Row::Unload: {
