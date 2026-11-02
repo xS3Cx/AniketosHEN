@@ -985,6 +985,9 @@ void append_toolbox_about_group(ps5ui::Group& g) {
                 .label("id_about_lineage_2",
                        toolbox_i18n::tr("about.lineage.goldhen"),
                        ps5ui::Style::Center)
+                .label("id_credit_andriushka",
+                       "\xE2\x98\x85 andriushka.exe",
+                       ps5ui::Style::Center)
                 .label("id_about_contributor", toolbox_i18n::tr("about.contributor"),
                        ps5ui::Style::Center)
                 .label("id_about_more", toolbox_i18n::tr("about.more"),
@@ -1029,6 +1032,10 @@ void append_toolbox_about_group(ps5ui::Group& g) {
                        ps5ui::Style::Center)
                 .label("id_project_9",
                        "miniz / Keystone (cheats engine)",
+                       ps5ui::Style::Center)
+                .label("id_project_10",
+                       "ShadowMountPlus (drakmor) - "
+                       "https://github.com/drakmor/ShadowMountPlus",
                        ps5ui::Style::Center);
           },
           toolbox_i18n::tr("about.projects.sub"), kIconProject);

@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <b>AniketosHEN</b> · <code>0.04i</code><br/>
+  <b>AniketosHEN</b> · <code>0.04l</code><br/>
   An all-in-one HEN and Toolbox for PlayStation 5<br/>
   <sub>A fork of <a href="https://github.com/aydencharles/onionHEN">OnionHEN</a>
   by 麒麟/0xp0co and contributors. Everything added on top of OnionHEN is by
@@ -34,7 +34,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="license"/></a>
-  <img src="https://img.shields.io/badge/Version-0.04i-8a2be2" alt="version 0.04i"/>
+  <img src="https://img.shields.io/badge/Version-0.04l-8a2be2" alt="version 0.04l"/>
   <img src="https://img.shields.io/badge/Platform-PlayStation%205-003791?style=flat&logo=playstation" alt="PlayStation 5"/>
   <img src="https://img.shields.io/badge/C-00599C?style=flat&logo=c&logoColor=white" alt="C"/>
   <img src="https://img.shields.io/badge/C++-00599C?style=flat&logo=cplusplus&logoColor=white" alt="C++"/>
@@ -553,6 +553,7 @@ Everything that OnionHEN does not have is credited to its original authors:
   and avatars (with automatic fitting of large animated avatars), Hide App, controller tools, keyboard and mouse for games, mouse control,
   the Visual Cheats Menu, game Information and trophy tools, error reports,
   the OnionHEN import and the AniketosHEN artwork.
+- ★ **andriushka.exe**
 - Designs the Shell Menu styles are recreated from (no code or assets of
   these projects are included):
   - **Akari** — [kernaltrap8/Akari](https://github.com/kernaltrap8/Akari), by kernaltrap8, original author **jordywastaken**; the order of the menu motion easings also follows Akari
