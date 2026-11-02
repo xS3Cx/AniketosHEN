@@ -9,7 +9,9 @@
 #include <onion/fs.h>
 #include <onion/log.h>
 
+#include <fcntl.h>
 #include <string>
+#include <unistd.h>
 
 namespace MigrationNotice {
 namespace {
@@ -74,8 +76,11 @@ void Tick() {
     LOG_INFO("[MIGRATION-NOTICE] closed button=%d", button);
     /* Only pressing the button counts as read; backing out of the pop-up
        shows it again on the next start. */
-    if (button == 0)
-      touch_file(kSeen);
+    if (button == 0) {
+      const int fd = open(kSeen, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+      if (fd >= 0)
+        close(fd);
+    }
     s_state = State::Done;
     break;
   }

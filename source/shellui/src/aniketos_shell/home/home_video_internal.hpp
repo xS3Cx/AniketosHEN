@@ -50,8 +50,9 @@ struct ScreenSize {
   float width, height;
 };
 MonoClass *ui3_class(const char *name);
-ScreenSize size_of(MonoObject *root);
-bool prepare_layer(MonoObject *widget, ScreenSize size, const char *name);
+ScreenSize size_of(MonoObject *root, ScreenSize preset = {1920.0f, 1080.0f});
+bool prepare_layer(MonoObject *widget, ScreenSize size, const char *name,
+                   const char *scale = nullptr);
 void set_scale(MonoObject *widget, const char *member);
 bool put_first(MonoObject *root, MonoObject *widget);
 void remove_widget(MonoObject *widget);

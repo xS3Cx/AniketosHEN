@@ -164,7 +164,7 @@ void console_log_hook(MonoString *message, int level, void *a, void *b) {
 
 bool eval(MonoObject *executor, const char *source, const char *url) {
   MonoMethod *method =
-      AniketosUI::Reflect::MethodOf(s_executor_class, "EvalScript", 2);
+      AniketosUI::Reflect::DeclaredMethod(s_executor_class, "EvalScript", 2);
   if (!method) {
     LOG_WARN("[HOMEJS] EvalScript(string, string) not found");
     return false;

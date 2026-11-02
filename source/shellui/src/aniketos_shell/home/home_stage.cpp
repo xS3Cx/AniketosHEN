@@ -89,8 +89,8 @@ MonoClass *ui3_class(const char *name) {
              : nullptr;
 }
 
-ScreenSize size_of(MonoObject *root) {
-  ScreenSize size{0.0f, 0.0f};
+/* `size` stands in for a side that cannot be read. */
+ScreenSize size_of(MonoObject *root, ScreenSize size) {
   Reflect::FloatProperty(root, "get_Width", &size.width);
   Reflect::FloatProperty(root, "get_Height", &size.height);
   if (size.width < 1.0f || size.height < 1.0f) /* a layer may not say */
@@ -99,8 +99,10 @@ ScreenSize size_of(MonoObject *root) {
 }
 
 /* What every full-screen widget starts with: sized, named so it can be found,
-   never focused. Goes through them all; false if one did not take. */
-bool prepare_layer(MonoObject *widget, ScreenSize size, const char *name) {
+   scaled if `scale` is given, never focused. Goes through them all; false if
+   one did not take. */
+bool prepare_layer(MonoObject *widget, ScreenSize size, const char *name,
+                   const char *scale) {
   void *width_arguments[1] = {&size.width};
   void *height_arguments[1] = {&size.height};
   void *name_arguments[1] = {mono_string_new(mono_domain_get(), name)};
@@ -109,6 +111,8 @@ bool prepare_layer(MonoObject *widget, ScreenSize size, const char *name) {
   bool ok = call(widget, "set_Width", 1, width_arguments);
   ok &= call(widget, "set_Height", 1, height_arguments);
   ok &= call(widget, "set_Name", 1, name_arguments);
+  if (scale)
+    set_scale(widget, scale);
   if (Reflect::MethodOf(widget, "set_Focusable", 1))
     ok &= call(widget, "set_Focusable", 1, focus_arguments);
   return ok;
@@ -217,7 +221,7 @@ MonoObject *stage() {
     return nullptr; /* ShellUI still starting */
   remove_stale(root);
   panel = make(panel_class);
-  const ScreenSize size = size_of(root);
+  const ScreenSize size = size_of(root, {0.0f, 0.0f});
   void *panel_arguments[1] = {panel};
   if (!panel || !prepare_layer(panel, size, kStageName) ||
       !call(root, "AppendChild", 1, panel_arguments)) {

@@ -187,11 +187,12 @@ static bool write_temp(MigrateContext *context, const char *temp,
     config_failed(context, errno, "create");
     return false;
   }
-  bool ok = migrate_write_all(out, text, length) && fsync(out) == 0;
-  if (close(out) != 0)
-    ok = false;
+  const bool written = migrate_write_all(out, text, length) && fsync(out) == 0;
+  int error = errno; /* close must not replace the error that explains it */
+  const bool ok = close(out) == 0 && written;
   if (!ok) {
-    const int error = errno;
+    if (written)
+      error = errno;
     unlink(temp);
     config_failed(context, error, "write");
   }

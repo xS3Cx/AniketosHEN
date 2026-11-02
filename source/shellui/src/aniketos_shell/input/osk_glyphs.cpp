@@ -9,6 +9,7 @@
 #include <onion/log.h>
 
 #include <cstdint>
+#include <fcntl.h>
 #include <string>
 #include <unistd.h>
 #include <vector>
@@ -492,7 +493,9 @@ void add_area_hook(MonoObject *panel, uint64_t type, uint64_t option,
     return;
   if (s_pending_frames < 0) {
     /* the first time in this run: marked until it has been shown */
-    touch_file(kPending);
+    const int fd = open(kPending, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+    if (fd >= 0)
+      close(fd);
     s_pending_frames = 300;
   }
   grow -= 1.0f;

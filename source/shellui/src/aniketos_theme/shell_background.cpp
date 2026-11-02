@@ -20,7 +20,7 @@ namespace AniketosTheme::NativeShellBackground {
 namespace {
 
 using AniketosUI::NullableUIColor;
-using AniketosUI::Reflect::MethodOf;
+using AniketosUI::Reflect::DeclaredMethod;
 
 constexpr const char *kBgLayerNamespace = "Sce.Vsh.ShellUI.BGLayer";
 constexpr int32_t kCustomImageFade = 9; // Sony BackgroundTransitionType
@@ -410,32 +410,32 @@ bool Resolve() {
   if (!s_plugin_class) {
     s_plugin_class = mono_class_from_name(s_image, kBgLayerNamespace,
                                           "BGLayerPlugin");
-    s_get_instance = MethodOf(s_plugin_class, "get_Instance", 0);
-    s_set_light = MethodOf(s_plugin_class, "SetThemedLightColor", 1);
+    s_get_instance = DeclaredMethod(s_plugin_class, "get_Instance", 0);
+    s_set_light = DeclaredMethod(s_plugin_class, "SetThemedLightColor", 1);
     s_set_basemat =
-        MethodOf(s_plugin_class, "SetThemedBackgroundBasematColor", 1);
+        DeclaredMethod(s_plugin_class, "SetThemedBackgroundBasematColor", 1);
     s_set_global_animation =
-        MethodOf(s_plugin_class, "SetGlobalBackgroundAnimation", 1);
+        DeclaredMethod(s_plugin_class, "SetGlobalBackgroundAnimation", 1);
     s_set_background_transition =
-        MethodOf(s_plugin_class, "SetBackgroundTransition", 1);
-    s_show_wave = MethodOf(s_plugin_class, "ShowWave", 1);
+        DeclaredMethod(s_plugin_class, "SetBackgroundTransition", 1);
+    s_show_wave = DeclaredMethod(s_plugin_class, "ShowWave", 1);
     s_transition_param_class = mono_class_from_name(
         s_image, kBgLayerNamespace, "BackgroundTransitionParam");
     MonoClass *background_layer_class =
         mono_class_from_name(s_image, kBgLayerNamespace, "BackgroundLayer");
-    s_get_show_wave = MethodOf(background_layer_class, "get_ShowWave", 0);
+    s_get_show_wave = DeclaredMethod(background_layer_class, "get_ShowWave", 0);
     MonoClass *image_mapper_class =
         mono_class_from_name(s_image, kBgLayerNamespace, "ImageMapManager");
     s_layer_get_image_mapper =
-        MethodOf(background_layer_class, "get_ImageMapper", 0);
+        DeclaredMethod(background_layer_class, "get_ImageMapper", 0);
     s_cancel_loading_image =
-        MethodOf(image_mapper_class, "CancelLoadingImage", 0);
+        DeclaredMethod(image_mapper_class, "CancelLoadingImage", 0);
     s_transition_set_type =
-        MethodOf(s_transition_param_class, "set_TransitionType", 1);
+        DeclaredMethod(s_transition_param_class, "set_TransitionType", 1);
     s_transition_set_image_uri =
-        MethodOf(s_transition_param_class, "set_NextImageUri", 1);
+        DeclaredMethod(s_transition_param_class, "set_NextImageUri", 1);
     s_transition_set_degree =
-        MethodOf(s_transition_param_class, "set_Degree", 1);
+        DeclaredMethod(s_transition_param_class, "set_Degree", 1);
     if (s_set_basemat && mono_compile_method)
       s_set_basemat_thunk =
           reinterpret_cast<BasematThunk>(mono_compile_method(s_set_basemat));

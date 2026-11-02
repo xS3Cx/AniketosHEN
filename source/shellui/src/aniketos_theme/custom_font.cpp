@@ -29,7 +29,7 @@ namespace AniketosTheme::CustomFont {
 namespace {
 
 using AniketosUI::MonotonicMs;
-using AniketosUI::Reflect::MethodOf;
+using AniketosUI::Reflect::DeclaredMethod;
 
 /* libkernel's description of a loaded module (sceKernelGetModuleInfo). */
 struct ModuleSegment {
@@ -259,7 +259,7 @@ bool call_static(const char *name_space, const char *klass, const char *method,
                  int count, void **args) {
   MonoClass *type =
       pui_img ? mono_class_from_name(pui_img, name_space, klass) : nullptr;
-  MonoMethod *found = MethodOf(type, method, count);
+  MonoMethod *found = DeclaredMethod(type, method, count);
   MonoObject *exception = nullptr;
   if (found)
     mono_runtime_invoke(found, nullptr, args, &exception);
@@ -274,13 +274,16 @@ bool call_static(const char *name_space, const char *klass, const char *method,
 void relayout_labels() {
   MonoClass *system =
       mono_class_from_name(pui_img, "Sce.PlayStation.PUI", "UISystem");
-  MonoMethod *get_layout = MethodOf(system, "get_LayoutSettings", 0);
+  MonoMethod *get_layout = DeclaredMethod(system, "get_LayoutSettings", 0);
   MonoObject *exception = nullptr;
   MonoObject *layout = get_layout ? mono_runtime_invoke(get_layout, nullptr,
                                                         nullptr, &exception)
                                   : nullptr;
-  MonoMethod *get_locale = MethodOf(layout, "get_ForceOverriddenLocale", 0);
-  MonoMethod *set_locale = MethodOf(layout, "set_ForceOverriddenLocale", 1);
+  MonoClass *layout_class = layout ? mono_object_get_class(layout) : nullptr;
+  MonoMethod *get_locale =
+      DeclaredMethod(layout_class, "get_ForceOverriddenLocale", 0);
+  MonoMethod *set_locale =
+      DeclaredMethod(layout_class, "set_ForceOverriddenLocale", 1);
   if (!get_locale || !set_locale || exception) {
     LOG_WARN("[FONT] LayoutSettings.ForceOverriddenLocale not found");
     return;

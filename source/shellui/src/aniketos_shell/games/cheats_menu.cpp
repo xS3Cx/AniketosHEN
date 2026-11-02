@@ -818,9 +818,8 @@ void Close() {
 /* LayerManager's focus layer: the menu belongs to the game and goes away when
    Home, the Control Center or a system app comes up. */
 bool GameHasFocus() {
-  const FocusLayer layer = CurrentFocusLayer();
   /* Without the field the running BigApp is all there is to go by. */
-  return layer == FocusLayer::Game || layer == FocusLayer::Unknown;
+  return GameLayerFocused();
 }
 
 } // namespace AniketosShell::CheatsMenu

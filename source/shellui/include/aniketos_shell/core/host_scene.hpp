@@ -36,5 +36,9 @@ private:
  * field or one of these layers was not found on this firmware. UI thread. */
 enum class FocusLayer { Unknown, Game, TopMenu, ShellApp, Other };
 FocusLayer CurrentFocusLayer();
+/* Whether the game has the screen. Needs only the field and Game, so it still
+ * answers on a firmware without TopMenu or ShellApp; with neither, true. UI
+ * thread. */
+bool GameLayerFocused();
 
 } // namespace AniketosShell

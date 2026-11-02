@@ -1,6 +1,7 @@
 /* Copyright (C) 2025 OnionHEN / LightningMods
  * Extracted from hook_functions.cpp — hook_boot
  */
+#include "aniketos_shell/controller/controller_tools.hpp"
 #include "aniketos_shell/core/boot_uri.hpp"
 #include "aniketos_shell/core/menu_host.hpp"
 #include "aniketos_shell/input/mouse_control.hpp"
@@ -150,6 +151,9 @@ bool handle_uri_boot_common(MonoString* uri, int opt, MonoString* titleIdForBoot
 
   
     result = GetData(deviceIndex);
+
+    /* Advances the Shell Menu's DualSense light-bar animations. */
+    controller_tick();
 
     if (AniketosShell::FilterPad(result))
       return result;

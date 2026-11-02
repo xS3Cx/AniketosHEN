@@ -30,6 +30,7 @@ MonoDomain *calling_domain() {
 
 MonoClassField *s_focus_field = nullptr;
 MonoVTable *s_focus_vtable = nullptr; /* null: not readable on this firmware */
+MonoVTable *s_game_vtable = nullptr;  /* needs less: the field and Game */
 int32_t s_focus_game = -1;
 int32_t s_focus_top_menu = -1;
 int32_t s_focus_shell_app = -1;
@@ -47,13 +48,25 @@ void resolve_focus_layer() {
               : nullptr;
   MonoVTable *vtable =
       s_focus_field ? mono_class_vtable(mono_domain_get(), manager) : nullptr;
-  const bool values = vtable && EnumValue(layers, "Game", &s_focus_game) &&
-                      EnumValue(layers, "TopMenu", &s_focus_top_menu) &&
+  const bool game = vtable && EnumValue(layers, "Game", &s_focus_game);
+  const bool values = game && EnumValue(layers, "TopMenu", &s_focus_top_menu) &&
                       EnumValue(layers, "ShellApp", &s_focus_shell_app);
   LOG_INFO("[ANIVSH:HOST] focus layer field=%d values=%d",
            s_focus_field ? 1 : 0, values ? 1 : 0);
+  LOG_INFO("[CHEATSMENU] focus layer field=%d game=%d", game ? 1 : 0,
+           s_focus_game);
+  if (game)
+    s_game_vtable = vtable;
   if (values)
     s_focus_vtable = vtable;
+}
+
+void ensure_focus_resolved() {
+  static bool resolved = false;
+  if (!resolved) {
+    resolved = true;
+    resolve_focus_layer();
+  }
 }
 
 } // namespace
@@ -164,11 +177,7 @@ bool HostScene::Resolve(HostSnapshot &out) {
 }
 
 FocusLayer CurrentFocusLayer() {
-  static bool resolved = false;
-  if (!resolved) {
-    resolved = true;
-    resolve_focus_layer();
-  }
+  ensure_focus_resolved();
   if (!s_focus_vtable)
     return FocusLayer::Unknown;
   int32_t value = -1;
@@ -180,6 +189,15 @@ FocusLayer CurrentFocusLayer() {
   if (value == s_focus_game)
     return FocusLayer::Game;
   return FocusLayer::Other;
+}
+
+bool GameLayerFocused() {
+  ensure_focus_resolved();
+  if (!s_game_vtable)
+    return true;
+  int32_t value = -1;
+  mono_field_static_get_value(s_game_vtable, s_focus_field, &value);
+  return value == s_focus_game;
 }
 
 } // namespace AniketosShell

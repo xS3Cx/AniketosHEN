@@ -332,9 +332,8 @@ bool build(MonoObject *root) {
   }
 
   const ScreenSize size = size_of(root);
-  prepare_layer(view, size, kWidgetName);
   /* fill the screen, cropping what does not fit */
-  set_scale(view, "AspectOutside");
+  prepare_layer(view, size, kWidgetName, "AspectOutside");
 
   bool yes = true;
   void *set_player_arguments[2] = {player, &yes};

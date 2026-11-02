@@ -29,6 +29,13 @@ inline void Hold(uint32_t &handle, MonoObject *object, bool strong = false) {
     handle = mono_gchandle_new_weakref(object, 0);
 }
 
+/* On `klass` itself, never a parent: a firmware that moved the method loses the
+ * feature, and nothing of the same name and arity gets called in its place. */
+inline MonoMethod *DeclaredMethod(MonoClass *klass, const char *name,
+                                  int parameters) {
+  return klass ? mono_class_get_method_from_name(klass, name, parameters)
+               : nullptr;
+}
 MonoMethod *MethodOf(MonoClass *klass, const char *name, int parameters);
 MonoMethod *MethodOf(MonoObject *object, const char *name, int parameters);
 MonoClassField *FindField(MonoObject *object, const char *name);

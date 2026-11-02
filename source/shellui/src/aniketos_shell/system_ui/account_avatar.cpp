@@ -94,7 +94,9 @@ FitJob s_fit_job;
 std::string s_fit_desired_source;
 std::string s_fit_desired_cache;
 unsigned long s_fit_generation = 0;
-unsigned long s_fit_failed_generation = 0; /* not tried again */
+/* not tried again while the file stays as it was */
+unsigned long s_fit_failed_generation = 0;
+time_t s_fit_failed_mtime = 0;
 std::atomic<bool> s_fit_running{false};
 std::atomic<bool> s_fit_done{false};
 std::atomic<bool> s_fit_ok{false};
@@ -130,6 +132,11 @@ bool is_nonempty_file(const std::string &path) {
   struct stat info {};
   return stat(path.c_str(), &info) == 0 && S_ISREG(info.st_mode) &&
          info.st_size > 0;
+}
+
+time_t modified_at(const std::string &path) {
+  struct stat info {};
+  return stat(path.c_str(), &info) == 0 ? info.st_mtime : 0;
 }
 
 uint32_t foreground_user() {
@@ -221,8 +228,8 @@ std::string chosen_path() {
 }
 
 /* Tells the user at once why the chosen picture will not show. A GIF over the
-   limits is fitted instead (avatar_codec), so only other formats are warned
-   about those. */
+   limits is fitted instead (avatar_codec), so only other formats, and a GIF too
+   big to decode for fitting, are warned about those. */
 void report_chosen() {
   const std::string path = chosen_path();
   if (path.empty())
@@ -240,7 +247,8 @@ void report_chosen() {
   LOG_INFO("[AVATAR] '%s' format=%d %dx%d frames=%d", name.c_str(),
            static_cast<int>(info.format), info.width, info.height, info.frames);
   const AvatarImage::Problem problem = AvatarImage::Check(info);
-  if (problem != AvatarImage::Problem::NotPicture && has_extension(path, kFitted))
+  if (problem != AvatarImage::Problem::NotPicture &&
+      has_extension(path, kFitted) && AvatarImage::DecodeFits(info))
     return;
   switch (problem) {
   case AvatarImage::Problem::NotPicture:
@@ -311,7 +319,8 @@ void request_fit(const std::string &source, const std::string &cache) {
     s_fit_desired_cache = cache;
     ++s_fit_generation;
   }
-  if (s_fit_running.load() || s_fit_failed_generation == s_fit_generation)
+  if (s_fit_running.load() || (s_fit_failed_generation == s_fit_generation &&
+                               s_fit_failed_mtime == modified_at(source)))
     return;
   start_fit();
 }
@@ -339,9 +348,10 @@ void consume_fit() {
       start_fit();
     return;
   }
-  if (!ok)
+  if (!ok) {
     s_fit_failed_generation = s_fit_generation;
-  else if (avatar_codec_cache_valid(s_fit_job.source.c_str(),
+    s_fit_failed_mtime = modified_at(s_fit_job.source);
+  } else if (avatar_codec_cache_valid(s_fit_job.source.c_str(),
                                     s_fit_job.cache.c_str()))
     Refresh();
 }

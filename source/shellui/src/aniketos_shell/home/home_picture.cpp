@@ -78,9 +78,8 @@ bool build_image(MonoObject *root, const std::string &path) {
   if (!asset)
     return false;
   const ScreenSize size = size_of(root);
-  prepare_layer(box, size, kImageWidgetName);
   /* fill the screen, cropping what does not fit */
-  set_scale(box, "AspectOutside");
+  prepare_layer(box, size, kImageWidgetName, "AspectOutside");
   void *image_arguments[1] = {asset};
   if (!call(box, "set_Image", 1, image_arguments) || !put_first(root, box))
     return false;
