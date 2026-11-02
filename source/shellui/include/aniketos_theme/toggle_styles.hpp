@@ -2,6 +2,9 @@
 
 struct MonoImage;
 struct MonoObject;
+namespace AniketosUI {
+struct UIColor;
+}
 
 /* Other looks for the system's on/off switch, drawn with the system's own
  * widgets: the switch is PUI's CheckBox in its "switch" style, which is two
@@ -17,10 +20,10 @@ namespace AniketosTheme::ToggleStyles {
 
 void Install(MonoImage *pui);
 
-/* From the Panel background hook (panel_tint.cpp): `rgba` is the colour the
+/* From the Panel background hook (panel_tint.cpp): `color` is the colour the
  * system is about to give `panel`, changed in place when the panel is part
  * of a switch and a style is chosen; true then. */
-bool OnPanelBackground(MonoObject *panel, float *rgba);
+bool OnPanelBackground(MonoObject *panel, AniketosUI::UIColor &color);
 
 /* UI thread, once a frame: moves the added parts of the switches on screen. */
 void Tick();

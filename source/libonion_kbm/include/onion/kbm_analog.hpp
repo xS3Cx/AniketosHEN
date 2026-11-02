@@ -1,10 +1,9 @@
 /* Keyboard & mouse for games: the analog side of the engine.
  *
  * Ramps for keys that drive sticks and triggers, the stick circle and byte
- * quantising, and the mouse-to-stick translator (research note G4). Plain
- * float maths with our own pow/sqrt, so the agent needs no libm and the host
- * tests get the same numbers bit for bit. Every value that leaves here is
- * finite.
+ * quantising, and the mouse-to-stick translator. Plain float maths with our
+ * own pow/sqrt, so the agent needs no libm and the host tests get the same
+ * numbers bit for bit. Every value that leaves here is finite.
  */
 #pragma once
 
@@ -12,9 +11,6 @@
 
 namespace onion::kbm::analog {
 
-float Sqrt(float x);            /* x <= 0 or not finite: 0 */
-float Pow(float base, float e); /* base <= 0: 0 */
-float Finite(float x);          /* NaN / inf: 0 */
 float Clamp(float x, float lo, float hi); /* NaN: lo */
 
 /* One analog output's 0..1 level: rises toward 1 while `on`, falls toward 0
@@ -36,12 +32,10 @@ public:
   /* Full deflection at sensitivity 100 is 1 / kSensBase counts/ms
      (16.7 c/ms, about 26 cm/s at 1600 CPI). */
   static constexpr float kSensBase = 0.06f;
-  /* Saturation carry cap (G4 section 6), in ms at full deflection. */
+  /* Saturation carry cap, in ms at full deflection. */
   static constexpr float kCarryCapMs = 150.f;
 
   void Reset();
-  /* Drops the position-mode stick position (layer or mode change). */
-  void ResetPosition() { px_ = py_ = 0.f; }
   /* Records this read's motion, spread over the `dt_us` since the last read. */
   void Push(uint64_t now_us, uint32_t dt_us, int32_t dx, int32_t dy);
   /* Average speed over the last `window_ms`, counts/ms, raw axes (x right,
@@ -68,10 +62,5 @@ private:
   float carry_ = 0.f, carry_x_ = 0.f, carry_y_ = 0.f;
   float px_ = 0.f, py_ = 0.f;
 };
-
-/* Turns a 0..1 magnitude along (ux, uy) into a deflection past the game's
-   deadzone and up to the outer limit (G4 section 7.2). */
-void CompensateDeadzone(const MouseParams &p, float ux, float uy, float m,
-                        float *x, float *y);
 
 } // namespace onion::kbm::analog

@@ -10,10 +10,26 @@
  */
 #pragma once
 
+#include <stdarg.h>
+#include <time.h>
+
 #include "onion/kbm_engine.hpp" /* InputFrame */
 #include "onion/kbm_types.hpp"
 
 namespace onion::kbm::agent {
+
+inline uint64_t NowUs() {
+  timespec t;
+  clock_gettime(CLOCK_MONOTONIC, &t);
+  return static_cast<uint64_t>(t.tv_sec) * 1000000u +
+         static_cast<uint64_t>(t.tv_nsec) / 1000u;
+}
+
+/* Finds libkernel and its klog call: before LogLine and InputInit. */
+void LogInit();
+
+/* One klog line: `prefix`, the text, a newline. */
+void LogLine(const char *prefix, const char *fmt, va_list args);
 
 /* Loads libSceUserService, libSceMouse and libSceIme (from the game's
    sandbox when the game has not loaded them) and resolves what the reader
@@ -21,9 +37,9 @@ namespace onion::kbm::agent {
 bool InputInit();
 
 /* Starts the reader thread. `control` may be null; otherwise the reader
-   bumps control->heartbeat every loop and keeps agent_status bit2 (mouse
-   open) and bit3 (keyboard open) up to date, leaving the other bits alone.
-   It first waits up to 500 ms for an older agent to clear bits 2 and 3. */
+   bumps control->heartbeat every loop and keeps kStatusMouseOpen and
+   kStatusKeyboardOpen up to date, leaving the other bits alone. It first
+   waits up to 500 ms for an older agent to clear those two. */
 bool InputStart(ControlPage *control);
 
 /* For the hook thread (any game thread, several at once are fine): the

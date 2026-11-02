@@ -102,18 +102,17 @@ constexpr IdName kMouseInputs[] = {
 struct ButtonName {
   uint32_t bit;
   const char *token;
-  const char *display;
 };
 
 constexpr ButtonName kButtons[] = {
-    {kPadCross, "cross", "Cross"},       {kPadCircle, "circle", "Circle"},
-    {kPadSquare, "square", "Square"},    {kPadTriangle, "triangle", "Triangle"},
-    {kPadL1, "l1", "L1"},                {kPadR1, "r1", "R1"},
-    {kPadL2, "l2", "L2"},                {kPadR2, "r2", "R2"},
-    {kPadL3, "l3", "L3"},                {kPadR3, "r3", "R3"},
-    {kPadOptions, "options", "Options"}, {kPadTouchpad, "touchpad", "Touchpad"},
-    {kPadUp, "up", "D-pad up"},          {kPadDown, "down", "D-pad down"},
-    {kPadLeft, "left", "D-pad left"},    {kPadRight, "right", "D-pad right"},
+    {kPadCross, "cross"},     {kPadCircle, "circle"},
+    {kPadSquare, "square"},   {kPadTriangle, "triangle"},
+    {kPadL1, "l1"},           {kPadR1, "r1"},
+    {kPadL2, "l2"},           {kPadR2, "r2"},
+    {kPadL3, "l3"},           {kPadR3, "r3"},
+    {kPadOptions, "options"}, {kPadTouchpad, "touchpad"},
+    {kPadUp, "up"},           {kPadDown, "down"},
+    {kPadLeft, "left"},       {kPadRight, "right"},
 };
 
 /* axis:<stick><axis><sign>, Y down positive */
@@ -121,17 +120,12 @@ struct AxisName {
   uint8_t axis;
   int sign;
   const char *token;
-  const char *display;
 };
 constexpr AxisName kAxes[] = {
-    {kAxisLX, -1, "axis:lx-", "Left stick left"},
-    {kAxisLX, +1, "axis:lx+", "Left stick right"},
-    {kAxisLY, -1, "axis:ly-", "Left stick up"},
-    {kAxisLY, +1, "axis:ly+", "Left stick down"},
-    {kAxisRX, -1, "axis:rx-", "Right stick left"},
-    {kAxisRX, +1, "axis:rx+", "Right stick right"},
-    {kAxisRY, -1, "axis:ry-", "Right stick up"},
-    {kAxisRY, +1, "axis:ry+", "Right stick down"},
+    {kAxisLX, -1, "axis:lx-"}, {kAxisLX, +1, "axis:lx+"},
+    {kAxisLY, -1, "axis:ly-"}, {kAxisLY, +1, "axis:ly+"},
+    {kAxisRX, -1, "axis:rx-"}, {kAxisRX, +1, "axis:rx+"},
+    {kAxisRY, -1, "axis:ry-"}, {kAxisRY, +1, "axis:ry+"},
 };
 
 bool prefixed(const char *s, const char *prefix, const char **rest) {
@@ -316,43 +310,6 @@ bool ParseOutput(const char *name, OutputDef *out) {
   }
   *out = o;
   return true;
-}
-
-std::string OutputDisplayName(const OutputDef &o) {
-  switch (o.kind) {
-  case OutputKind::None: return "Nothing";
-  case OutputKind::Button: {
-    std::string out;
-    for (const ButtonName &b : kButtons) {
-      if (!(o.buttons & b.bit)) continue;
-      if (!out.empty()) out += " + ";
-      out += b.display;
-    }
-    return out;
-  }
-  case OutputKind::AxisDirection:
-    for (const AxisName &a : kAxes)
-      if (a.axis == o.axis && (a.sign < 0) == (o.value < 0)) return a.display;
-    return "";
-  case OutputKind::Trigger: return o.trigger == kTriggerL2 ? "L2" : "R2";
-  case OutputKind::LayerHold: return "Hold layer " + o.layer;
-  case OutputKind::LayerToggle: return "Toggle layer " + o.layer;
-  case OutputKind::Macro: return "Macro " + o.macro;
-  case OutputKind::StickScale:
-    return o.axis ? "Scale right stick" : "Scale left stick";
-  case OutputKind::MappingToggle: return "Suspend mapping";
-  }
-  return "";
-}
-
-std::vector<std::string> AllOutputNames() {
-  std::vector<std::string> out = {"none"};
-  for (const ButtonName &b : kButtons) out.push_back(std::string("pad:") + b.token);
-  for (const AxisName &a : kAxes) out.push_back(a.token);
-  for (const char *n : {"trigger:l2", "trigger:r2", "layer:hold", "layer:toggle",
-                        "macro", "scale:left", "scale:right", "suspend"})
-    out.push_back(n);
-  return out;
 }
 
 const char *GestureName(Gesture g) { return enum_name(static_cast<size_t>(g), kGestureNames); }

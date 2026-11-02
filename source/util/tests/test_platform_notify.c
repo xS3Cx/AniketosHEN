@@ -271,29 +271,29 @@ static int test_notify_rich_localizes_both_text_fields(void) {
   return 0;
 }
 
-static int g_rich_logged = -1;
+static int s_last_is_logged = -1;
 
 static int32_t capture_rich_logged(int32_t user_id, bool is_logged,
                                    const char *payload) {
   (void)payload;
   TEST_ASSERT_TRUE(user_id == 0xFE);
-  g_rich_logged = is_logged ? 1 : 0;
+  s_last_is_logged = is_logged ? 1 : 0;
   return 0;
 }
 
 static int test_notify_rich_toast_is_not_logged(void) {
   onion_notify_set_rich_send(capture_rich_logged);
-  g_rich_logged = -1;
+  s_last_is_logged = -1;
   onion_notify_rich_toast("notify.brand", "notify.boot.starting", "/icon.png",
                           "download", "46");
-  TEST_ASSERT_TRUE(g_rich_logged == 0);
-  g_rich_logged = -1;
+  TEST_ASSERT_TRUE(s_last_is_logged == 0);
+  s_last_is_logged = -1;
   onion_notify_try_rich_toast("{\"rawData\":{}}", "notify.boot.welcome");
-  TEST_ASSERT_TRUE(g_rich_logged == 0);
-  g_rich_logged = -1;
+  TEST_ASSERT_TRUE(s_last_is_logged == 0);
+  s_last_is_logged = -1;
   onion_notify_rich("notify.brand", "notify.boot.starting", "/icon.png",
                     "download", "47");
-  TEST_ASSERT_TRUE(g_rich_logged == 1);
+  TEST_ASSERT_TRUE(s_last_is_logged == 1);
   onion_notify_set_rich_send(NULL);
   return 0;
 }

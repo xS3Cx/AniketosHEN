@@ -5,13 +5,10 @@
 #include "ipc.hpp"
 #include "external_symbols.hpp"
 #include "toolbox_i18n.hpp"
-#include "aniketos_shell/games/trophy_tools.hpp"
-#include "aniketos_shell/home/home_bookmark.hpp"
-#include "aniketos_shell/home/hidden_apps.hpp"
+#include "aniketos_shell/games/game_options_menu.hpp"
 #include <onion/platform.h>
 #include <onion/system_tmp.h>
 #include <string>
-#include <chrono>
 #include <fstream>
 #include <sys/stat.h>
 
@@ -103,38 +100,6 @@ int sceRegMgrGetInt_hook(long regid, int* out_val){
 
   return ret;
 }
-/* The title an Options menu entry is about, read from its URL: a
-   "titleId=" parameter (any case, "npTitleId=" too) or the first of the
-   "titleIds" list some dialogs carry, percent-encoded or not. */
-static std::string menu_entry_title(const std::string &url) {
-    std::string text;
-    for (size_t i = 0; i < url.size(); ++i) {
-        if (url[i] == '%' && i + 2 < url.size() &&
-            std::isxdigit(static_cast<unsigned char>(url[i + 1])) &&
-            std::isxdigit(static_cast<unsigned char>(url[i + 2]))) {
-            text += static_cast<char>(std::stoi(url.substr(i + 1, 2), nullptr, 16));
-            i += 2;
-        } else {
-            text += url[i];
-        }
-    }
-    std::string lower = text;
-    for (char &c : lower)
-        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    for (const char *key : {"titleid=", "\"titleids\":[\""}) {
-        const size_t at = lower.find(key);
-        if (at == std::string::npos)
-            continue;
-        const std::string id = text.substr(at + std::strlen(key), 9);
-        bool clean = id.size() == 9;
-        for (const char c : id)
-            clean = clean && std::isalnum(static_cast<unsigned char>(c));
-        if (clean)
-            return id;
-    }
-    return std::string();
-}
-
 static std::string extractTIDFromURI(const std::string& url) {
     /* "titleId=" in most entries, "titleid=" in Check for Update's */
     const std::string prefix = "titleid=";
@@ -153,52 +118,6 @@ static std::string extractTIDFromURI(const std::string& url) {
         }
     }
     return std::string(); // Not found
-}
-
-namespace {
-constexpr auto kMenuGap = std::chrono::milliseconds(500);
-bool s_aniketos_block_added = false;
-std::chrono::steady_clock::time_point s_last_menu_entry;
-
-bool is_aniketos_anchor(const std::string &id) {
-    return id == "MENU_ID_APPLICATION_DELETE" ||
-           id == "MENU_ID_CHECK_PATCH";
-}
-
-void add_aniketos_entries(MonoObject* inst, MonoObject* array,
-                          MonoString* actionId, MonoObject* subMenu,
-                          bool enable, const std::string& title) {
-    createJson(inst, array, mono_string_new(Root_Domain, "MENU_ID_CHEATS"),
-               mono_string_new(Root_Domain,
-                               toolbox_i18n::tr("cheats.game_menu")),
-               mono_string_new(Root_Domain, "OnionHEN?Cheats_not_open"),
-               actionId, nullptr, subMenu, enable);
-
-    createJson(inst, array,
-               mono_string_new(Root_Domain, "MENU_ID_TROPHY_UNLOCK_ALL"),
-               mono_string_new(Root_Domain,
-                               toolbox_i18n::tr("trophy.game_menu")),
-               mono_string_new(Root_Domain, TrophyTools::kUnlockAllUri),
-               actionId, nullptr, subMenu, enable);
-
-    if (HomeBookmark::Allowed(title)) {
-        const std::string text = std::string(HomeBookmark::kGlyph) + " " +
-                                 toolbox_i18n::tr("bookmark.menu_tabs");
-        createJson(inst, array,
-                   mono_string_new(Root_Domain, "MENU_ID_ANIKETOS_BOOKMARK"),
-                   mono_string_new(Root_Domain, text.c_str()),
-                   mono_string_new(Root_Domain, HomeBookmark::kMenuUri),
-                   actionId, nullptr, subMenu, enable);
-    }
-
-    if (HomeHidden::FilterEnabled() && HomeHidden::Allowed(title))
-        createJson(inst, array,
-                   mono_string_new(Root_Domain, "MENU_ID_ANIKETOS_HIDE"),
-                   mono_string_new(Root_Domain,
-                                   toolbox_i18n::tr("hideapp.game_menu")),
-                   mono_string_new(Root_Domain, HomeHidden::kMenuUri),
-                   actionId, nullptr, subMenu, enable);
-}
 }
 
 void createJson_hook(MonoObject* inst, MonoObject* array, MonoString* id, MonoString* label, MonoString* actionUrl, MonoString* actionId, MonoString* messageId, MonoObject* subMenu, bool enable) {
@@ -221,49 +140,27 @@ void createJson_hook(MonoObject* inst, MonoObject* array, MonoString* id, MonoSt
                Mono_to_String(messageId).c_str());
 #endif
 
-    if (!g_settings.onionhen_game_opts) {
-        if (id_str == "MENU_ID_APPLICATION_DELETE") {
-            const std::string title = menu_entry_title(Mono_to_String(actionUrl));
-            if (!title.empty())
-                g_ui.current_menu_tid = title;
-            if (HomeBookmark::Allowed(title)) {
-                const std::string text = std::string(HomeBookmark::kGlyph) + " " +
-                                         toolbox_i18n::tr("bookmark.menu_tabs");
-                createJson(inst, array,
-                           mono_string_new(Root_Domain, "MENU_ID_ANIKETOS_BOOKMARK"),
-                           mono_string_new(Root_Domain, text.c_str()),
-                           mono_string_new(Root_Domain, HomeBookmark::kMenuUri),
-                           actionId, nullptr, subMenu, enable);
-            }
-        }
+    if(!g_settings.onionhen_game_opts) {
+        GameOptionsMenu::OnEntryOptionsOff({inst, array, id_str, actionUrl, actionId, subMenu, enable});
         createJson(inst, array, id, label, actionUrl, actionId, messageId, subMenu, enable);
         return;
     }
 
-    const auto now = std::chrono::steady_clock::now();
-    if (now - s_last_menu_entry > kMenuGap)
-        s_aniketos_block_added = false;
-    s_last_menu_entry = now;
+    GameOptionsMenu::OnEntry({inst, array, id_str, actionUrl, actionId, subMenu, enable});
 
-    if (!s_aniketos_block_added && is_aniketos_anchor(id_str)) {
-        const std::string title = menu_entry_title(Mono_to_String(actionUrl));
-        if (!title.empty())
-            g_ui.current_menu_tid = title;
-        add_aniketos_entries(inst, array, actionId, subMenu, enable, title);
-        s_aniketos_block_added = true;
-        LOG_INFO("[GAMEMENU] Aniketos block at %s (title %s)",
-                 id_str.c_str(), title.c_str());
-    }
-
+    // Only extract and update titleId if one is found in the current URL
     std::string extracted_tid = extractTIDFromURI(Mono_to_String(actionUrl));
     if (!extracted_tid.empty() && extracted_tid != g_ui.current_menu_tid) {
         g_ui.current_menu_tid = extracted_tid;
 #if SHELL_DEBUG==1
+        //notify("Current menu titleId: %s", g_ui.current_menu_tid.c_str());
         LOG_DEBUG("Updated menu titleId: %s", g_ui.current_menu_tid.c_str());
 #endif
     }
-    if (id_str == "MENU_ID_CHECK_PATCH")
+    if(id_str == "MENU_ID_CHECK_PATCH"){  
+      //createJson_hook: 8815fec90 id: MENU_ID_CHECK_PATCH, label: , actionUrl: pspatchcheck:check-for-update?titleid=CUSA01127, actionId: , messageId: msgid_check_update
         return;
+    }
 
     createJson(inst, array, id, label, actionUrl, actionId, messageId, subMenu, enable);
 }

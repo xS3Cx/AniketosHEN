@@ -21,7 +21,8 @@ std::mutex &inject_mutex();
 
 namespace onion::daemon::kbm {
 
-/** Lifecycle subscriber (BigAppStarted / BigAppExited); only queues work. */
+/** Lifecycle subscriber (BigAppStarted / BigAppExited): queues the work, and
+ *  blocks a title that ended right after the agent went in. */
 onion::lifecycle::ISubscriber &subscriber();
 
 /** "kbm reload" from ShellUI: recompile the running game's profile and write

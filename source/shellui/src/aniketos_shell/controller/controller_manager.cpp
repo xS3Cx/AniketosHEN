@@ -16,28 +16,28 @@
  */
 #include "aniketos_shell/controller/controller_manager.hpp"
 
-#include "hooked_funcs.hpp"
 #include "aniketos_shell/input/pad_reader.hpp"
+#include "aniketos_ui/monotonic_clock.hpp"
+#include "hooked_funcs.hpp"
 
-#include <onion/platform.h>
+#include <onion/log.h>
 
 #include <atomic>
 #include <cmath>
 #include <cstring>
 #include <mutex>
 #include <pthread.h>
-#include <time.h>
 
 extern "C" {
-int sceUserServiceGetForegroundUser(int *user_id);
 int sceUserServiceGetUserName(int user_id, char *name, size_t size);
 int scePadGetHandle(int user_id, int type, int index);
 int scePadGetControllerInformation(int handle, void *info);
 }
 
 namespace AniketosHEN::Controller {
+namespace {
 
-const char *ToString(ControllerClass value) {
+const char *class_name(ControllerClass value) {
   switch (value) {
   case ControllerClass::StandardPad: return "StandardPad";
   case ControllerClass::Guitar: return "Guitar";
@@ -52,8 +52,6 @@ const char *ToString(ControllerClass value) {
   default: return "Unknown";
   }
 }
-
-namespace {
 
 /* Offsets inside ScePadControllerInformation. They are only ever used after
  * validate_layout() has confirmed, on this running firmware, that the getter
@@ -74,27 +72,38 @@ constexpr int kBufferBytes = 128;
 constexpr int kPollMillis = 1000;
 
 std::atomic<bool> s_started{false};
-std::atomic<bool> s_stop{false};
-std::atomic<bool> s_ready{false};
-std::atomic<bool> s_worker_running{false};
-pthread_t s_worker{};
 
 std::mutex s_mutex;
 ControllerInfo s_snapshot;
-uint32_t s_generation = 0;
 
-uint64_t monotonic_millis() {
-  timespec now{};
-  clock_gettime(CLOCK_MONOTONIC, &now);
-  return static_cast<uint64_t>(now.tv_sec) * 1000u +
-         static_cast<uint64_t>(now.tv_nsec) / 1000000u;
+struct InformationFields {
+  float density = 0.0f;
+  uint16_t width = 0;
+  uint16_t height = 0;
+  uint32_t device_class = 0;
+};
+
+/* Calls the getter over the guard pattern. */
+int read_information(int handle, unsigned char *buffer) {
+  memset(buffer, kGuard, kBufferBytes);
+  return scePadGetControllerInformation(handle, buffer);
 }
 
-int written_extent(const unsigned char *buffer, int length) {
-  for (int i = length - 1; i >= 0; i--)
+int written_extent(const unsigned char *buffer) {
+  for (int i = kBufferBytes - 1; i >= 0; i--)
     if (buffer[i] != kGuard)
       return i + 1;
   return -1;
+}
+
+InformationFields decode(const unsigned char *buffer) {
+  InformationFields fields;
+  memcpy(&fields.density, buffer + kOffTouchDensity, sizeof(fields.density));
+  memcpy(&fields.width, buffer + kOffTouchWidth, sizeof(fields.width));
+  memcpy(&fields.height, buffer + kOffTouchHeight, sizeof(fields.height));
+  memcpy(&fields.device_class, buffer + kOffDeviceClass,
+         sizeof(fields.device_class));
+  return fields;
 }
 
 bool plausible_touchpad(uint16_t width, uint16_t height, float density) {
@@ -109,14 +118,13 @@ bool plausible_touchpad(uint16_t width, uint16_t height, float density) {
  * exactly as the layout we validated against real hardware. */
 bool validate_layout(int handle) {
   unsigned char buffer[kBufferBytes];
-  memset(buffer, kGuard, sizeof(buffer));
-  const int ret = scePadGetControllerInformation(handle, buffer);
+  const int ret = read_information(handle, buffer);
   if (ret != 0) {
     LOG_ERROR("[Controller] layout probe failed ret=0x%08x",
               static_cast<unsigned>(ret));
     return false;
   }
-  const int extent = written_extent(buffer, kBufferBytes);
+  const int extent = written_extent(buffer);
   if (extent != kInfoSize) {
     LOG_ERROR("[Controller] unexpected ScePadControllerInformation size %d "
               "(expected %d) — refusing to decode",
@@ -124,29 +132,23 @@ bool validate_layout(int handle) {
     return false;
   }
 
-  float density = 0.0f;
-  uint16_t width = 0, height = 0;
-  uint32_t device_class = 0;
-  memcpy(&density, buffer + kOffTouchDensity, sizeof(density));
-  memcpy(&width, buffer + kOffTouchWidth, sizeof(width));
-  memcpy(&height, buffer + kOffTouchHeight, sizeof(height));
-  memcpy(&device_class, buffer + kOffDeviceClass, sizeof(device_class));
-
-  if (!plausible_touchpad(width, height, density)) {
+  const InformationFields fields = decode(buffer);
+  if (!plausible_touchpad(fields.width, fields.height, fields.density)) {
     LOG_ERROR("[Controller] implausible touchpad %ux%u — layout rejected",
-              width, height);
+              fields.width, fields.height);
     return false;
   }
   if (buffer[kOffConnected] > 1 || buffer[kOffConnectedCount] > 16 ||
-      device_class > 0x0f) {
+      fields.device_class > 0x0f) {
     LOG_ERROR("[Controller] implausible connected=%u count=%u class=%u — "
               "layout rejected",
-              buffer[kOffConnected], buffer[kOffConnectedCount], device_class);
+              buffer[kOffConnected], buffer[kOffConnectedCount],
+              fields.device_class);
     return false;
   }
 
   LOG_INFO("[Controller] layout validated: %d bytes, touchpad %ux%u, class %u",
-           extent, width, height, device_class);
+           extent, fields.width, fields.height, fields.device_class);
   return true;
 }
 
@@ -177,47 +179,33 @@ void fill_user(ControllerInfo &info) {
 /* Decode one sample. Only called after validate_layout() succeeded. */
 bool sample(int handle, ControllerInfo &info) {
   unsigned char buffer[kBufferBytes];
-  memset(buffer, kGuard, sizeof(buffer));
-  if (scePadGetControllerInformation(handle, buffer) != 0)
-    return false;
-  if (written_extent(buffer, kBufferBytes) != kInfoSize)
+  if (read_information(handle, buffer) != 0 ||
+      written_extent(buffer) != kInfoSize)
     return false;
 
-  float density = 0.0f;
-  uint16_t width = 0, height = 0;
-  uint32_t device_class = 0;
-  memcpy(&density, buffer + kOffTouchDensity, sizeof(density));
-  memcpy(&width, buffer + kOffTouchWidth, sizeof(width));
-  memcpy(&height, buffer + kOffTouchHeight, sizeof(height));
-  memcpy(&device_class, buffer + kOffDeviceClass, sizeof(device_class));
-
+  const InformationFields fields = decode(buffer);
   info.backend_ready = true;
   info.handle = handle;
   info.connected = buffer[kOffConnected] != 0;
   info.connected_count = buffer[kOffConnectedCount];
 
-  info.device_class = device_class <= 9
-                          ? static_cast<ControllerClass>(device_class)
+  info.device_class = fields.device_class <= 9
+                          ? static_cast<ControllerClass>(fields.device_class)
                           : ControllerClass::Unknown;
-  info.device_class_state = Availability::Verified;
 
-  info.touchpad_width = width;
-  info.touchpad_height = height;
-  info.touchpad_density = density;
-  info.touchpad_state =
-      (width && height) ? Availability::Verified : Availability::Unavailable;
+  info.touchpad_width = fields.width;
+  info.touchpad_height = fields.height;
+  info.touchpad_state = (fields.width && fields.height)
+                            ? Availability::Verified
+                            : Availability::Unavailable;
 
   info.deadzone_left = buffer[kOffDeadzoneLeft];
   info.deadzone_right = buffer[kOffDeadzoneRight];
   info.deadzone_state = Availability::Verified;
 
-  /* Read successfully, but no controlled USB/Bluetooth transition has proven
-   * what the value means yet, so it stays out of the production UI. */
   info.connection_type_raw = buffer[kOffConnectionType];
-  info.connection_state = Availability::Experimental;
 
   fill_user(info);
-  info.sampled_at_ms = monotonic_millis();
   return true;
 }
 
@@ -234,41 +222,35 @@ bool meaningfully_differs(const ControllerInfo &a, const ControllerInfo &b) {
 void publish(const ControllerInfo &info) {
   std::lock_guard<std::mutex> lock(s_mutex);
   s_snapshot = info;
-  s_snapshot.generation = ++s_generation;
 }
 
-void publish_disconnected() {
+void publish_disconnected(bool backend_ready) {
   ControllerInfo empty;
-  empty.backend_ready = s_ready.load(std::memory_order_acquire);
+  empty.backend_ready = backend_ready;
   publish(empty);
 }
 
-void sleep_millis(long millis) {
-  const timespec delay{millis / 1000, (millis % 1000) * 1000000L};
-  nanosleep(&delay, nullptr);
-}
-
 void *worker(void *) {
-  s_worker_running.store(true, std::memory_order_release);
   LOG_INFO("[Controller] subsystem worker started");
 
   int validated_handle = -1;
+  bool backend_ready = false;
   ControllerInfo previous;
   bool published_any = false;
 
-  while (!s_stop.load(std::memory_order_acquire)) {
+  for (;;) {
     const int handle = acquire_handle();
 
     if (handle < 0) {
       if (previous.connected || !published_any) {
         LOG_INFO("[Controller] no controller available");
-        publish_disconnected();
+        publish_disconnected(backend_ready);
         previous = ControllerInfo{};
         published_any = true;
       }
       validated_handle = -1;
-      s_ready.store(false, std::memory_order_release);
-      sleep_millis(kPollMillis);
+      backend_ready = false;
+      AniketosUI::SleepMs(kPollMillis);
       continue;
     }
 
@@ -277,21 +259,21 @@ void *worker(void *) {
      * unnoticed. */
     if (handle != validated_handle) {
       if (!validate_layout(handle)) {
-        s_ready.store(false, std::memory_order_release);
-        publish_disconnected();
+        backend_ready = false;
+        publish_disconnected(backend_ready);
         previous = ControllerInfo{};
         published_any = true;
-        sleep_millis(kPollMillis * 3);
+        AniketosUI::SleepMs(kPollMillis * 3);
         continue;
       }
       validated_handle = handle;
-      s_ready.store(true, std::memory_order_release);
+      backend_ready = true;
     }
 
     ControllerInfo next;
     if (!sample(handle, next)) {
       validated_handle = -1;
-      sleep_millis(kPollMillis);
+      AniketosUI::SleepMs(kPollMillis);
       continue;
     }
 
@@ -299,21 +281,15 @@ void *worker(void *) {
       LOG_INFO("[Controller] state: connected=%d count=%u class=%s "
                "touchpad=%ux%u user=%d connType(raw,experimental)=%u",
                next.connected ? 1 : 0, next.connected_count,
-               ToString(next.device_class), next.touchpad_width,
+               class_name(next.device_class), next.touchpad_width,
                next.touchpad_height, next.user_id, next.connection_type_raw);
       published_any = true;
     }
     publish(next);
     previous = next;
 
-    sleep_millis(kPollMillis);
+    AniketosUI::SleepMs(kPollMillis);
   }
-
-  publish_disconnected();
-  s_ready.store(false, std::memory_order_release);
-  LOG_INFO("[Controller] subsystem worker stopped");
-  s_worker_running.store(false, std::memory_order_release);
-  return nullptr;
 }
 
 } // namespace
@@ -322,34 +298,19 @@ bool Start() {
   bool expected = false;
   if (!s_started.compare_exchange_strong(expected, true))
     return true;
-  s_stop.store(false, std::memory_order_release);
-  if (pthread_create(&s_worker, nullptr, worker, nullptr) != 0) {
+  pthread_t thread{};
+  if (pthread_create(&thread, nullptr, worker, nullptr) != 0) {
     s_started.store(false, std::memory_order_release);
     LOG_ERROR("[Controller] worker start failed");
     return false;
   }
+  pthread_detach(thread);
   return true;
-}
-
-void Stop() {
-  if (!s_started.load(std::memory_order_acquire))
-    return;
-  s_stop.store(true, std::memory_order_release);
-  /* Join rather than detach: the Toolbox and the VSH renderer must not be able
-   * to observe a half-torn-down subsystem, and nothing may call back into this
-   * module after Stop() returns. */
-  pthread_join(s_worker, nullptr);
-  s_started.store(false, std::memory_order_release);
-  s_ready.store(false, std::memory_order_release);
-  publish_disconnected();
-  LOG_INFO("[Controller] subsystem stopped and state cleared");
 }
 
 ControllerInfo GetSnapshot() {
   std::lock_guard<std::mutex> lock(s_mutex);
   return s_snapshot;
 }
-
-bool IsReady() { return s_ready.load(std::memory_order_acquire); }
 
 } // namespace AniketosHEN::Controller

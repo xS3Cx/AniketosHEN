@@ -1,5 +1,7 @@
 #pragma once
 
+#include "aniketos_ui/small_file.hpp" // renames.tsv
+
 #include <onion/distribution.h>
 
 #include <string>
@@ -31,6 +33,6 @@ int Generation();
 
 /* The font files in kDirectory (.otf/.ttf), sorted. */
 const std::vector<std::string> &Files(bool rescan = false);
-std::string FileName(const std::string &path);
+using AniketosUI::FileName; // renames.tsv
 
 } // namespace AniketosTheme::CustomFont

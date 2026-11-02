@@ -8,15 +8,11 @@
  * behavior with AniketosHEN's existing primitives.
  */
 
-// Apparition opens as one quiet header/footer unit, then unfolds the list
-// between those two bars. Closing performs the exact inverse before fading.
-Color apparition_selection_surface(const Color &accent) {
-  (void)accent;
-  // The selected row is the same neutral surface as Apparition's header.
-  // Global Theme owns the selected text accent only; tinting this panel made
-  // the entire switch change colour when Global Theme was enabled.
-  return {42.0f / 255.0f, 42.0f / 255.0f, 42.0f / 255.0f, 1.0f};
-}
+// The header, the footer and the selected row share one neutral surface.
+// Global Theme owns the selected text accent only; tinting the selected row
+// made the entire switch change colour when Global Theme was enabled.
+constexpr Color kApparitionBanner{42.0f / 255.0f, 42.0f / 255.0f,
+                                  42.0f / 255.0f, 1.0f};
 
 Color apparition_neutral_option_text() {
   return light_menu_appearance()
@@ -40,6 +36,58 @@ Color apparition_toggle_fill(bool enabled) {
   return enabled ? right_color() : Color{0.0f, 0.0f, 0.0f, 1.0f};
 }
 
+Color apparition_gradient_color(const AniketosUI::MenuStyle &style, float t) {
+  return style.dual_color
+             ? mix(left_color(), right_color(), gradient_t(t), 1.0f)
+             : left_color();
+}
+
+Color apparition_blend(Color from, Color to, float t) {
+  return Color{from.r + (to.r - from.r) * t,
+               from.g + (to.g - from.g) * t,
+               from.b + (to.b - from.b) * t,
+               from.a + (to.a - from.a) * t};
+}
+
+/* The platform's glyph just after the centred title. */
+void place_apparition_platform_glyph(float width, float header_y,
+                                     float header_height, float title_fallback,
+                                     bool visible) {
+  const float glyph_size = apparition_platform_glyph_size(header_height);
+  const float title_width =
+      exact_label_text_width(s_widgets.title, title_fallback);
+  const float glyph_gap = std::max(4.0f, glyph_size * 0.20f);
+  image_geometry(s_widgets.header_platform_glyph,
+                 width * 0.5f + title_width * 0.5f + glyph_gap,
+                 header_y + (header_height - glyph_size) * 0.5f, glyph_size,
+                 glyph_size, visible);
+}
+
+/* The separators, on the two dedicated theme planes. */
+void place_apparition_separators(float width, float body_y, float footer_y,
+                                 float separator) {
+  for (int i = 0; i < kFrameGradientSlices; ++i) {
+    const GradientSlice slice =
+        gradient_slice(width, i, kFrameGradientSlices);
+    panel_geometry(s_widgets.theme_header_slices[i], slice.x,
+                   body_y - separator, slice.width, separator);
+    panel_geometry(s_widgets.theme_footer_slices[i], slice.x,
+                   footer_y - separator, slice.width, separator);
+  }
+}
+
+void color_apparition_separators(const AniketosUI::MenuStyle &style) {
+  for (int i = 0; i < kFrameGradientSlices; ++i) {
+    const float t = (static_cast<float>(i) + 0.5f) /
+                    static_cast<float>(kFrameGradientSlices);
+    const Color line_color = apparition_gradient_color(style, t);
+    panel_color(s_widgets.theme_header_slices[i], line_color);
+    panel_color(s_widgets.theme_footer_slices[i], line_color);
+  }
+}
+
+// Apparition opens as one quiet header/footer unit, then unfolds the list
+// between those two bars. Closing performs the exact inverse before fading.
 void update_apparition_open_close_animation(float reveal) {
   const ApparitionAnimationLayout &layout = s_apparition_animation_layout;
   if (!layout.valid)
@@ -75,31 +123,13 @@ void update_apparition_open_close_animation(float reveal) {
                  layout.footer_height);
   label_geometry(s_widgets.title, 0.0f, header_y + layout.text_offset,
                  layout.width, layout.header_height);
-  const float glyph_size =
-      apparition_platform_glyph_size(layout.header_height);
-  const float title_width = exact_label_text_width(
-      s_widgets.title, layout.header_height * 2.9f);
-  const float glyph_gap = std::max(4.0f, glyph_size * 0.20f);
-  image_geometry(s_widgets.header_platform_glyph,
-                 layout.width * 0.5f + title_width * 0.5f + glyph_gap,
-                 header_y + (layout.header_height - glyph_size) * 0.5f,
-                 glyph_size, glyph_size, frame_opacity > 0.001f);
+  place_apparition_platform_glyph(layout.width, header_y, layout.header_height,
+                                  layout.header_height * 2.9f,
+                                  frame_opacity > 0.001f);
   label_geometry(s_widgets.page_title, 0.0f,
                  footer_y + layout.text_offset, layout.width,
                  layout.footer_height);
-  for (int i = 0; i < kFrameGradientSlices; ++i) {
-    const float x0 = layout.width * static_cast<float>(i) /
-                     static_cast<float>(kFrameGradientSlices);
-    const float x1 = layout.width * static_cast<float>(i + 1) /
-                     static_cast<float>(kFrameGradientSlices);
-    panel_geometry(s_widgets.theme_header_slices[i], x0,
-                   body_y - layout.separator, x1 - x0, layout.separator);
-    panel_geometry(s_widgets.theme_footer_slices[i],
-                   x0,
-                   footer_y - layout.separator,
-                   x1 - x0,
-                   layout.separator);
-  }
+  place_apparition_separators(layout.width, body_y, footer_y, layout.separator);
   Set_Property(s_panel_class, s_widgets.master, "Opacity", frame_opacity);
   Set_Property(s_label_class, s_widgets.title, "Opacity", frame_opacity);
   Set_Property(s_label_class, s_widgets.page_title, "Opacity", frame_opacity);
@@ -127,7 +157,7 @@ float apparition_bar_overlap(size_t visible_index) {
 // colour/highlight frame: UI2.Label can briefly expose its previous layout
 // while a managed setter is being applied, which produced detached markers
 // and stale values in the lower-right corner.
-[[maybe_unused]] void update_apparition_menu_colors_only() {
+void update_apparition_menu_colors_only() {
   if (s_stack.empty())
     return;
 
@@ -141,25 +171,13 @@ float apparition_bar_overlap(size_t visible_index) {
     return;
 
   const AniketosUI::MenuStyle style = active_menu_style();
-  const auto gradient_color = [&](float t) {
-    return style.dual_color
-               ? mix(left_color(), right_color(), gradient_t(t), 1.0f)
-               : left_color();
-  };
-  const Color accent = gradient_color(0.5f);
-  const Color selection_surface = apparition_selection_surface(accent);
+  const Color accent = apparition_gradient_color(style, 0.5f);
   set_color(s_label_class, s_widgets.title, "TextColor", accent);
   set_color(s_label_class, s_widgets.page_title, "TextColor", accent);
 
-  const auto blend = [](Color from, Color to, float t) {
-    return Color{from.r + (to.r - from.r) * t,
-                 from.g + (to.g - from.g) * t,
-                 from.b + (to.b - from.b) * t,
-                 from.a + (to.a - from.a) * t};
-  };
   const Color neutral = apparition_neutral_option_text();
-  const Color title_accent = gradient_color(0.15f);
-  const Color value_accent = gradient_color(0.85f);
+  const Color title_accent = apparition_gradient_color(style, 0.15f);
+  const Color value_accent = apparition_gradient_color(style, 0.85f);
   for (size_t visible_index = 0; visible_index < kMaxVisibleOptions;
        ++visible_index) {
     const size_t option_index = state.scroll + visible_index;
@@ -167,8 +185,10 @@ float apparition_bar_overlap(size_t visible_index) {
       continue;
     const Option &option = options[option_index];
     const float bar_overlap = apparition_bar_overlap(visible_index);
-    const Color title_color = blend(neutral, title_accent, bar_overlap);
-    const Color value_color = blend(neutral, value_accent, bar_overlap);
+    const Color title_color =
+        apparition_blend(neutral, title_accent, bar_overlap);
+    const Color value_color =
+        apparition_blend(neutral, value_accent, bar_overlap);
     set_color(s_label_class, s_widgets.rows[visible_index], "TextColor",
               title_color);
     set_color(s_label_class, s_widgets.values[visible_index], "TextColor",
@@ -180,12 +200,6 @@ float apparition_bar_overlap(size_t visible_index) {
       // lower-right edge of the clipped list during a page hand-off.
       set_color(s_label_class, s_widgets.selector_right[visible_index],
                 "TextColor", value_color);
-    } else if (option.type == OptionType::Strings ||
-               option.type == OptionType::ThemeChoice) {
-      set_color(s_label_class, s_widgets.selector_left[visible_index],
-                "TextColor", value_color);
-      set_color(s_label_class, s_widgets.selector_right[visible_index],
-                "TextColor", value_color);
     } else if (option.type == OptionType::Toggle) {
       panel_color(s_widgets.toggles[visible_index],
                   apparition_toggle_outline());
@@ -195,15 +209,52 @@ float apparition_bar_overlap(size_t visible_index) {
   }
   // Sample every animated surface from this exact frame palette. Otherwise
   // separators and controls retain an older colour than the labels.
-  for (int i = 0; i < kFrameGradientSlices; ++i) {
-    const float t = (static_cast<float>(i) + 0.5f) /
-                    static_cast<float>(kFrameGradientSlices);
-    const Color line_color = gradient_color(t);
-    panel_color(s_widgets.theme_header_slices[i], line_color);
-    panel_color(s_widgets.theme_footer_slices[i], line_color);
-  }
-  panel_color(s_widgets.highlight, selection_surface);
+  color_apparition_separators(style);
+  panel_color(s_widgets.highlight, kApparitionBanner);
   s_apparition_force_color_refresh = false;
+}
+
+/* The frame's shared border panels: this look draws none. */
+void hide_apparition_borders() {
+  for (MonoObject *border : s_widgets.left_borders)
+    collapse_panel(border);
+  for (MonoObject *border : s_widgets.right_borders)
+    collapse_panel(border);
+  for (auto &line : s_widgets.horizontal_borders)
+    for (MonoObject *part : line)
+      collapse_panel(part);
+}
+
+void hide_apparition_row(size_t index) {
+  label_text(s_widgets.rows[index], "");
+  label_text(s_widgets.values[index], "");
+  label_geometry(s_widgets.rows[index], 0.0f, 0.0f, 0.0f, 0.0f);
+  label_geometry(s_widgets.values[index], 0.0f, 0.0f, 0.0f, 0.0f);
+  label_angle(s_widgets.values[index], 0.0f);
+  Set_Property(s_label_class, s_widgets.rows[index], "Opacity", 0.0f);
+  Set_Property(s_label_class, s_widgets.values[index], "Opacity", 0.0f);
+  clear_selector_markers(index);
+  hide_appendum_option_control(index);
+  hide_color_hint(index);
+}
+
+// Original `base.gsc`: BoolBack is 10x10 and BoolOpt is 8x8, centred
+// eight pixels from the right edge.  The old 15px PUI control made
+// both the checkbox and its switch row visibly oversized.
+// Returns the checkbox's left edge.
+float update_apparition_toggle(size_t index, const Option &option, float width,
+                               float row_y, float row, float scale) {
+  const float box = 10.0f * scale;
+  const float box_x = width - 8.0f * scale - box * 0.5f;
+  const float box_y = row_y + (row - box) * 0.5f;
+  panel_geometry(s_widgets.toggles[index], box_x, box_y, box, box);
+  panel_color(s_widgets.toggles[index], apparition_toggle_outline());
+  const float inner = 8.0f * scale;
+  panel_geometry(s_widgets.toggle_inners[index], box_x + (box - inner) * 0.5f,
+                 box_y + (box - inner) * 0.5f, inner, inner);
+  panel_color(s_widgets.toggle_inners[index],
+              apparition_toggle_fill(option.value == "1"));
+  return box_x;
 }
 
 void update_apparition_menu_widgets() {
@@ -259,16 +310,9 @@ void update_apparition_menu_widgets() {
   // Values sampled from the supplied Apparition reference frame. ShellUI's
   // Apparition surface is deliberately fully opaque, independent of the
   // general Menu Opacity setting.
-  const auto gradient_color = [&](float t) {
-    return style.dual_color
-               ? mix(left_color(), right_color(), gradient_t(t), 1.0f)
-               : left_color();
-  };
-  const Color accent = gradient_color(0.5f);
-  const Color selection_surface = apparition_selection_surface(accent);
-  Color banner{42.0f / 255.0f, 42.0f / 255.0f, 42.0f / 255.0f, 1.0f};
-  Color background{20.0f / 255.0f, 20.0f / 255.0f, 20.0f / 255.0f,
-                   1.0f};
+  const Color accent = apparition_gradient_color(style, 0.5f);
+  constexpr Color background{20.0f / 255.0f, 20.0f / 255.0f, 20.0f / 255.0f,
+                             1.0f};
   set_master_geometry(x, y, width, total_height);
   s_apparition_animation_layout = {true, x, y, width, total_height, body_y,
                                     body_height, footer_y, footer_height,
@@ -278,9 +322,9 @@ void update_apparition_menu_widgets() {
   panel_geometry(s_widgets.header, 0.0f, 0.0f, width, body_y);
   panel_geometry(s_widgets.body, 0.0f, body_y, width, body_height);
   panel_geometry(s_widgets.footer, 0.0f, footer_y, width, footer_height);
-  panel_color(s_widgets.header, banner);
+  panel_color(s_widgets.header, kApparitionBanner);
   panel_color(s_widgets.body, background);
-  panel_color(s_widgets.footer, banner);
+  panel_color(s_widgets.footer, kApparitionBanner);
   panel_geometry(s_widgets.scroll_clip, 0.0f, body_y, width, body_height);
   Set_Property(s_panel_class, s_widgets.body, "Opacity", 1.0f);
   Set_Property(s_panel_class, s_widgets.scroll_clip, "Opacity", 1.0f);
@@ -288,61 +332,27 @@ void update_apparition_menu_widgets() {
   // Use the two dedicated theme planes for the separator and footer line.
   // They are created before labels and stay inside the master's clip bounds;
   // generic border slices are not reliable after a theme switch.
-  for (int i = 0; i < kFrameGradientSlices; ++i) {
-    const float x0 = width * static_cast<float>(i) /
-                     static_cast<float>(kFrameGradientSlices);
-    const float x1 = width * static_cast<float>(i + 1) /
-                     static_cast<float>(kFrameGradientSlices);
-    const float t = (static_cast<float>(i) + 0.5f) /
-                    static_cast<float>(kFrameGradientSlices);
-    const Color line_color = gradient_color(t);
-    panel_geometry(s_widgets.theme_header_slices[i], x0, body_y - edge,
-                   x1 - x0, edge);
-    panel_color(s_widgets.theme_header_slices[i], line_color);
-    panel_geometry(s_widgets.theme_footer_slices[i], x0, footer_y - edge,
-                   x1 - x0, edge);
-    panel_color(s_widgets.theme_footer_slices[i], line_color);
-  }
-
-  for (MonoObject *border : s_widgets.left_borders) {
-    panel_geometry(border, 0.0f, 0.0f, 0.0f, 0.0f);
-    panel_hide(border);
-  }
-  for (MonoObject *border : s_widgets.right_borders) {
-    panel_geometry(border, 0.0f, 0.0f, 0.0f, 0.0f);
-    panel_hide(border);
-  }
-  for (int line = 0; line < kBorderLines; ++line) {
-    for (int segment = 0; segment < kFrameGradientSlices; ++segment) {
-      MonoObject *part = s_widgets.horizontal_borders[line][segment];
-      panel_geometry(part, 0.0f, 0.0f, 0.0f, 0.0f);
-      panel_hide(part);
-    }
-  }
+  place_apparition_separators(width, body_y, footer_y, edge);
+  color_apparition_separators(style);
+  hide_apparition_borders();
 
   replace_font(std::max(1, static_cast<int>(std::lround(font_size))));
   label_font(s_widgets.title);
   label_font(s_widgets.page_title);
   label_font(s_widgets.counter);
   for (size_t i = 0; i < kMaxVisibleOptions; ++i) {
-    label_font(s_widgets.rows[i]);
-    label_font(s_widgets.values[i]);
-    label_font(s_widgets.selector_left[i]);
-    label_font(s_widgets.selector_right[i]);
+    option_row_fonts(i);
     Set_Property(s_label_class, s_widgets.rows[i], "HorizontalAlignment", 0);
     Set_Property(s_label_class, s_widgets.values[i], "HorizontalAlignment", 2);
-    Set_Property(s_label_class, s_widgets.rows[i], "VerticalAlignment", 2);
-    Set_Property(s_label_class, s_widgets.values[i], "VerticalAlignment", 2);
-    Set_Property(s_label_class, s_widgets.rows[i], "FitHeightToText", false);
-    Set_Property(s_label_class, s_widgets.values[i], "FitHeightToText", false);
-    Set_Property(s_label_class, s_widgets.rows[i], "MaxLineCount", 1);
-    Set_Property(s_label_class, s_widgets.values[i], "MaxLineCount", 1);
+    for (MonoObject *label : {s_widgets.rows[i], s_widgets.values[i]}) {
+      Set_Property(s_label_class, label, "VerticalAlignment", 2);
+      Set_Property(s_label_class, label, "FitHeightToText", false);
+      Set_Property(s_label_class, label, "MaxLineCount", 1);
+    }
   }
-  Set_Property(s_label_class, s_widgets.title, "HorizontalAlignment", 1);
-  Set_Property(s_label_class, s_widgets.title, "VerticalAlignment", 2);
-  Set_Property(s_label_class, s_widgets.page_title, "HorizontalAlignment", 1);
-  Set_Property(s_label_class, s_widgets.page_title, "VerticalAlignment", 2);
   for (MonoObject *label : {s_widgets.title, s_widgets.page_title}) {
+    Set_Property(s_label_class, label, "HorizontalAlignment", 1);
+    Set_Property(s_label_class, label, "VerticalAlignment", 2);
     Set_Property(cls(label), label, "FitWidthToText", false);
     Set_Property(cls(label), label, "FitHeightToText", false);
     Set_Property(cls(label), label, "MaxLineCount", 1);
@@ -351,55 +361,40 @@ void update_apparition_menu_widgets() {
   Set_Property(s_label_class, s_widgets.title, "Opacity", 1.0f);
   label_text(s_widgets.title, menu_header_text());
   label_geometry(s_widgets.title, 0.0f, text_offset, width, body_y);
-  const float glyph_size = apparition_platform_glyph_size(row);
-  const float title_width = exact_label_text_width(
-      s_widgets.title, approximate_text_width(menu_header_text(), font_size));
-  const float glyph_gap = std::max(4.0f, glyph_size * 0.20f);
-  image_geometry(s_widgets.header_platform_glyph,
-                 width * 0.5f + title_width * 0.5f + glyph_gap,
-                 (body_y - glyph_size) * 0.5f,
-                 glyph_size, glyph_size);
-  label_text(s_widgets.version, "");
-  label_geometry(s_widgets.version, 0.0f, 0.0f, 0.0f, 0.0f);
+  place_apparition_platform_glyph(
+      width, 0.0f, body_y, approximate_text_width(menu_header_text(), font_size),
+      true);
+  clear_label(s_widgets.version);
   set_color(s_label_class, s_widgets.page_title, "TextColor", accent);
   Set_Property(s_label_class, s_widgets.page_title, "Opacity", 1.0f);
   label_text(s_widgets.page_title, menu_footer_text());
   label_geometry(s_widgets.page_title, 0.0f, footer_y + text_offset, width,
                  footer_height);
   // Apparition's OptionCounter remains disabled.
-  label_text(s_widgets.counter, "");
-  label_geometry(s_widgets.counter, 0.0f, 0.0f, 0.0f, 0.0f);
+  clear_label(s_widgets.counter);
 
   const float target_highlight =
       static_cast<float>(state.selected - state.scroll) * row;
   update_highlight_target(state, target_highlight);
   panel_geometry(s_widgets.highlight, 0.0f, s_highlight_y, width, row);
-  panel_color(s_widgets.highlight, selection_surface);
-  for (MonoObject *slice : s_widgets.highlight_slices) {
-    panel_geometry(slice, 0.0f, 0.0f, 0.0f, 0.0f);
-    panel_hide(slice);
-  }
+  panel_color(s_widgets.highlight, kApparitionBanner);
+  for (MonoObject *slice : s_widgets.highlight_slices)
+    collapse_panel(slice);
 
+  // Apparition's SpotlightCursor dims all non-selected entries.
+  // Fade the former selection out while the destination fades in.  The
+  // previous implementation temporarily painted every row white, causing
+  // text to jump ahead of the smooth scroller.
+  const Color neutral = apparition_neutral_option_text();
+  const Color title_accent = apparition_gradient_color(style, 0.15f);
+  const Color value_accent = apparition_gradient_color(style, 0.85f);
   const float base_value_width = width * 0.56f;
   for (size_t visible_index = 0; visible_index < kMaxVisibleOptions;
        ++visible_index) {
     const size_t option_index = state.scroll + visible_index;
     const float row_y = visible_index * row;
     if (option_index >= options.size()) {
-      label_text(s_widgets.rows[visible_index], "");
-      label_text(s_widgets.values[visible_index], "");
-      label_geometry(s_widgets.rows[visible_index], 0.0f, 0.0f, 0.0f,
-                     0.0f);
-      label_geometry(s_widgets.values[visible_index], 0.0f, 0.0f, 0.0f,
-                     0.0f);
-      label_angle(s_widgets.values[visible_index], 0.0f);
-      Set_Property(s_label_class, s_widgets.rows[visible_index], "Opacity",
-                   0.0f);
-      Set_Property(s_label_class, s_widgets.values[visible_index], "Opacity",
-                   0.0f);
-      clear_selector_markers(visible_index);
-      hide_appendum_option_control(visible_index);
-      hide_color_hint(visible_index);
+      hide_apparition_row(visible_index);
       continue;
     }
 
@@ -408,8 +403,8 @@ void update_apparition_menu_widgets() {
        identifier) gives it most of the width; its title is short */
     const float value_width =
         option.wide_value ? width * 0.80f : base_value_width;
-    prepare_submenu_marker_slot(visible_index,
-                                option.type == OptionType::Submenu);
+    if (option.type != OptionType::Submenu)
+      clear_selector_markers(visible_index);
     hide_appendum_option_control(visible_index);
     if (option.type != OptionType::ColorSlider)
       hide_color_hint(visible_index);
@@ -417,51 +412,25 @@ void update_apparition_menu_widgets() {
                  1.0f);
     Set_Property(s_label_class, s_widgets.values[visible_index], "Opacity",
                  1.0f);
-    // Apparition's SpotlightCursor dims all non-selected entries.
-    // Fade the former selection out while the destination fades in.  The
-    // previous implementation temporarily painted every row white, causing
-    // text to jump ahead of the smooth scroller.
-    const Color neutral = apparition_neutral_option_text();
-    const auto blend = [](Color from, Color to, float t) {
-      return Color{from.r + (to.r - from.r) * t,
-                   from.g + (to.g - from.g) * t,
-                   from.b + (to.b - from.b) * t,
-                   from.a + (to.a - from.a) * t};
-    };
-    const Color title_accent = gradient_color(0.15f);
-    const Color value_accent = gradient_color(0.85f);
     const float bar_overlap = apparition_bar_overlap(visible_index);
-    const Color title_color = blend(neutral, title_accent, bar_overlap);
-    const Color value_color = blend(neutral, value_accent, bar_overlap);
+    const Color title_color =
+        apparition_blend(neutral, title_accent, bar_overlap);
+    const Color value_color =
+        apparition_blend(neutral, value_accent, bar_overlap);
     float title_right = width - inset;
+    // A submenu's value stays empty: its marker is laid out in its own stable
+    // label below, and the shared value pool must stay empty and unrotated so
+    // it can never leak a previous page's value glyph while the viewport is
+    // being resized.
     std::string display_value;
 
-    if (option.type == OptionType::Submenu) {
-      // The marker is laid out in its own stable label below. Keep the shared
-      // value pool empty and unrotated so it can never leak a previous page's
-      // selector/value glyph while the viewport is being resized.
-      display_value.clear();
-    } else if (option.type == OptionType::Toggle) {
-      // Original `base.gsc`: BoolBack is 10x10 and BoolOpt is 8x8, centred
-      // eight pixels from the right edge.  The old 15px PUI control made
-      // both the checkbox and its switch row visibly oversized.
-      const float box = 10.0f * scale;
-      const float box_x = width - 8.0f * scale - box * 0.5f;
-      const float box_y = row_y + (row - box) * 0.5f;
-      panel_geometry(s_widgets.toggles[visible_index], box_x, box_y, box,
-                     box);
-      panel_color(s_widgets.toggles[visible_index],
-                  apparition_toggle_outline());
-      const float inner = 8.0f * scale;
-      panel_geometry(s_widgets.toggle_inners[visible_index],
-                     box_x + (box - inner) * 0.5f,
-                     box_y + (box - inner) * 0.5f, inner, inner);
-      panel_color(s_widgets.toggle_inners[visible_index],
-                  apparition_toggle_fill(option.value == "1"));
-      title_right = box_x - inset;
+    if (option.type == OptionType::Toggle) {
+      title_right = update_apparition_toggle(visible_index, option, width,
+                                             row_y, row, scale) -
+                    inset;
     } else if (option.type == OptionType::Strings ||
                option.type == OptionType::ThemeChoice) {
-      display_value = option.value;
+      display_value = selector_display_value(option);
     } else if (option.type == OptionType::SliderInt ||
                option.type == OptionType::SliderFloat) {
       display_value = "< " + option.value + " >";
@@ -474,22 +443,12 @@ void update_apparition_menu_widgets() {
                         width - inset)
                         .title_right;
     }
-    const bool selector = option.type == OptionType::Strings ||
-                          option.type == OptionType::ThemeChoice;
-    if (selector)
-      display_value = selector_display_value(option);
 
     label_text(s_widgets.rows[visible_index], option.title);
-    const float text_x = inset;
-    label_geometry(s_widgets.rows[visible_index], text_x, row_y + text_offset,
-                   std::max(0.0f, title_right - text_x - inset), row);
+    label_geometry(s_widgets.rows[visible_index], inset, row_y + text_offset,
+                   std::max(0.0f, title_right - inset - inset), row);
     set_color(s_label_class, s_widgets.rows[visible_index], "TextColor",
               title_color);
-    const SelectorMarkerLayout selector_layout = update_selector_markers(
-        visible_index, selector, option.string_index, option.string_count,
-        width - inset - value_width, row_y + text_offset, value_width, row,
-            selector_painted_text_width(display_value.c_str(), row),
-        value_color, Color{0.35f, 0.35f, 0.35f, 0.65f});
     label_text(s_widgets.values[visible_index], display_value);
     if (option.type == OptionType::Submenu) {
       // The shared value slot may have been a rotated submenu/value on the
@@ -504,16 +463,10 @@ void update_apparition_menu_widgets() {
       update_submenu_marker(visible_index, width - inset - row,
                             row_y + text_offset, row, 1.57079632679f,
                             value_color);
-    } else if (selector_layout.visible) {
-      selector_value_label_geometry(s_widgets.values[visible_index],
-                                    selector_layout.value_x,
-                                    row_y + text_offset,
-                                    selector_layout.value_width, row);
     } else {
       value_label_geometry(s_widgets.values[visible_index],
                            width - inset - value_width,
-                           row_y + text_offset, value_width, row,
-                           option.type == OptionType::Submenu);
+                           row_y + text_offset, value_width, row);
     }
     set_color(s_label_class, s_widgets.values[visible_index], "TextColor",
               value_color);

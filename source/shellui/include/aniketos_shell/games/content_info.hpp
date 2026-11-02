@@ -11,8 +11,8 @@
    That screen is its own React Native app (rnps-content-information,
    NPXS40017), started anew for every title with
    "pscontentinfo:info?titleId=...". A script evaluated before its bundle
-   (see content_info_inject_js.inc, put in by home_js) reads the values from
-   the app database through the module the screen itself uses and appends
+   (see content_info_inject_js.inc, put in by script_injector) reads the values
+   from the app database through the module the screen itself uses and appends
    the rows. The native side gives it the labels and the mount.lnk targets
    of /user/app; nothing is written anywhere. */
 namespace ContentInfo {

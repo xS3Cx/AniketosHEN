@@ -18,8 +18,6 @@
 
 enum { kPathMax = 1024, kNameMax = 128 };
 
-/* ---- scrubbing ----------------------------------------------------------- */
-
 typedef struct Out {
   char *data;
   size_t cap; /* including the terminator */
@@ -272,8 +270,6 @@ size_t onion_report_sanitize(const char *in, size_t in_len, char *out_buf,
   return out.len;
 }
 
-/* ---- report files -------------------------------------------------------- */
-
 static bool valid_kind(const char *kind) {
   if (!kind || !kind[0] || strlen(kind) > 48)
     return false;
@@ -284,7 +280,7 @@ static bool valid_kind(const char *kind) {
   return true;
 }
 
-static bool is_report_name(const char *name) {
+bool onion_report_is_file_name(const char *name) {
   const size_t n = strlen(name);
   return n > 4 && n < kNameMax && name[0] != '.' &&
          strcmp(name + n - 4, ".txt") == 0;
@@ -304,7 +300,7 @@ static void prune(const char *dir) {
   size_t count = 0;
   struct dirent *entry;
   while ((entry = readdir(handle)) != NULL && count < kScanMax) {
-    if (!is_report_name(entry->d_name))
+    if (!onion_report_is_file_name(entry->d_name))
       continue;
     const size_t length = strlen(entry->d_name); /* < kNameMax, checked */
     memcpy(names[count], entry->d_name, length + 1);
@@ -339,7 +335,6 @@ bool onion_report_write(const char *dir, const char *kind, const char *build,
     free(text);
     return false;
   }
-  /* The build string is ours, but scrub the whole header region anyway. */
   const size_t length =
       (size_t)header +
       onion_report_sanitize(body ? body : "", body ? strlen(body) : 0,
@@ -378,13 +373,16 @@ size_t onion_report_append_tail(char *out, size_t out_cap, const char *label,
     close(fd);
     return length;
   }
-  const off_t start =
-      st.st_size > (off_t)max_bytes ? st.st_size - (off_t)max_bytes : 0;
-  char *chunk = malloc(max_bytes + 1);
+  /* A cut reads one byte more: the byte before the tail tells whether the
+   * tail starts on a line of its own. */
+  const bool cut = st.st_size > (off_t)max_bytes;
+  const off_t start = cut ? st.st_size - (off_t)max_bytes - 1 : 0;
+  const size_t want = cut ? max_bytes + 1 : max_bytes;
+  char *chunk = malloc(want + 1);
   ssize_t got = -1;
   if (chunk && lseek(fd, start, SEEK_SET) == start) {
     do {
-      got = read(fd, chunk, max_bytes);
+      got = read(fd, chunk, want);
     } while (got < 0 && errno == EINTR);
   }
   close(fd);
@@ -394,9 +392,9 @@ size_t onion_report_append_tail(char *out, size_t out_cap, const char *label,
   }
   chunk[got] = '\0';
   const char *text = chunk;
-  if (start > 0) {
+  if (cut) {
     const char *newline = memchr(chunk, '\n', (size_t)got);
-    text = newline ? newline + 1 : chunk;
+    text = newline ? newline + 1 : chunk + 1;
   }
   /* A log holds no NUL bytes; stop at one if a torn write left any. */
   const size_t text_length = strnlen(text, (size_t)got - (size_t)(text - chunk));

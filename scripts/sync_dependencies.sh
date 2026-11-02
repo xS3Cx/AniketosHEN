@@ -18,8 +18,8 @@ INIT_SUBMODULES=0
 FORCE_DOWNLOAD=0
 
 # kstuff-lite v1.11 supports firmware 1.00-13.60 (PS4 fpkg up to 11.60, per
-# its release notes). Keep ONION_KSTUFF_MAX_FIRMWARE in
-# source/bootstrapper/source/launch_pipeline.c in step with this version.
+# its release notes). Keep kKstuffMaxFirmware in
+# source/bootstrapper/source/bootstrap_safety.cpp in step with this version.
 KSTUFF_VERSION="v1.11"
 KSTUFF_URL="https://github.com/EchoStretch/kstuff-lite/releases/download/${KSTUFF_VERSION}/kstuff.elf"
 # Pinned: an upstream file that changed after review is refused, not embedded.

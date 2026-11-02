@@ -36,18 +36,25 @@ const char *onion_boot_level_name(onion_boot_level level) {
   }
 }
 
+/* @parent gets the directory of @path, empty for a file in the root or a bare
+ * name. False when @path is empty or too long. */
+static bool parent_dir(const char *path, char parent[kPathMax]) {
+  const int n = snprintf(parent, kPathMax, "%s", path ? path : "");
+  if (n <= 0 || n >= kPathMax)
+    return false;
+  char *slash = strrchr(parent, '/');
+  if (slash && slash != parent)
+    *slash = '\0';
+  else
+    parent[0] = '\0';
+  return true;
+}
+
 /* The lock file's directory lives in /system_tmp, which a fresh boot does not
  * have yet. */
 static bool make_parent(const char *path) {
   char parent[kPathMax];
-  const int n = snprintf(parent, sizeof(parent), "%s", path ? path : "");
-  if (n <= 0 || (size_t)n >= sizeof(parent))
-    return false;
-  char *slash = strrchr(parent, '/');
-  if (!slash || slash == parent)
-    return true;
-  *slash = '\0';
-  return mkdir_tree(parent);
+  return parent_dir(path, parent) && (!parent[0] || mkdir_tree(parent));
 }
 
 static int open_lock(const char *path, bool create) {
@@ -150,8 +157,6 @@ bool onion_instance_lock_busy(const char *path) {
   return busy;
 }
 
-/* ---- boot level ---------------------------------------------------------- */
-
 typedef struct BootState {
   bool present;
   int level;
@@ -198,13 +203,28 @@ static BootState read_state(const char *path) {
   return state;
 }
 
+/* The rename of a state file has to survive the panic it is written for. A
+ * failure here only loses that extra safety: the state is written. */
+static void sync_parent(const char *path) {
+  char parent[kPathMax];
+  if (!parent_dir(path, parent) || !parent[0])
+    return;
+  const int fd = open(parent, O_RDONLY | O_CLOEXEC);
+  if (fd >= 0) {
+    (void)fsync(fd);
+    close(fd);
+  }
+}
+
 static bool write_state(const char *path, int level, const char *phase) {
   char text[kStateMaxBytes];
   const int n = snprintf(text, sizeof(text), "level=%d\nphase=%s\n", level,
                          phase);
-  if (n <= 0 || (size_t)n >= sizeof(text) || !make_parent(path))
+  if (n <= 0 || (size_t)n >= sizeof(text) || !make_parent(path) ||
+      !write_file_atomic(path, text, (size_t)n))
     return false;
-  return write_file_atomic(path, text, (size_t)n);
+  sync_parent(path);
+  return true;
 }
 
 static bool path_exists(const char *path) {

@@ -14,7 +14,7 @@
 
 #include "external_symbols.hpp"
 
-namespace AniketosUI::MonoFast {
+namespace AniketosUI::MonoPropertyCache {
 
 enum class Kind : int { GetThunk, SetThunk, SetMethod };
 
@@ -65,4 +65,6 @@ void SetInvoke(MonoClass *klass, MonoObject *instance, const char *property,
  */
 MonoObject *ScratchColor(float r, float g, float b, float a);
 
-} // namespace AniketosUI::MonoFast
+} // namespace AniketosUI::MonoPropertyCache
+
+namespace AniketosUI { namespace MonoFast = MonoPropertyCache; } // renames.tsv

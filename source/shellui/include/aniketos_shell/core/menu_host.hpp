@@ -2,20 +2,16 @@
 
 #include "external_symbols.hpp"
 
-#include <cstdint>
+struct GamePadData;
 
 namespace AniketosShell {
 
 bool Initialize(MonoImage *app_system, MonoImage *pui);
-bool ResolveSystemHost();
-bool AttachMenu();
-void DetachMenu();
 void Tick();
-void HandleInput(uint32_t buttons_down);
-void RequestToggle();
-bool IsShellAlive();
-bool IsAttached();
 bool ShouldSuppressShellInput();
+/* The open Shell Menu owns the controller: empties ShellUI's pad state so the
+ * same press cannot also navigate Home underneath it, and returns true. */
+bool FilterPad(GamePadData &data);
 MonoObject *HostRoot();
 
 } // namespace AniketosShell

@@ -63,6 +63,14 @@
   ONION_DIST_DATA_ROOT "/" ONION_DIST_NAME "_util_daemon.log"
 #define ONION_DIST_UTIL_CRASH_LOG_PATH                                         \
   ONION_DIST_DATA_ROOT "/" ONION_DIST_NAME "_util_crash.log"
+#define ONION_DIST_SHELLUI_LOG_PATH                                            \
+  ONION_DIST_USER_DATA_ROOT "/" ONION_DIST_NAME "_shellui.log"
+
+/* Home script injection markers: ShellUI writes them, util and the daemon
+ * read or clear them. */
+#define ONION_DIST_JS_PENDING_PATH ONION_DIST_USER_DATA_ROOT "/js_inject_pending"
+#define ONION_DIST_JS_UNCONFIRMED_PATH                                         \
+  ONION_DIST_USER_DATA_ROOT "/js_inject_unconfirmed"
 
 /* One-time OnionHEN -> AniketosHEN data migration (see <onion/migrate.h>). */
 #define ONION_DIST_MIGRATION_MARKER ".migrated_from_" ONION_DIST_LEGACY_NAME

@@ -8,11 +8,10 @@
 #include "onpress.hpp"
 
 #include "aniketos_shell/input/kbm_capture.hpp"
-#include "aniketos_shell/toolbox/kbm_toolbox.hpp"
+#include "aniketos_ui/monotonic_clock.hpp"
+#include "kbm_toolbox_internal.hpp"
 #include "settings_page_refresh.hpp"
 #include "toolbox_navigation.hpp"
-
-#include <ctime>
 
 namespace kbm_toolbox {
 namespace {
@@ -30,12 +29,6 @@ MonoObject *s_refresh_page = nullptr; /* redraw on the next frame */
 int s_pops = 0;                       /* pages to close after a delete */
 uint64_t s_pop_deadline = 0;
 MonoObject *s_deleted_page = nullptr; /* redrawn as "deleted" if it stays */
-
-uint64_t now_ms() {
-  timespec ts{};
-  clock_gettime(CLOCK_MONOTONIC, &ts);
-  return static_cast<uint64_t>(ts.tv_sec) * 1000 + ts.tv_nsec / 1000000;
-}
 
 void capture_begin(const Path &target, MonoObject *page) {
   if (s_capture.active)
@@ -82,7 +75,7 @@ void capture_tick() {
 bool is_list(const std::string &f) {
   static const char *const kNotLists[] = {"on", "merge", "inherit", "ix", "iy",
                                           "repeat", "name"};
-  if (f.rfind("pb", 0) == 0)
+  if (f.starts_with("pb"))
     return false;
   for (const char *n : kNotLists)
     if (f == n)
@@ -111,7 +104,7 @@ OnPressResult on_press(OnPressContext &ctx) {
   if (!parse_id(ctx.id, &p))
     return OnPressResult::NotMine;
   ctx.dirty = false; /* nothing here lives in config.ini */
-  const std::string f = p.word;
+  const std::string &f = p.word;
 
   if (f == "input" || f == "suspend") {
     capture_begin(p, ctx.instance);
@@ -125,19 +118,19 @@ OnPressResult on_press(OnPressContext &ctx) {
     return OnPressResult::Consumed;
   }
   if (f == "newtpl" || f == "newempty" || f == "reset" || f == "clear") {
-    create_profile(p, f == "newtpl" || f == "reset");
-    notify(f == "newtpl" || f == "reset" ? "notify.kbm.from_template"
-                                         : "notify.kbm.emptied");
+    const bool from_template = f == "newtpl" || f == "reset";
+    if (create_profile(p, from_template))
+      notify(from_template ? "notify.kbm.from_template" : "notify.kbm.emptied");
     s_refresh_page = ctx.instance;
     return OnPressResult::Consumed;
   }
   if (f == "delete") {
-    delete_profile(p);
-    notify("notify.kbm.profile_deleted");
+    notify(delete_profile(p) ? "notify.kbm.profile_deleted"
+                             : "notify.kbm.save_failed");
     s_refresh_page = ctx.instance;
     return OnPressResult::Consumed;
   }
-  if (f.rfind("add", 0) == 0) {
+  if (f.starts_with("add")) {
     Path created;
     if (add_item(p, f.substr(3), &created))
       toolbox_push_resource(resource(created).c_str());
@@ -145,20 +138,21 @@ OnPressResult on_press(OnPressContext &ctx) {
       notify("notify.kbm.limit");
     return OnPressResult::Consumed;
   }
-  if (f.rfind("del", 0) == 0) {
+  if (f.starts_with("del")) {
     const int pages = delete_item(p);
     if (pages == 0) {
       notify("notify.kbm.gone");
     } else {
       s_pops = pages;
-      s_pop_deadline = now_ms() + kPopGiveUpMs;
+      s_pop_deadline = AniketosUI::MonotonicMs() + kPopGiveUpMs;
       s_deleted_page = ctx.instance;
     }
     return OnPressResult::Consumed;
   }
 
-  const bool saved = set_value(p, ctx.value) && save(p);
-  if (!saved && f != "name") /* names explain their own refusal */
+  if (set_value(p, ctx.value))
+    save(p); /* says so itself when it fails */
+  else if (f != "name") /* names explain their own refusal */
     notify("notify.kbm.gone");
   if (f == "name") {
     show_saved_text(ctx, p);
@@ -181,7 +175,7 @@ void Tick() {
   /* After a delete, close the deleted item's pages, one transition at a
      time; the page below redraws itself when it comes back. */
   if (s_pops > 0) {
-    if (now_ms() > s_pop_deadline) {
+    if (AniketosUI::MonotonicMs() > s_pop_deadline) {
       s_pops = 0;
       onion::shellui::settings::refresh(s_deleted_page);
     } else if (!toolbox_is_stack_under_transition() && toolbox_pop_page()) {

@@ -1,47 +1,39 @@
 #include "aniketos_shell/games/cheats_menu.hpp"
 
+#include "aniketos_shell/core/host_scene.hpp"
+#include "aniketos_shell/games/cheats_list.hpp"
 #include "aniketos_shell/input/pad_reader.hpp"
 #include "aniketos_shell/system_ui/system_dialogs.hpp"
+#include "aniketos_ui/mono_reflect.hpp"
+#include "aniketos_ui/monotonic_clock.hpp"
 #include "aniketos_ui/pui_primitives.hpp"
-#include "external_symbols.hpp"
 #include "hooked_funcs.hpp"
-#include "ipc.hpp"
-#include "onion_cjson.hpp"
 #include "toolbox_i18n.hpp"
 #include "ps5/kernel.h"
 
 #include <onion/log.h>
-#include <onion/proc_query.h>
-#include <onion/settings.hpp>
 
 #include <algorithm>
-#include <atomic>
-#include <cmath>
-#include <cstdio>
-#include <cstdlib>
 #include <cstring>
-#include <mutex>
-#include <pthread.h>
 #include <string>
-#include <time.h>
 #include <unistd.h>
-#include <unordered_set>
+#include <utility>
 #include <vector>
-
-extern MonoObject *Game;
-extern int g_libmono_handle;
-extern onion::Settings g_settings;
-bool resolve_root_dimensions(MonoObject *root, float *screen_w,
-                             float *screen_h);
 
 namespace AniketosShell::CheatsMenu {
 namespace {
 
 using AniketosUI::Color;
+using AniketosUI::MonotonicMs;
+using CheatsList::Cheat;
+using CheatsList::Group;
+using CheatsList::JobKind;
+using CheatsList::JobResult;
+using CheatsList::ToggleRequest;
 namespace Pui = AniketosUI::Pui;
+namespace Reflect = AniketosUI::Reflect;
 
-/* ---- Look -----------------------------------------------------------------
- * The classic PS4 "HaxCry" mod menu, measured on its screenshots (a 720p
+/* The classic PS4 "HaxCry" mod menu, measured on its screenshots (a 720p
  * capture) and scaled by 1.5 for the 1920x1080 Game layer: a 243 px wide
  * menu, 31 px header, 24.4 px rows and a 25 px footer there. */
 constexpr float kMarginX = 96.0f;
@@ -60,6 +52,8 @@ constexpr int kSubtitleFont = 18;
 constexpr int kRowFont = 27;
 constexpr int kFooterFont = 24;
 constexpr int kMaxRows = 14;
+constexpr int kTrimEllipsis = 3; /* TextTrimming.EllipsisCharacter */
+constexpr int kTrimMarquee = 5;  /* TextTrimming.Marquee */
 
 /* Header and footer of the main menu, olive green; a submenu's header is
    mint. The list panel is black at 81%, the selected row a white bar. */
@@ -77,255 +71,7 @@ constexpr const char *kRootName = "id_aniketos_cheats_menu";
 constexpr const char *kTitleText = "Cheats Menu";
 constexpr const char *kSubtitleText = "powered by AniketosHEN";
 
-/* ---- Cheat list, as the util payload's cheat service reports it ---------- */
-struct Cheat {
-  std::string key;
-  std::string name;
-  bool enabled = false;
-};
-
-struct Group {
-  std::string label;
-  std::vector<Cheat> cheats;
-};
-
-struct CheatList {
-  std::string session_id;
-  std::string game;
-  std::string authors;
-  std::vector<Group> groups;
-};
-
-std::string join_authors(const cJSON *object) {
-  std::string joined;
-  std::unordered_set<std::string> seen;
-  const cJSON *authors = onion_cjson::item(object, "authors");
-  if (!cJSON_IsArray(authors))
-    return joined;
-  const cJSON *author = nullptr;
-  cJSON_ArrayForEach(author, authors) {
-    const char *value = onion_cjson::string_value(author);
-    if (!value || !*value || !seen.insert(value).second)
-      continue;
-    if (!joined.empty())
-      joined += ", ";
-    joined += value;
-  }
-  return joined;
-}
-
-void parse_cheats(const cJSON *array, Group &group) {
-  if (!cJSON_IsArray(array))
-    return;
-  const cJSON *entry = nullptr;
-  cJSON_ArrayForEach(entry, array) {
-    Cheat cheat;
-    cheat.key = onion_cjson::string_item(entry, "key", "");
-    cheat.name = onion_cjson::string_item(entry, "name", "");
-    cheat.enabled = onion_cjson::bool_item(entry, "enabled");
-    if (!cheat.key.empty())
-      group.cheats.push_back(std::move(cheat));
-  }
-}
-
-bool parse_list(const std::string &json, CheatList &out) {
-  onion_cjson::Root root(json);
-  if (!root || !onion_cjson::bool_item(root.get(), "canToggle"))
-    return false;
-  out.session_id = onion_cjson::string_item(root.get(), "sessionId", "");
-  out.game = onion_cjson::string_item(root.get(), "name", "");
-  out.authors = join_authors(root.get());
-  const cJSON *groups = onion_cjson::item(root.get(), "groups");
-  if (cJSON_IsArray(groups) && cJSON_GetArraySize(groups) > 0) {
-    const cJSON *entry = nullptr;
-    cJSON_ArrayForEach(entry, groups) {
-      Group group;
-      const std::string format = onion_cjson::string_item(entry, "format", "");
-      const std::string authors = join_authors(entry);
-      group.label = authors.empty() ? format : authors;
-      if (!authors.empty() && !format.empty())
-        group.label += " (" + format + ")";
-      parse_cheats(onion_cjson::item(entry, "cheats"), group);
-      if (!group.cheats.empty())
-        out.groups.push_back(std::move(group));
-    }
-  } else {
-    Group group;
-    group.label = out.game;
-    parse_cheats(onion_cjson::item(root.get(), "cheats"), group);
-    if (!group.cheats.empty())
-      out.groups.push_back(std::move(group));
-  }
-  return !out.session_id.empty() && !out.groups.empty();
-}
-
-/* ---- Util calls off the UI thread ------------------------------------------
- * Both calls are synchronous IPC round trips (the first list of a game also
- * reads and decrypts its cheat files), so they run on a short-lived thread and
- * the UI thread picks the result up on a later frame. One job at a time. */
-enum class JobKind { Fetch, Toggle };
-
-struct JobResult {
-  JobKind kind = JobKind::Fetch;
-  bool ok = false;
-  CheatList list;
-  std::string reply;
-  size_t group = 0;
-  size_t index = 0;
-  bool enabled = false;
-};
-
-struct ToggleRequest {
-  std::string session_id;
-  std::string key;
-  bool enabled = false;
-  size_t group = 0;
-  size_t index = 0;
-};
-
-std::atomic<bool> s_job_busy{false};
-std::atomic<bool> s_job_done{false};
-std::mutex s_job_mutex;
-ToggleRequest s_toggle_request; /* written before the toggle thread starts */
-JobResult s_job_result;         /* under s_job_mutex */
-
-std::string read_and_remove(const std::string &path) {
-  std::string text;
-  FILE *file = std::fopen(path.c_str(), "rb");
-  if (file) {
-    char buffer[4096];
-    size_t got = 0;
-    while ((got = std::fread(buffer, 1, sizeof(buffer), file)) > 0)
-      text.append(buffer, got);
-    std::fclose(file);
-  }
-  unlink(path.c_str());
-  return text;
-}
-
-void publish(JobResult &&result) {
-  {
-    std::lock_guard<std::mutex> lock(s_job_mutex);
-    s_job_result = std::move(result);
-  }
-  s_job_done.store(true, std::memory_order_release);
-  s_job_busy.store(false, std::memory_order_release);
-}
-
-void *fetch_job(void *) {
-  JobResult result;
-  result.kind = JobKind::Fetch;
-  std::string title_id;
-  int app_id = -1;
-  onion_bigapp_process_t process{};
-  if (Get_Running_App_TID(title_id, app_id)) {
-    const int found = onion_resolve_running_bigapp(&process);
-    const bool have_process = (found == 0 || found == -2) && process.pid > 0 &&
-                              process.session_generation != 0 &&
-                              process.process_name[0] != '\0';
-    std::string path;
-    if (have_process &&
-        IPC_Client::getInstance(true).GetGameCheats(
-            title_id, path, "runtime", process.pid, process.appid,
-            process.process_name, process.session_generation,
-            /*quiet=*/true) &&
-        !path.empty())
-      result.ok = parse_list(read_and_remove(path), result.list);
-  }
-  size_t count = 0;
-  for (const Group &group : result.list.groups)
-    count += group.cheats.size();
-  LOG_INFO("[CHEATSMENU] list title=%s pid=%d ok=%d groups=%zu cheats=%zu",
-           title_id.c_str(), static_cast<int>(process.pid), result.ok ? 1 : 0,
-           result.list.groups.size(), count);
-  publish(std::move(result));
-  return nullptr;
-}
-
-void *toggle_job(void *) {
-  const ToggleRequest request = s_toggle_request;
-  JobResult result;
-  result.kind = JobKind::Toggle;
-  result.group = request.group;
-  result.index = request.index;
-  result.enabled = request.enabled;
-  result.ok = IPC_Client::getInstance(true).ToggleGameCheat(
-      request.session_id, request.key, request.enabled, result.reply);
-  LOG_INFO("[CHEATSMENU] toggle enabled=%d ok=%d reply=%s",
-           request.enabled ? 1 : 0, result.ok ? 1 : 0, result.reply.c_str());
-  publish(std::move(result));
-  return nullptr;
-}
-
-bool start_job(void *(*job)(void *)) {
-  if (s_job_busy.exchange(true, std::memory_order_acq_rel))
-    return false;
-  pthread_t thread{};
-  if (pthread_create(&thread, nullptr, job, nullptr) != 0) {
-    s_job_busy.store(false, std::memory_order_release);
-    LOG_ERROR("[CHEATSMENU] failed to start a worker thread");
-    return false;
-  }
-  pthread_detach(thread);
-  return true;
-}
-
-/* ---- Who has the screen ---------------------------------------------------
- * LayerManager.s_curFocusLayer (Sce.Vsh.ShellUI.AppSystem), read by name: the
- * menu belongs to the game and goes away when Home, the Control Center or a
- * system app comes up. */
-bool s_focus_resolved = false;
-MonoVTable *s_focus_vtable = nullptr;
-MonoClassField *s_focus_field = nullptr;
-int32_t s_focus_game = -1;
-
-MonoClass *nested_class(MonoClass *outer, const char *name) {
-  static MonoClass *(*nested_types)(MonoClass *, void **) = nullptr;
-  if (!nested_types)
-    nested_types = reinterpret_cast<decltype(nested_types)>(
-        kernel_dynlib_dlsym(-1, g_libmono_handle,
-                            "mono_class_get_nested_types"));
-  if (!outer || !nested_types)
-    return nullptr;
-  void *iter = nullptr;
-  while (MonoClass *inner = nested_types(outer, &iter))
-    if (!std::strcmp(mono_class_get_name(inner), name))
-      return inner;
-  return nullptr;
-}
-
-bool game_has_focus() {
-  if (!s_focus_resolved) {
-    s_focus_resolved = true;
-    MonoImage *app_system = getDLLimage("Sce.Vsh.ShellUI.AppSystem.dll");
-    MonoClass *manager =
-        app_system ? mono_class_from_name(app_system,
-                                          "Sce.Vsh.ShellUI.AppSystem",
-                                          "LayerManager")
-                   : nullptr;
-    MonoClass *layers = nested_class(manager, "FocusLayer");
-    MonoClassField *game =
-        layers ? mono_class_get_field_from_name(layers, "Game") : nullptr;
-    s_focus_field =
-        manager ? mono_class_get_field_from_name(manager, "s_curFocusLayer")
-                : nullptr;
-    if (game && s_focus_field) {
-      mono_field_static_get_value(mono_class_vtable(mono_domain_get(), layers),
-                                  game, &s_focus_game);
-      s_focus_vtable = mono_class_vtable(mono_domain_get(), manager);
-    }
-    LOG_INFO("[CHEATSMENU] focus layer field=%d game=%d",
-             s_focus_vtable ? 1 : 0, s_focus_game);
-  }
-  /* Without the field the running BigApp is all there is to go by. */
-  if (!s_focus_vtable)
-    return true;
-  int32_t value = -1;
-  mono_field_static_get_value(s_focus_vtable, s_focus_field, &value);
-  return value == s_focus_game;
-}
-
-/* ---- Keeping the controller from the game ---------------------------------
+/* Keeping the controller from the game:
  * libScePad's scePadSetForceIntercepted (the call ShellUI's own
  * Sce.Vsh.ShellUI.PadInternal.NativeCall makes) marks the pad as taken by the
  * system, so the game reads no buttons while the menu is open. ShellUI keeps
@@ -371,7 +117,7 @@ void set_intercept(bool on) {
            static_cast<unsigned>(result));
 }
 
-/* ---- Widgets ---------------------------------------------------------------
+/* Widgets:
  * UI2 only: the Game layer is a UI2 scene. Everything hangs off one panel
  * that is removed again when the menu closes. */
 struct Widgets {
@@ -392,8 +138,6 @@ Pui::Runtime s_pui;
 Widgets s_widgets;
 std::vector<uint32_t> s_handles;
 std::vector<MonoObject *> s_objects;
-MonoObject *s_fonts[4] = {}; /* title, subtitle, row, footer (unboxed) */
-MonoObject *s_outline = nullptr;
 
 bool retain(MonoObject *object, void *) {
   if (!object || !mono_gchandle_new)
@@ -446,7 +190,7 @@ MonoObject *label(MonoObject *parent, const char *name, MonoObject *font,
   s_pui.font = font;
   MonoObject *object = Pui::CreateLabel(s_pui, parent, name, horizontal);
   if (object)
-    Set_Property(s_pui.label, object, "TextTrimming", 3); /* EllipsisCharacter */
+    Set_Property(s_pui.label, object, "TextTrimming", kTrimEllipsis);
   return object;
 }
 
@@ -467,22 +211,19 @@ void destroy_widgets() {
   s_handles.clear();
   s_objects.clear();
   s_widgets = {};
-  std::fill(std::begin(s_fonts), std::end(s_fonts), nullptr);
-  s_outline = nullptr;
 }
 
 bool create_widgets(MonoObject *host) {
   if (!Pui::Resolve(s_pui, pui_img, retain, nullptr))
     return false;
   Pui::RemoveNamed(s_pui, host, kRootName); /* left over from a crash */
-  s_fonts[0] = make_font(kTitleFont, 700);
-  s_fonts[1] = make_font(kSubtitleFont, 400);
-  s_fonts[2] = make_font(kRowFont, 400);
-  s_fonts[3] = make_font(kFooterFont, 400);
-  s_outline = make_outline(kTitleOutline);
-  for (MonoObject *font : s_fonts)
-    if (!font)
-      return false;
+  MonoObject *title_font = make_font(kTitleFont, 700);
+  MonoObject *subtitle_font = make_font(kSubtitleFont, 400);
+  MonoObject *row_font = make_font(kRowFont, 400);
+  MonoObject *footer_font = make_font(kFooterFont, 400);
+  MonoObject *outline = make_outline(kTitleOutline);
+  if (!title_font || !subtitle_font || !row_font || !footer_font)
+    return false;
 
   Widgets &w = s_widgets;
   w.root = panel(host, kRootName);
@@ -494,12 +235,12 @@ bool create_widgets(MonoObject *host) {
   w.highlight = panel(w.root, "id_cheats_menu_highlight");
   for (int i = 0; i < 4; ++i)
     w.edges[i] = panel(w.root, "id_cheats_menu_edge");
-  w.title = label(w.root, "id_cheats_menu_title", s_fonts[0], 1);
-  w.subtitle = label(w.root, "id_cheats_menu_subtitle", s_fonts[1], 1);
-  w.footer_label = label(w.root, "id_cheats_menu_footer_text", s_fonts[3], 1);
+  w.title = label(w.root, "id_cheats_menu_title", title_font, 1);
+  w.subtitle = label(w.root, "id_cheats_menu_subtitle", subtitle_font, 1);
+  w.footer_label = label(w.root, "id_cheats_menu_footer_text", footer_font, 1);
   for (int i = 0; i < kMaxRows; ++i) {
-    w.names[i] = label(w.root, "id_cheats_menu_row", s_fonts[2], 0);
-    w.values[i] = label(w.root, "id_cheats_menu_value", s_fonts[2], 2);
+    w.names[i] = label(w.root, "id_cheats_menu_row", row_font, 0);
+    w.values[i] = label(w.root, "id_cheats_menu_value", row_font, 2);
   }
   if (!w.body || !w.header || !w.footer || !w.highlight || !w.title ||
       !w.subtitle || !w.footer_label)
@@ -507,9 +248,9 @@ bool create_widgets(MonoObject *host) {
   for (int i = 0; i < kMaxRows; ++i)
     if (!w.names[i] || !w.values[i])
       return false;
-  if (s_outline) {
+  if (outline) {
     Set_Property(s_pui.label, w.title, "EnableThemedShadowColor", false);
-    Set_Property_Invoke(s_pui.label, w.title, "TextShadow", s_outline);
+    Set_Property_Invoke(s_pui.label, w.title, "TextShadow", outline);
   }
   Pui::PanelColor(s_pui, w.body, kBody);
   Pui::PanelColor(s_pui, w.highlight, kWhite);
@@ -546,7 +287,6 @@ float text_width(const std::string &text, float font_size) {
   return em * font_size;
 }
 
-/* ---- Menu state ------------------------------------------------------------ */
 enum class State { Closed, Loading, Open, Native };
 /* What a list being fetched is for: the drawn menu, or PUI's own card (over
    the game, or on the Control Center's scene). */
@@ -554,7 +294,7 @@ enum class Target { Overlay, NativeGame, NativeScene };
 
 State s_state = State::Closed;
 Target s_target = Target::Overlay;
-CheatList s_list;
+CheatsList::List s_list;
 /* With more than one cheat file the first page lists the files and each
    opens as a submenu; with one it lists the cheats straight away. */
 int s_group = -1;            /* -1: the file list */
@@ -577,9 +317,6 @@ uint32_t s_native_scene = 0;
 std::vector<ToggleRequest> s_toggle_queue;
 /* What each switch of the card was last set to, by PUI or by us. */
 std::vector<bool> s_native_wanted;
-
-constexpr int kTrimEllipsis = 3; /* TextTrimming.EllipsisCharacter */
-constexpr int kTrimMarquee = 5;  /* TextTrimming.Marquee */
 
 bool on_file_list() { return s_group < 0; }
 
@@ -608,18 +345,18 @@ void name_trimming(int row, bool scroll) {
     Invoke<void>(pui_img, s_pui.label, name, "ResetMarquee");
 }
 
+MonoObject *game_root() {
+  return Game ? Get_Property<MonoObject *>(pui_img, "Sce.PlayStation.PUI.UI2",
+                                           "Scene", Game, "RootWidget")
+              : nullptr;
+}
+
 void layout() {
   Widgets &w = s_widgets;
-  MonoObject *host = w.root;
-  if (!host)
+  if (!w.root)
     return;
-  MonoObject *game_root = Get_Property<MonoObject *>(
-      pui_img, "Sce.PlayStation.PUI.UI2", "Scene", Game, "RootWidget");
   float screen_w = 1920.0f, screen_h = 1080.0f;
-  if (!resolve_root_dimensions(game_root, &screen_w, &screen_h)) {
-    screen_w = 1920.0f;
-    screen_h = 1080.0f;
-  }
+  resolve_root_dimensions(game_root(), &screen_w, &screen_h);
 
   const bool main = on_file_list() || s_list.groups.size() == 1;
   const int count = row_count();
@@ -632,47 +369,45 @@ void layout() {
 
   const std::string title =
       main ? kTitleText : s_list.groups[s_group].label;
-  const float width = kWidth;
   const float value_width = text_width("Off", kRowFont) + kTextRight;
   const float header_h = kTitleHeight + (main ? kSubtitleHeight : 0.0f);
   const float footer_h = main ? kFooterHeight : 0.0f;
   const float body_h = visible * kRowHeight;
   const float height = header_h + body_h + footer_h;
-  const float x = std::max(0.0f, screen_w - kMarginX - width);
+  const float x = std::max(0.0f, screen_w - kMarginX - kWidth);
   const float y = std::min(kMarginY, std::max(0.0f, screen_h - height));
-  Pui::PanelGeometry(s_pui, w.root, x, y, width, height);
+  Pui::PanelGeometry(s_pui, w.root, x, y, kWidth, height);
 
   const Color bar = main ? kMainBar : kSubBar;
-  Pui::PanelGeometry(s_pui, w.header, 0, 0, width, header_h);
+  Pui::PanelGeometry(s_pui, w.header, 0, 0, kWidth, header_h);
   Pui::PanelColor(s_pui, w.header, bar);
   Pui::LabelGeometry(s_pui, w.title, kTextLeft, main ? 2.0f : 0.0f,
-                     width - 2 * kTextLeft, kTitleHeight);
+                     kWidth - 2 * kTextLeft, kTitleHeight);
   Pui::LabelText(s_pui, w.title, title);
   if (main) {
-    Pui::LabelGeometry(s_pui, w.subtitle, 0, kTitleHeight - 6.0f, width,
+    Pui::LabelGeometry(s_pui, w.subtitle, 0, kTitleHeight - 6.0f, kWidth,
                        kSubtitleHeight);
     Pui::LabelText(s_pui, w.subtitle, kSubtitleText);
   } else {
     Pui::LabelText(s_pui, w.subtitle, "");
   }
-  Pui::PanelGeometry(s_pui, w.body, 0, header_h, width, body_h);
-  Pui::PanelGeometry(s_pui, w.footer, 0, header_h + body_h, width, footer_h);
+  Pui::PanelGeometry(s_pui, w.body, 0, header_h, kWidth, body_h);
+  Pui::PanelGeometry(s_pui, w.footer, 0, header_h + body_h, kWidth, footer_h);
   Pui::PanelColor(s_pui, w.footer, main ? kMainBar : kClear);
   Pui::LabelGeometry(s_pui, w.footer_label, kTextLeft, header_h + body_h,
-                     width - 2 * kTextLeft, footer_h);
+                     kWidth - 2 * kTextLeft, footer_h);
   Pui::LabelText(s_pui, w.footer_label, main ? footer_text() : "");
 
-  const Color edge = bar;
-  Pui::PanelGeometry(s_pui, w.edges[0], 0, 0, width, kEdge);
-  Pui::PanelGeometry(s_pui, w.edges[1], 0, height - kEdge, width, kEdge);
+  Pui::PanelGeometry(s_pui, w.edges[0], 0, 0, kWidth, kEdge);
+  Pui::PanelGeometry(s_pui, w.edges[1], 0, height - kEdge, kWidth, kEdge);
   Pui::PanelGeometry(s_pui, w.edges[2], 0, 0, kEdge, height);
-  Pui::PanelGeometry(s_pui, w.edges[3], width - kEdge, 0, kEdge, height);
+  Pui::PanelGeometry(s_pui, w.edges[3], kWidth - kEdge, 0, kEdge, height);
   for (MonoObject *object : w.edges)
-    Pui::PanelColor(s_pui, object, edge);
+    Pui::PanelColor(s_pui, object, bar);
 
   const int selected_row = s_selected - s_top;
   Pui::PanelGeometry(s_pui, w.highlight, 0,
-                     header_h + selected_row * kRowHeight, width, kRowHeight);
+                     header_h + selected_row * kRowHeight, kWidth, kRowHeight);
   for (int row = 0; row < kMaxRows; ++row) {
     MonoObject *name = w.names[row];
     MonoObject *value = w.values[row];
@@ -689,8 +424,8 @@ void layout() {
     const bool selected = index == s_selected;
     label_color(name, selected ? kBlack : kWhite);
     const float name_width =
-        on_file_list() ? width - kTextLeft - kTextRight
-                       : width - kTextLeft - kValueGap - value_width;
+        on_file_list() ? kWidth - kTextLeft - kTextRight
+                       : kWidth - kTextLeft - kValueGap - value_width;
     const std::string &text = on_file_list()
                                   ? s_list.groups[index].label
                                   : s_list.groups[s_group].cheats[index].name;
@@ -702,7 +437,7 @@ void layout() {
       continue;
     }
     const Cheat &cheat = s_list.groups[s_group].cheats[index];
-    Pui::LabelGeometry(s_pui, value, width - kTextRight - value_width, row_y,
+    Pui::LabelGeometry(s_pui, value, kWidth - kTextRight - value_width, row_y,
                        value_width, kRowHeight);
     Pui::LabelText(s_pui, value, cheat.enabled ? "On" : "Off");
     label_color(value, cheat.enabled ? kOn : kOff);
@@ -713,11 +448,8 @@ uintptr_t focused_scene() {
   return reinterpret_cast<uintptr_t>(SystemDialogs::FocusedScene());
 }
 
-void open_menu(CheatList &&list) {
-  MonoObject *host = Game ? Get_Property<MonoObject *>(
-                                pui_img, "Sce.PlayStation.PUI.UI2", "Scene",
-                                Game, "RootWidget")
-                          : nullptr;
+void open_menu(CheatsList::List &&list) {
+  MonoObject *host = game_root();
   if (!host) {
     LOG_WARN("[CHEATSMENU] no Game layer root");
     return;
@@ -745,13 +477,6 @@ void open_menu(CheatList &&list) {
            reinterpret_cast<void *>(s_open_focus));
 }
 
-uint64_t now_millis() {
-  timespec now{};
-  clock_gettime(CLOCK_MONOTONIC, &now);
-  return static_cast<uint64_t>(now.tv_sec) * 1000u +
-         static_cast<uint64_t>(now.tv_nsec) / 1000000u;
-}
-
 void release_controller_when_idle(bool now) {
   if (!s_intercepting) {
     s_release_pending = false;
@@ -759,20 +484,14 @@ void release_controller_when_idle(bool now) {
   }
   if (!s_release_pending) {
     s_release_pending = true;
-    s_release_since_ms = now_millis();
+    s_release_since_ms = MonotonicMs();
   }
   /* Two seconds at most: a button held on is the player's business. */
   if (now || Input::HeldButtons() == 0 ||
-      now_millis() - s_release_since_ms >= 2000) {
+      MonotonicMs() - s_release_since_ms >= 2000) {
     set_intercept(false);
     s_release_pending = false;
   }
-}
-
-void forget_native_scene() {
-  if (s_native_scene)
-    mono_gchandle_free(s_native_scene);
-  s_native_scene = 0;
 }
 
 void close_menu(bool release_now = false) {
@@ -782,14 +501,14 @@ void close_menu(bool release_now = false) {
     SystemDialogs::CloseNativeMenu();
   release_controller_when_idle(release_now);
   destroy_widgets();
-  forget_native_scene();
+  Reflect::Release(s_native_scene);
   s_state = State::Closed;
   s_list = {};
   s_native_rows.clear();
   s_toggle_pending = false;
 }
 
-/* ---- PUI's own card ----------------------------------------------------------
+/* PUI's own card:
  * The same pop-up menu the Sweety Shell Menu is drawn with: one switch per
  * cheat under the "Cheats Menu" header, and a last row, greyed out, with who
  * made the cheats. Its focus, scrolling, sounds and input are PUI's. */
@@ -819,8 +538,7 @@ bool open_native(int focus) {
   s_native_rows.push_back({-1, -1});
   s_native_wanted.push_back(false);
 
-  MonoObject *scene =
-      s_native_scene ? mono_gchandle_get_target(s_native_scene) : nullptr;
+  MonoObject *scene = Reflect::Target(s_native_scene);
   SystemDialogs::NativeMenuPlacement placement;
   placement.margin = kMarginX;
   placement.min_width = 652.0f;
@@ -833,12 +551,12 @@ bool open_native(int focus) {
   return opened;
 }
 
-void start_native(CheatList &&list) {
+void start_native(CheatsList::List &&list) {
   s_list = std::move(list);
   if (!open_native(0)) {
-    CheatList drawn = std::move(s_list);
+    CheatsList::List drawn = std::move(s_list);
     s_list = {};
-    forget_native_scene();
+    Reflect::Release(s_native_scene);
     if (s_target == Target::NativeGame) {
       LOG_WARN("[CHEATSMENU] no native card over the game; drawing the menu");
       open_menu(std::move(drawn));
@@ -861,10 +579,9 @@ void queue_toggle(int group, int index, bool enabled) {
 }
 
 void run_toggle_queue() {
-  if (s_toggle_queue.empty() || s_job_busy.load(std::memory_order_acquire))
+  if (s_toggle_queue.empty())
     return;
-  s_toggle_request = s_toggle_queue.front();
-  if (start_job(toggle_job)) {
+  if (CheatsList::StartToggle(s_toggle_queue.front())) {
     s_toggle_queue.erase(s_toggle_queue.begin());
     s_toggle_pending = true;
   }
@@ -897,9 +614,8 @@ void request_toggle(size_t group, size_t index) {
   if (s_toggle_pending)
     return;
   const Cheat &cheat = s_list.groups[group].cheats[index];
-  s_toggle_request = {s_list.session_id, cheat.key, !cheat.enabled, group,
-                      index};
-  s_toggle_pending = start_job(toggle_job);
+  s_toggle_pending = CheatsList::StartToggle(
+      {s_list.session_id, cheat.key, !cheat.enabled, group, index});
 }
 
 void handle_input(uint32_t down, uint32_t repeated) {
@@ -954,13 +670,9 @@ void follow_focus() {
 }
 
 void take_job_result() {
-  if (!s_job_done.exchange(false, std::memory_order_acq_rel))
-    return;
   JobResult result;
-  {
-    std::lock_guard<std::mutex> lock(s_job_mutex);
-    result = std::move(s_job_result);
-  }
+  if (!CheatsList::TakeResult(result))
+    return;
   if (result.kind == JobKind::Fetch) {
     if (s_state != State::Loading)
       return;
@@ -968,14 +680,14 @@ void take_job_result() {
     if (!result.ok) {
       if (s_target == Target::NativeScene)
         notify("%s", toolbox_i18n::tr("home_menu.cheats.none"));
-      forget_native_scene();
+      Reflect::Release(s_native_scene);
       return;
     }
     /* The drawn menu only while it is still wanted: the game in front, the
        switch on. */
     if (s_target == Target::NativeScene)
       start_native(std::move(result.list));
-    else if (!g_settings.cheats_visual_menu || !game_has_focus())
+    else if (!g_settings.cheats_visual_menu || !GameHasFocus())
       return;
     else if (s_target == Target::NativeGame)
       start_native(std::move(result.list));
@@ -985,6 +697,7 @@ void take_job_result() {
   }
   s_toggle_pending = false;
   if ((s_state != State::Open && s_state != State::Native) ||
+      result.session_id != s_list.session_id ||
       result.group >= s_list.groups.size() ||
       result.index >= s_list.groups[result.group].cheats.size())
     return;
@@ -1005,7 +718,8 @@ void take_job_result() {
       if (s_native_rows[row].first == static_cast<int>(result.group) &&
           s_native_rows[row].second == static_cast<int>(result.index))
         focus = static_cast<int>(row);
-    open_native(focus);
+    if (!open_native(focus))
+      close_menu(/*release_now=*/true);
   }
 }
 
@@ -1025,7 +739,7 @@ bool Tick(bool toggle_requested, uint32_t buttons_down,
       return false;
     }
     if (s_state == State::Closed && g_settings.cheats_visual_menu &&
-        game_has_focus() && start_job(fetch_job)) {
+        GameHasFocus() && CheatsList::StartFetch()) {
       s_state = State::Loading;
       s_target = g_settings.cheats_visual_render == 1 ? Target::NativeGame
                                                       : Target::Overlay;
@@ -1038,7 +752,7 @@ bool Tick(bool toggle_requested, uint32_t buttons_down,
 
   if (s_state == State::Native) {
     if (s_target != Target::NativeScene &&
-        (!g_settings.cheats_visual_menu || !game_has_focus())) {
+        (!g_settings.cheats_visual_menu || !GameHasFocus())) {
       close_menu(/*release_now=*/true);
       return false;
     }
@@ -1047,7 +761,7 @@ bool Tick(bool toggle_requested, uint32_t buttons_down,
   }
   if (s_state != State::Open)
     return false;
-  if (!g_settings.cheats_visual_menu || !game_has_focus()) {
+  if (!g_settings.cheats_visual_menu || !GameHasFocus()) {
     close_menu(/*release_now=*/true);
     return false;
   }
@@ -1081,27 +795,31 @@ void OpenFromControlCenter(MonoObject *scene) {
   }
   if (s_state == State::Open || s_state == State::Native)
     close_menu(/*release_now=*/true);
-  if (s_state != State::Closed || !start_job(fetch_job)) {
+  if (s_state != State::Closed || !CheatsList::StartFetch()) {
     LOG_INFO("[CHEATSMENU] busy; Control Center request dropped");
     return;
   }
-  forget_native_scene();
-  if (scene)
-    s_native_scene = mono_gchandle_new_weakref(scene, 0);
+  Reflect::Hold(s_native_scene, scene);
   s_target = Target::NativeScene;
   s_state = State::Loading;
 }
 
 void Close() {
   s_toggle_queue.clear();
-  if (s_state == State::Loading)
+  if (s_state == State::Loading) {
     s_state = State::Closed;
+    Reflect::Release(s_native_scene);
+  }
   if (s_state == State::Open || s_state == State::Native || s_release_pending)
     close_menu(/*release_now=*/true);
 }
 
-bool IsOpen() { return s_state == State::Open || s_state == State::Native; }
-
-bool GameHasFocus() { return game_has_focus(); }
+/* LayerManager's focus layer: the menu belongs to the game and goes away when
+   Home, the Control Center or a system app comes up. */
+bool GameHasFocus() {
+  const FocusLayer layer = CurrentFocusLayer();
+  /* Without the field the running BigApp is all there is to go by. */
+  return layer == FocusLayer::Game || layer == FocusLayer::Unknown;
+}
 
 } // namespace AniketosShell::CheatsMenu

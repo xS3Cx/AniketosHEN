@@ -6,8 +6,6 @@
 #include <onion/fs.h>
 #include <onion/notify.h>
 
-#include <dirent.h>
-#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <sys/stat.h>
@@ -33,22 +31,10 @@ static const EmbeddedIcon kEmbeddedIcons[] = {
 #undef ONION_ICON
 };
 
-static bool logo_recoloured(void) {
-  DIR *folder = opendir(ONION_LOGO_DIR);
-  if (!folder)
-    return false;
-  bool found = false;
-  const struct dirent *entry;
-  while (!found && (entry = readdir(folder)) != NULL)
-    found = entry->d_name[0] != '.';
-  closedir(folder);
-  return found;
-}
-
 bool bootstrap_assets_write_notify_icon(void) {
   mkdir("/user/data", 0777);
   mkdir(ONION_DIST_USER_DATA_ROOT, 0777);
-  if (logo_recoloured() && if_exists(ONION_NOTIFY_ICON_PATH))
+  if (bootstrap_logo_recoloured() && if_exists(ONION_NOTIFY_ICON_PATH))
     return true;
   return write_file_atomic_if_changed(ONION_NOTIFY_ICON_PATH, sicon_start,
                                       sicon_size);

@@ -17,14 +17,8 @@ typedef struct BootstrapConfig {
 /** Configure notifications/logging and resolve the startup settings. */
 bool bootstrap_config_load(BootstrapConfig *config);
 
-/**
- * Import the data a previous OnionHEN installation left under /data/OnionHEN
- * (once; later boots return immediately). Never fatal: on failure the
- * OnionHEN directory is untouched, settings are still read from it, and the
- * next boot retries. Must run before the services that create files under
- * the AniketosHEN data root are launched.
- */
-void bootstrap_migrate_legacy_data(void);
+/** The user at the console, or -1: where toast-only notifications go. */
+int32_t bootstrap_foreground_user(void);
 
 #ifdef __cplusplus
 }

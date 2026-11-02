@@ -49,16 +49,10 @@ float Exp2(float y) {
   return sum * FromBits(uint32_t(i + 127) << 23);
 }
 
-} // namespace
-
+/* NaN / inf: 0 */
 float Finite(float x) { return IsFinite(x) ? x : 0.f; }
 
-float Clamp(float x, float lo, float hi) {
-  if (!(x >= lo))
-    return lo; /* also NaN */
-  return x > hi ? hi : x;
-}
-
+/* base <= 0: 0 */
 float Pow(float base, float e) {
   if (!(base > 0.f) || !IsFinite(base) || !IsFinite(e))
     return 0.f;
@@ -69,12 +63,48 @@ float Pow(float base, float e) {
   return Exp2(e * Log2(base));
 }
 
+/* x <= 0 or not finite: 0 */
 float Sqrt(float x) {
   if (!(x > 0.f) || !IsFinite(x))
     return 0.f;
   float r = Exp2(0.5f * Log2(x));
   r = 0.5f * (r + x / r);
   return 0.5f * (r + x / r);
+}
+
+/* Turns a 0..1 magnitude along (ux, uy) into a deflection past the game's
+   deadzone and up to the outer limit. */
+void CompensateDeadzone(const MouseParams &p, float ux, float uy, float m,
+                        float *x, float *y) {
+  const float dz = Clamp(p.deadzone_x1000 / 1000.f, 0.f, 0.5f);
+  const float outer = p.outer_x1000 ? Clamp(p.outer_x1000 / 1000.f, dz, 1.f) : 1.f;
+  m = Clamp(m, 0.f, 1.f);
+  if (m <= 0.f) {
+    *x = *y = 0.f;
+    return;
+  }
+  if (p.deadzone_shape == DeadzoneShape::Square) {
+    float a[2] = {ux * m, uy * m};
+    for (float &v : a) {
+      const float mag = v < 0 ? -v : v;
+      /* components under half a byte step stay 0, or near-axis aim snaps */
+      v = mag > 0.5f / 127.f ? (v < 0 ? -1.f : 1.f) * (dz + (outer - dz) * mag) : 0.f;
+    }
+    *x = a[0];
+    *y = a[1];
+    return;
+  }
+  const float r = dz + (outer - dz) * m;
+  *x = ux * r;
+  *y = uy * r;
+}
+
+} // namespace
+
+float Clamp(float x, float lo, float hi) {
+  if (!(x >= lo))
+    return lo; /* also NaN */
+  return x > hi ? hi : x;
 }
 
 float RampStep(float level, bool on, const Ramp &ramp, float dt_ms) {
@@ -115,31 +145,6 @@ uint8_t Quantise(float d, float *err) {
   if (err)
     *err = Clamp(f - float(b), -1.f, 1.f);
   return uint8_t(b);
-}
-
-void CompensateDeadzone(const MouseParams &p, float ux, float uy, float m,
-                        float *x, float *y) {
-  const float dz = Clamp(p.deadzone_x1000 / 1000.f, 0.f, 0.5f);
-  const float outer = p.outer_x1000 ? Clamp(p.outer_x1000 / 1000.f, dz, 1.f) : 1.f;
-  m = Clamp(m, 0.f, 1.f);
-  if (m <= 0.f) {
-    *x = *y = 0.f;
-    return;
-  }
-  if (p.deadzone_shape == DeadzoneShape::Square) {
-    float a[2] = {ux * m, uy * m};
-    for (float &v : a) {
-      const float mag = v < 0 ? -v : v;
-      /* components under half a byte step stay 0, or near-axis aim snaps */
-      v = mag > 0.5f / 127.f ? (v < 0 ? -1.f : 1.f) * (dz + (outer - dz) * mag) : 0.f;
-    }
-    *x = a[0];
-    *y = a[1];
-    return;
-  }
-  const float r = dz + (outer - dz) * m;
-  *x = ux * r;
-  *y = uy * r;
 }
 
 void MouseStick::Reset() {

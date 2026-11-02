@@ -1,7 +1,5 @@
 #pragma once
 
-#include "external_symbols.hpp"
-
 /* The DevKit/TestKit overlays on Home, drawn by the system's own widget
  * (ReactNative.Components.ShellUI.HomeUI.DebugInfoView in
  * Sce.Vsh.ShellUI.ReactNativeShellApp): the "System Software / Release Check

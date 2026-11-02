@@ -90,36 +90,10 @@ static OnPressResult id_onionhen_credits(OnPressContext &ctx) {
   return OnPressResult::EarlyReturn;
 }
 
-/* The rows of "Find me on": show where that is, nothing to save. */
-static OnPressResult find_me(const char *where) {
-  notify("%s", where);
-  return OnPressResult::EarlyReturn;
-}
-static OnPressResult id_find_me_x(OnPressContext &) {
-  return find_me("X: x.com/Alex0_SH");
-}
-static OnPressResult id_find_me_youtube(OnPressContext &) {
-  return find_me("YouTube: AlexZero");
-}
-static OnPressResult id_find_me_discord(OnPressContext &) {
-  return find_me("Discord: alex0sh");
-}
-static OnPressResult id_find_me_telegram(OnPressContext &) {
-  return find_me("Telegram: t.me/missgoodpussy");
-}
-static OnPressResult id_find_me_tiktok(OnPressContext &) {
-  return find_me("TikTok: tiktok.com/@mealexzero");
-}
-
 static const OnPressExactEntry kRootExact[] = {
     {"id_download_cheats", id_download_cheats},
     {"id_lm_test", id_lm_test},
     {"id_onionhen_credits", id_onionhen_credits},
-    {"id_find_me_x", id_find_me_x},
-    {"id_find_me_youtube", id_find_me_youtube},
-    {"id_find_me_discord", id_find_me_discord},
-    {"id_find_me_telegram", id_find_me_telegram},
-    {"id_find_me_tiktok", id_find_me_tiktok},
 };
 
 const OnPressExactEntry *onpress_misc_root_exact(size_t *count) {

@@ -1,6 +1,9 @@
 #pragma once
 
+#include "aniketos_ui/home_scene.hpp" // renames.tsv
 #include "monodef.h"
+
+#include <cstddef>
 #include <string>
 
 namespace ShellClock {
@@ -34,31 +37,26 @@ bool GetDateOverlayState(DateOverlayState *state);
  * game...). False when no system clock is known yet, in which case there is
  * nothing to follow. */
 bool GetNativeClockOpacity(float *opacity);
-/* Root widget of the scene the system clock is in, or null. Children of it
- * are faded and animated by PUI together with that scene. */
-MonoObject *GetHomeRoot();
-bool IsWidgetDisposed(MonoObject *widget);
-/* Calls `visit` with the root widget of every scene in ShellUI's scene tree
- * (sub-scenes and modal scenes). UI thread. */
-void VisitSceneRoots(void (*visit)(MonoObject *root, void *context),
-                     void *context);
-void RemoveStaleHomeChildren(MonoObject *root);
-std::string DebugPropText(MonoObject *object, const char *name);
+/* The root widget of the scene the system clock is in (Home's root, or the
+ * Control Center's while its clock is the one on screen). Scene fades and
+ * zooms are applied above it, so whatever is parented to it takes part in
+ * them exactly like the clock does. */
+MonoObject *ClockSceneRoot();
 void RequestRefresh();
-/* The custom clock is switched on (and customization with it). Home and the
- * Control Center then get the script that draws it in Sony's clock
- * (home_inject_js.inc); a clock the script draws is marked by its test id
- * and the label hooks leave it alone. */
-bool CustomClockOn();
-/* The clock's settings for that script, as JSON: on, seconds, hour format,
- * the AM/PM words, the date's parts and the menu language's month and
- * weekday names, colours and sizes. Plain ASCII (other text is written as
- * \u escapes): the script executor cuts a script with other text short. */
+/* The clock's settings for the script that draws it in Sony's clock
+ * (home_inject_js.inc), as JSON: on, seconds, hour format, the AM/PM words,
+ * the date's parts and the menu language's month and weekday names, colours
+ * and sizes. Plain ASCII (other text is written as \u escapes): the script
+ * executor cuts a script with other text short. */
 std::string ScriptConfig();
 /** One-line description of the clock state, for the profiler log. */
 void DebugSnapshot(char *out, size_t out_size);
 void DebugDumpProperties(const char *tag);
-void DebugDumpChain(const char *tag);
 void DebugDumpPuiImage(const char *path);
+
+inline MonoObject *GetHomeRoot() { return AniketosUI::HomeScene::Root(); } // renames.tsv
+inline bool IsWidgetDisposed(MonoObject *widget) { return AniketosUI::HomeScene::IsDisposed(widget); } // renames.tsv
+inline void RemoveStaleHomeChildren(MonoObject *root) { AniketosUI::HomeScene::RemoveStaleChildren(root); } // renames.tsv
+inline std::string DebugPropText(MonoObject *object, const char *name) { return AniketosUI::HomeScene::PropertyText(object, name); } // renames.tsv
 
 } // namespace ShellClock

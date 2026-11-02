@@ -1,23 +1,24 @@
 #include "aniketos_shell/input/kbm_capture.hpp"
 
 #include "aniketos_shell/input/mouse_control.hpp"
+#include "aniketos_ui/mono_reflect.hpp"
+#include "aniketos_ui/mono_symbols.hpp"
+#include "aniketos_ui/monotonic_clock.hpp"
 #include "external_symbols.hpp"
-#include "ps5/kernel.h"
+#include "hooked_funcs.hpp"
 
 #include <onion/log.h>
 
 #include <cstring>
-#include <time.h>
-
-extern int g_libmono_handle;
-extern "C" int sceUserServiceGetForegroundUser(int *user_id);
 
 namespace KbmCapture {
 namespace {
 
 namespace kbm = onion::kbm;
 
-/* ---- the keyboard: ScePsmUtil's ImeKbController internal calls ------------
+using AniketosUI::MonotonicMs;
+
+/* ScePsmUtil's ImeKbController internal calls:
  * KbdOpenNative(ImeKeyboardParamInternal&, ulong& accessor): one libSceIme
  *   keyboard client; -1 when this user has one, 0x80bc0001 when any exists.
  * KbdGetEventNative(accessor, ImeEventNative&): 1 an event, 0 none (an empty
@@ -67,8 +68,8 @@ int offset_of(MonoClass *klass, const char *first, const char *name) {
 void *internal_call(MonoClass *klass, const char *name, int parameters) {
   static void *(*lookup)(MonoMethod *) = nullptr;
   if (!lookup)
-    lookup = reinterpret_cast<decltype(lookup)>(kernel_dynlib_dlsym(
-        -1, g_libmono_handle, "mono_lookup_internal_call"));
+    lookup = reinterpret_cast<decltype(lookup)>(
+        libmono_symbol("mono_lookup_internal_call"));
   MonoMethod *method =
       klass ? mono_class_get_method_from_name(klass, name, parameters)
             : nullptr;
@@ -79,11 +80,7 @@ void *internal_call(MonoClass *klass, const char *name, int parameters) {
 }
 
 void load_api() {
-  static MonoImage *(*image_loaded)(const char *) = nullptr;
-  if (!image_loaded)
-    image_loaded = reinterpret_cast<decltype(image_loaded)>(
-        kernel_dynlib_dlsym(-1, g_libmono_handle, "mono_image_loaded"));
-  MonoImage *image = image_loaded ? image_loaded(kImage) : nullptr;
+  MonoImage *image = AniketosUI::Reflect::LoadedImage(kImage);
   if (!image)
     return; /* PUI loads it with the first text field: tried again later */
   s_api_tried = true;
@@ -124,13 +121,8 @@ template <typename T> T get(const uint8_t *buffer, int offset) {
   return value;
 }
 
-/* ---- session ---------------------------------------------------------------- */
-
-enum class Mode { Off, Capture, Live };
-
-Mode s_mode = Mode::Off;
+bool s_session = false;
 uint64_t s_accessor = 0; /* 0: the keyboard is not ours */
-bool s_sink_set = false;
 uint64_t s_deadline_ms = 0;
 uint64_t s_polled_ms = 0;
 int s_logged_events = 0;
@@ -139,18 +131,10 @@ uint8_t s_down[(kbm::kInputCount + 7) / 8] = {};
 Result s_result{};
 Input s_candidate = kbm::kInputNone; /* a modifier or Esc, answers on release */
 uint64_t s_candidate_ms = 0;
-int s_wheel_v = 0, s_wheel_h = 0, s_dx = 0, s_dy = 0;
 
 constexpr uint64_t kUnpolledMs = 3000;
 constexpr uint64_t kEscapeCancelMs = 1000;
 constexpr int kMaxLoggedEvents = 40;
-
-uint64_t now_ms() {
-  timespec now{};
-  clock_gettime(CLOCK_MONOTONIC, &now);
-  return static_cast<uint64_t>(now.tv_sec) * 1000u +
-         static_cast<uint64_t>(now.tv_nsec) / 1000000u;
-}
 
 bool held(Input input) { return s_down[input >> 3] & (1u << (input & 7)); }
 void set_held(Input input, bool on) {
@@ -226,7 +210,7 @@ void finish(State state, Input input) {
   stop_listening(); /* the answer is in: keyboard and mouse go back now */
 }
 
-bool waiting() { return s_mode == Mode::Capture && s_result.state == State::None; }
+bool waiting() { return s_session && s_result.state == State::None; }
 
 void on_down(Input input, uint64_t now) {
   if (input == kbm::kInputNone || input >= kbm::kInputCount || held(input))
@@ -277,7 +261,9 @@ void follow_modifiers(uint32_t status, uint64_t now) {
     }
 }
 
+/* The keyboard is gone: what it held was not let go, so it answers nothing. */
 void release_all_held() {
+  s_candidate = kbm::kInputNone;
   for (int input = 0; input < kbm::kInputCount; ++input)
     if (held(static_cast<Input>(input)))
       on_up(static_cast<Input>(input));
@@ -325,9 +311,8 @@ void read_keyboard(uint64_t now) {
 }
 
 /* MouseControl's frame, while a session runs: nothing on screen is clicked. */
-void mouse_sink(uint32_t buttons, uint32_t went_down, int wheel, int tilt,
-                int dx, int dy) {
-  const uint64_t now = now_ms();
+void mouse_sink(uint32_t buttons, uint32_t went_down, int wheel, int tilt) {
+  const uint64_t now = MonotonicMs();
   for (int bit = 0; bit < 8; ++bit) {
     const Input button = static_cast<Input>(kbm::kMouseButtonFirst + bit);
     if (went_down & (1u << bit))
@@ -339,99 +324,57 @@ void mouse_sink(uint32_t buttons, uint32_t went_down, int wheel, int tilt,
     on_notch(wheel > 0 ? kbm::kWheelUp : kbm::kWheelDown, now);
   if (tilt)
     on_notch(tilt > 0 ? kbm::kWheelRight : kbm::kWheelLeft, now);
-  s_wheel_v += wheel;
-  s_wheel_h += tilt;
-  s_dx += dx;
-  s_dy += dy;
 }
 
 void stop_listening() {
   close_keyboard();
-  if (s_sink_set) {
-    MouseControl::SetCaptureSink(nullptr);
-    s_sink_set = false;
-  }
+  MouseControl::SetCaptureSink(nullptr);
   memset(s_down, 0, sizeof(s_down));
   s_modifiers = 0;
   s_candidate = kbm::kInputNone;
 }
 
-bool start(Mode mode) {
+void end_session() {
   stop_listening();
-  s_mode = mode;
-  s_result = Result{};
-  s_polled_ms = now_ms();
-  s_logged_events = 0;
-  s_wheel_v = s_wheel_h = s_dx = s_dy = 0;
-  MouseControl::SetCaptureSink(&mouse_sink);
-  s_sink_set = true;
-  return open_keyboard();
-}
-
-void end() {
-  stop_listening();
-  s_mode = Mode::Off;
+  s_session = false;
 }
 
 } // namespace
 
 bool BeginCapture(uint32_t timeout_ms) {
-  const bool keyboard = start(Mode::Capture);
+  stop_listening();
+  s_session = true;
+  s_result = Result{};
+  s_polled_ms = MonotonicMs();
   s_deadline_ms = s_polled_ms + timeout_ms;
+  s_logged_events = 0;
+  MouseControl::SetCaptureSink(&mouse_sink);
+  const bool keyboard = open_keyboard();
   LOG_INFO("[KBM-CAPTURE] capture started (%u ms, keyboard %d)",
            static_cast<unsigned>(timeout_ms), keyboard ? 1 : 0);
   return keyboard;
 }
 
 Result PollCapture() {
-  s_polled_ms = now_ms();
-  return s_mode == Mode::Capture ? s_result : Result{State::Cancelled, 0, {}};
+  s_polled_ms = MonotonicMs();
+  return s_session ? s_result : Result{State::Cancelled, 0, {}};
 }
 
 void EndCapture() {
-  if (s_mode == Mode::Capture)
-    end();
-}
-
-bool BeginLive() {
-  const bool keyboard = start(Mode::Live);
-  LOG_INFO("[KBM-CAPTURE] live test started (keyboard %d)", keyboard ? 1 : 0);
-  return keyboard;
-}
-
-bool LiveFrame(kbm::InputFrame &frame) {
-  if (s_mode != Mode::Live)
-    return false;
-  const uint64_t now = now_ms();
-  s_polled_ms = now;
-  frame.now_us = now * 1000u;
-  memcpy(frame.down, s_down, sizeof(frame.down));
-  const auto notches = [](int value) {
-    return static_cast<int16_t>(value > 32767 ? 32767 : value < -32767 ? -32767 : value);
-  };
-  frame.wheel_v = notches(s_wheel_v);
-  frame.wheel_h = notches(s_wheel_h);
-  frame.mouse_dx = s_dx;
-  frame.mouse_dy = s_dy;
-  s_wheel_v = s_wheel_h = s_dx = s_dy = 0;
-  return true;
-}
-
-void EndLive() {
-  if (s_mode == Mode::Live)
-    end();
+  if (s_session)
+    end_session();
 }
 
 void Tick() {
-  if (s_mode == Mode::Off)
+  if (!s_session)
     return;
-  const uint64_t now = now_ms();
+  const uint64_t now = MonotonicMs();
   if (now - s_polled_ms > kUnpolledMs) {
     LOG_WARN("[KBM-CAPTURE] nobody polls: session ended");
-    end();
+    end_session();
     return;
   }
-  if (!waiting() && s_mode == Mode::Capture)
+  if (!waiting())
     return;
   read_keyboard(now);
   if (!waiting())

@@ -1,17 +1,14 @@
 /* Copyright (C) 2026 AniketosHEN — controller toolbox helpers */
 #include "aniketos_shell/controller/controller_tools.hpp"
 
-#include "hooked_funcs.hpp"
 #include "aniketos_shell/input/pad_reader.hpp"
-#include <onion/platform.h>
-#include <time.h>
-#include <cstring>
-#include <iterator>
-#include <algorithm>
+#include "aniketos_ui/monotonic_clock.hpp"
+#include "hooked_funcs.hpp"
 
-extern "C" int sceUserServiceGetForegroundUser(int *user_id);
-extern "C" int scePadOpen(int user_id, int type, int index, const void *param);
-extern "C" int scePadClose(int handle);
+#include <onion/log.h>
+
+#include <algorithm>
+#include <cstring>
 
 struct ScePadLightBarParam {
   uint8_t red;
@@ -20,22 +17,28 @@ struct ScePadLightBarParam {
   uint8_t reserved;
 };
 
-extern "C" int scePadSetLightBar(int handle, const ScePadLightBarParam *param);
+extern "C" {
+int scePadOpen(int user_id, int type, int index, const void *param);
+int scePadClose(int handle);
+int scePadSetLightBar(int handle, const ScePadLightBarParam *param);
+int scePadResetLightBar(int handle);
 /* motors[0] the large (strong, low) motor, motors[1] the small one */
-extern "C" int scePadSetVibration(int handle, const uint8_t *motors);
+int scePadSetVibration(int handle, const uint8_t *motors);
 /* Without this a DualSense ignores rumble sent from ShellUI (measured on
    13.42 consoles); kVibrationMode is the mode that lets it through. */
-extern "C" int scePadSetVibrationMode(int handle, int mode);
+int scePadSetVibrationMode(int handle, int mode);
 /* The system's per-device calls take the controller's device id, not a
    handle; ShellUI's own Settings use them the same way. */
-extern "C" int scePadGetDeviceId(int handle, void *device_id);
-extern "C" int scePadSetUserNumber(uint32_t device_id, int number);
-extern "C" int scePadSetLightBarBaseBrightness(uint32_t device_id, int level);
-extern "C" int sceUserServiceGetUserNumber(int user_id, int *number);
-extern "C" int sceUserServiceGetLightBarBaseBrightness(int user_id, int *level);
-extern "C" int scePadResetLightBar(int handle);
+int scePadGetDeviceId(int handle, void *device_id);
+int scePadSetUserNumber(uint32_t device_id, int number);
+int scePadSetLightBarBaseBrightness(uint32_t device_id, int level);
+int sceUserServiceGetUserNumber(int user_id, int *number);
+int sceUserServiceGetLightBarBaseBrightness(int user_id, int *level);
+}
 
 namespace {
+
+using AniketosUI::MonotonicMs;
 
 ControllerAnimation s_animation = ControllerAnimation::Off;
 uint64_t s_last_animation_ms = 0;
@@ -46,6 +49,10 @@ uint64_t s_last_lightbar_log_ms = 0;
    LEDs change the bar is put back from this. */
 bool s_lightbar_ours = false;
 ScePadLightBarParam s_lightbar_last{0, 0, 0, 0};
+
+PlayerLedAnimation s_led_animation = PlayerLedAnimation::Off;
+uint64_t s_led_next_ms = 0;
+int s_led_phase = 0;
 
 int &custom_channel(bool color_b, uint8_t channel) {
   if (color_b) {
@@ -62,9 +69,14 @@ int &custom_channel(bool color_b, uint8_t channel) {
   }
 }
 
+/* A handle borrowed from the pad reader, or our own, closed at scope end. */
 struct PadLease {
   int handle{-1};
   bool borrowed{};
+  ~PadLease() {
+    if (handle >= 0 && !borrowed)
+      (void)scePadClose(handle);
+  }
 };
 
 PadLease open_active_pad() {
@@ -83,13 +95,6 @@ PadLease open_active_pad() {
   if (handle < 0)
     LOG_ERROR("Controller: scePadOpen failed: 0x%x", handle);
   return {handle, false};
-}
-
-uint64_t monotonic_millis() {
-  timespec time {};
-  clock_gettime(CLOCK_MONOTONIC, &time);
-  return static_cast<uint64_t>(time.tv_sec) * 1000u +
-         static_cast<uint64_t>(time.tv_nsec) / 1000000u;
 }
 
 uint8_t blend(uint8_t from, uint8_t to, uint8_t amount) {
@@ -139,6 +144,11 @@ uint64_t s_rumble_step_end_ms = 0;
 int s_vibration_mode_handle = -1;
 constexpr int kVibrationMode = 2;
 
+template <size_t Length> void select_rumble(const RumbleStep (&steps)[Length]) {
+  s_rumble = steps;
+  s_rumble_length = Length;
+}
+
 bool send_rumble(uint8_t large, uint8_t small) {
   const PadLease pad = open_active_pad();
   if (pad.handle < 0)
@@ -154,8 +164,6 @@ bool send_rumble(uint8_t large, uint8_t small) {
   const uint8_t motors[2] = {static_cast<uint8_t>(large * strength / 100),
                              static_cast<uint8_t>(small * strength / 100)};
   const int result = scePadSetVibration(pad.handle, motors);
-  if (!pad.borrowed)
-    (void)scePadClose(pad.handle);
   if (result != 0)
     LOG_ERROR("Controller: scePadSetVibration failed: 0x%x", result);
   return result == 0;
@@ -164,7 +172,7 @@ bool send_rumble(uint8_t large, uint8_t small) {
 void tick_rumble() {
   if (!s_rumble)
     return;
-  const uint64_t now = monotonic_millis();
+  const uint64_t now = MonotonicMs();
   if (now < s_rumble_step_end_ms)
     return;
   if (++s_rumble_index >= s_rumble_length) {
@@ -195,8 +203,6 @@ void restore_lightbar_after_player_change() {
   if (pad.handle < 0)
     return;
   (void)scePadSetLightBar(pad.handle, &color);
-  if (!pad.borrowed)
-    (void)scePadClose(pad.handle);
 }
 
 /* The device id of the active controller, read from it each time (cheap),
@@ -207,8 +213,6 @@ bool active_device_id(uint32_t *device_id) {
     return false;
   unsigned char buffer[16] = {};
   const int result = scePadGetDeviceId(pad.handle, buffer);
-  if (!pad.borrowed)
-    (void)scePadClose(pad.handle);
   if (result != 0) {
     LOG_ERROR("Controller: scePadGetDeviceId failed: 0x%x", result);
     return false;
@@ -216,10 +220,6 @@ bool active_device_id(uint32_t *device_id) {
   std::memcpy(device_id, buffer, sizeof(*device_id));
   return true;
 }
-
-PlayerLedAnimation s_led_animation = PlayerLedAnimation::Off;
-uint64_t s_led_next_ms = 0;
-int s_led_phase = 0;
 
 bool apply_player_number(int player) {
   uint32_t device = 0;
@@ -246,7 +246,7 @@ bool apply_brightness(int level) {
 void tick_player_leds() {
   if (s_led_animation == PlayerLedAnimation::Off)
     return;
-  const uint64_t now = monotonic_millis();
+  const uint64_t now = MonotonicMs();
   if (now < s_led_next_ms)
     return;
   switch (s_led_animation) {
@@ -271,10 +271,46 @@ void tick_player_leds() {
   }
 }
 
+bool set_lightbar(uint8_t red, uint8_t green, uint8_t blue) {
+  const PadLease pad = open_active_pad();
+  if (pad.handle < 0)
+    return false;
+  const ScePadLightBarParam lightbar{red, green, blue, 0};
+  const int result = scePadSetLightBar(pad.handle, &lightbar);
+  if (result != 0) {
+    LOG_ERROR("Controller: scePadSetLightBar failed: 0x%x", result);
+    return false;
+  }
+  s_lightbar_ours = true;
+  s_lightbar_last = lightbar;
+  const uint64_t now = MonotonicMs();
+  if (now - s_last_lightbar_log_ms >= 2000) {
+    s_last_lightbar_log_ms = now;
+    LOG_INFO("Controller: lightbar applied handle=%d borrowed=%d rgb=%u,%u,%u",
+             pad.handle, pad.borrowed ? 1 : 0, red, green, blue);
+  }
+  return true;
+}
+
+bool reset_lightbar() {
+  const PadLease pad = open_active_pad();
+  if (pad.handle < 0)
+    return false;
+  const int result = scePadResetLightBar(pad.handle);
+  if (result != 0) {
+    LOG_ERROR("Controller: scePadResetLightBar failed: 0x%x", result);
+    return false;
+  }
+  s_lightbar_ours = false;
+  LOG_INFO("Controller: lightbar reset handle=%d borrowed=%d", pad.handle,
+           pad.borrowed ? 1 : 0);
+  return true;
+}
+
 void tick_animation() {
   if (s_animation == ControllerAnimation::Off)
     return;
-  const uint64_t now = monotonic_millis();
+  const uint64_t now = MonotonicMs();
   if (now - s_last_animation_ms < 60)
     return;
   s_last_animation_ms = now;
@@ -310,52 +346,10 @@ void tick_animation() {
   case ControllerAnimation::Off:
     return;
   }
-  (void)controller_set_lightbar(red, green, blue);
+  (void)set_lightbar(red, green, blue);
 }
 
 } // namespace
-
-bool controller_set_lightbar(uint8_t red, uint8_t green, uint8_t blue) {
-  const PadLease pad = open_active_pad();
-  if (pad.handle < 0)
-    return false;
-  const ScePadLightBarParam lightbar{red, green, blue, 0};
-  const int result = scePadSetLightBar(pad.handle, &lightbar);
-  if (result == 0) {
-    s_lightbar_ours = true;
-    s_lightbar_last = lightbar;
-  }
-  if (!pad.borrowed)
-    (void)scePadClose(pad.handle);
-  if (result != 0)
-    LOG_ERROR("Controller: scePadSetLightBar failed: 0x%x", result);
-  else {
-    const uint64_t now = monotonic_millis();
-    if (now - s_last_lightbar_log_ms >= 2000) {
-      s_last_lightbar_log_ms = now;
-      LOG_INFO("Controller: lightbar applied handle=%d borrowed=%d rgb=%u,%u,%u",
-               pad.handle, pad.borrowed ? 1 : 0, red, green, blue);
-    }
-  }
-  return result == 0;
-}
-
-bool controller_reset_lightbar() {
-  const PadLease pad = open_active_pad();
-  if (pad.handle < 0)
-    return false;
-  const int result = scePadResetLightBar(pad.handle);
-  if (result == 0)
-    s_lightbar_ours = false;
-  if (!pad.borrowed)
-    (void)scePadClose(pad.handle);
-  if (result != 0)
-    LOG_ERROR("Controller: scePadResetLightBar failed: 0x%x", result);
-  else
-    LOG_INFO("Controller: lightbar reset handle=%d borrowed=%d", pad.handle,
-             pad.borrowed ? 1 : 0);
-  return result == 0;
-}
 
 void controller_set_custom_channel(bool color_b, uint8_t channel, uint8_t value) {
   if (channel < 3)
@@ -369,9 +363,9 @@ uint8_t controller_get_custom_channel(bool color_b, uint8_t channel) {
 
 bool controller_apply_custom_color(bool color_b) {
   s_animation = ControllerAnimation::Off;
-  return controller_set_lightbar(controller_get_custom_channel(color_b, 0),
-                                 controller_get_custom_channel(color_b, 1),
-                                 controller_get_custom_channel(color_b, 2));
+  return set_lightbar(controller_get_custom_channel(color_b, 0),
+                      controller_get_custom_channel(color_b, 1),
+                      controller_get_custom_channel(color_b, 2));
 }
 
 void controller_start_animation(ControllerAnimation animation) {
@@ -381,23 +375,20 @@ void controller_start_animation(ControllerAnimation animation) {
 
 void controller_stop_animation() {
   s_animation = ControllerAnimation::Off;
-  (void)controller_reset_lightbar();
+  (void)reset_lightbar();
 }
 
 bool controller_vibrate(VibrationPattern pattern) {
   switch (pattern) {
-  case VibrationPattern::Short: s_rumble = kShort; s_rumble_length = std::size(kShort); break;
-  case VibrationPattern::Long: s_rumble = kLong; s_rumble_length = std::size(kLong); break;
-  case VibrationPattern::Heartbeat:
-    s_rumble = kHeartbeat;
-    s_rumble_length = std::size(kHeartbeat);
-    break;
-  case VibrationPattern::Light: s_rumble = kLight; s_rumble_length = std::size(kLight); break;
-  case VibrationPattern::Heavy: s_rumble = kHeavy; s_rumble_length = std::size(kHeavy); break;
-  case VibrationPattern::Wave: s_rumble = kWave; s_rumble_length = std::size(kWave); break;
+  case VibrationPattern::Short: select_rumble(kShort); break;
+  case VibrationPattern::Long: select_rumble(kLong); break;
+  case VibrationPattern::Heartbeat: select_rumble(kHeartbeat); break;
+  case VibrationPattern::Light: select_rumble(kLight); break;
+  case VibrationPattern::Heavy: select_rumble(kHeavy); break;
+  case VibrationPattern::Wave: select_rumble(kWave); break;
   }
   s_rumble_index = 0;
-  s_rumble_step_end_ms = monotonic_millis() + s_rumble[0].ms;
+  s_rumble_step_end_ms = MonotonicMs() + s_rumble[0].ms;
   const bool sent = send_rumble(s_rumble[0].large, s_rumble[0].small);
   LOG_INFO("Controller: vibration pattern=%d sent=%d strength=%d",
            static_cast<int>(pattern), sent ? 1 : 0,
@@ -448,9 +439,8 @@ void controller_stop_vibration() {
   (void)send_rumble(0, 0);
 }
 
-void controller_handle_buttons(uint32_t buttons_down) {
+void controller_tick() {
   tick_animation();
   tick_rumble();
   tick_player_leds();
-  (void)buttons_down;
 }

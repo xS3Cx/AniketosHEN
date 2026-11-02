@@ -1,5 +1,6 @@
 #pragma once
 
+#include "aniketos_shell/home/home_rows.hpp" // renames.tsv
 #include "external_symbols.hpp"
 
 #include <string>
@@ -7,11 +8,9 @@
 /* Home's tab bar ("Games", "Media", and ours: "Emulators").
  *
  * The Emulators tab is a real space in Home's own React code, added by the
- * script script_injector.cpp puts into Home's runtime. This side supplies what the
- * script cannot: which installed titles are emulators, and the database
- * filter that gives the new space its tile row (and takes the same titles
- * out of Games). It also keeps each tab's focus frame around the whole
- * caption, glyph included.
+ * script script_injector.cpp puts into Home's runtime; home_rows gives it its
+ * tiles. This side keeps each tab's focus frame around the whole caption,
+ * glyph included.
  *
  * Games and Media can show names of the user's (home_tab_games_name,
  * home_tab_media_name): React keeps Sony's caption, and the label the text
@@ -25,8 +24,7 @@ namespace HomeTabs {
 inline constexpr char kGamesGlyph[] = "\xEE\xBF\x8E";
 inline constexpr char kMediaGlyph[] = "\xEF\xA1\xB1";
 inline constexpr char kEmulatorsGlyph[] = "\xEE\xBE\xB1";
-/* The content limit by which the Emulators list's query is recognised. */
-inline constexpr int kEmulatorsContentLimit = 7771;
+using HomeRows::kEmulatorsContentLimit; // renames.tsv
 
 /* Home's own tabs, the ones that can be renamed. */
 enum class StockTab { Games, Media };
@@ -48,15 +46,8 @@ void ScriptCaption(StockTab tab, std::string *name, std::string *glyph);
 void Install(MonoImage *pui);
 /* UI thread, once a frame. */
 void Tick();
-/* True when the Emulators tab can be given a tile row (the database query
- * hook is in place): the condition for adding the tab. */
-bool Ready();
-/* True when at least one installed emulator was found. With none, entering
- * the tab shows a notice and returns to Games. */
-bool HasEmulators();
-/* Whether the Home that is starting has the Emulators tab (set as the
- * script goes in): only then are the emulators kept out of Games. */
-void SetEmulatorsTabShown(bool shown);
+using HomeRows::Ready; // renames.tsv
+using HomeRows::SetEmulatorsTabShown; // renames.tsv
 /* What the text hook is to show in a label it is giving the glyph of a
  * stock tab (UI thread), `stock` being the system's caption it was handed:
  * the glyph and the user's name for a label known to be in the tab bar, or

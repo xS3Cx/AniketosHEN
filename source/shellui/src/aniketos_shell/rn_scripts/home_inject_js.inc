@@ -1,9 +1,10 @@
 /* JavaScript evaluated in Home's runtime right before its bundle (see
- * script_injector.cpp). `__aniketosConfig` is defined by the native side just ahead
- * of it: {app, space, emulators, caption, label, limit, icon, presence, clock,
- * webTiles, and the bookmark's}; app is 'home' or 'control-center', space is empty in
- * the Control Center, where only the presence dot, the clock and the size
- * limit of action cards are touched, and emulators is false when the Emulators tab is switched off.
+ * script_injector.cpp). `__aniketosConfig` is defined by the native side just
+ * ahead of it: {app, space, emulators, caption, label, limit, icon, presence,
+ * clock, stockCaptions, webTiles, and the bookmark's}; app is 'home' or
+ * 'control-center', space is empty in the Control Center, where only the
+ * presence dot, the clock and the size limit of action cards are touched, and
+ * emulators is false when the Emulators tab is switched off.
  *
  * Home is a webpack bundle whose screens are driven by data: the tab bar is
  * `spaceIds.map(...)`, a tab's caption is `textBySpaceId[id]`, and each

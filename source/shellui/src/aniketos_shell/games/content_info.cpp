@@ -1,6 +1,7 @@
 #include "aniketos_shell/games/content_info.hpp"
 
-#include "aniketos_shell/rn_scripts/script_injector.hpp"
+#include "aniketos_shell/home/title_info.hpp"
+#include "aniketos_shell/rn_scripts/js_string.hpp"
 #include "toolbox_i18n.hpp"
 
 #include <onion/log.h>
@@ -18,15 +19,6 @@ namespace {
    system's. Added here so no translation can lose it. */
 constexpr const char kStar[] = "\xE2\x98\x85 ";
 
-bool valid_title(const std::string &id) {
-  if (id.size() != 9)
-    return false;
-  for (const char c : id)
-    if (!std::isalnum(static_cast<unsigned char>(c)))
-      return false;
-  return true;
-}
-
 /* Games run from a dump keep a mount.lnk in their /user/app folder that
    names the folder they are mounted from; the database only knows the
    /user/app path. A JavaScript object of title id -> that folder. */
@@ -38,7 +30,7 @@ std::string mount_links() {
     return "{}";
   while (dirent *entry = readdir(dir)) {
     const std::string id = entry->d_name;
-    if (!valid_title(id))
+    if (!AniketosShell::TitleInfo::Valid(id))
       continue;
     const std::string path = "/user/app/" + id + "/mount.lnk";
     const int fd = open(path.c_str(), O_RDONLY);
@@ -58,7 +50,7 @@ std::string mount_links() {
       continue;
     if (!out.empty())
       out += ", ";
-    out += HomeJs::JsString(id) + ": " + HomeJs::JsString(target);
+    out += JsString(id) + ": " + JsString(target);
     ++count;
   }
   closedir(dir);
@@ -77,10 +69,10 @@ const char *InjectedScript() {
 
 std::string ScriptConfig() {
   const auto label = [](const char *key) {
-    return HomeJs::JsString(std::string(kStar) + toolbox_i18n::tr(key));
+    return JsString(std::string(kStar) + toolbox_i18n::tr(key));
   };
   const auto text = [](const char *key) {
-    return HomeJs::JsString(toolbox_i18n::tr(key));
+    return JsString(toolbox_i18n::tr(key));
   };
   return "globalThis.__aniketosInfo = {labels: {"
          "titleId: " + label("content_info.title_id") +

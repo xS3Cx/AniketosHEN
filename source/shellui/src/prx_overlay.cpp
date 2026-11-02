@@ -1,29 +1,7 @@
 /* Copyright (C) 2025 OnionHEN / LightningMods — P0 split. */
 
 
-#include "aniketos_theme/custom_font.hpp"
-#include "aniketos_shell/input/mouse_control.hpp"
-#include "aniketos_shell/input/kbm_capture.hpp"
-#include "aniketos_shell/toolbox/kbm_toolbox.hpp"
-#include "aniketos_shell/hardware/pad_speaker.hpp"
-#include "aniketos_theme/toggle_styles.hpp"
-#include "aniketos_shell/home/home_tabs.hpp"
-#include "aniketos_shell/home/home_bookmark.hpp"
-#include "aniketos_shell/home/web_tiles.hpp"
-#include "aniketos_shell/input/osk_glyphs.hpp"
-#include "aniketos_shell/home/home_particles.hpp"
-#include "aniketos_shell/home/home_video.hpp"
-#include "aniketos_shell/system_ui/account_avatar.hpp"
-#include "aniketos_shell/system_ui/devkit_overlay.hpp"
-#include "aniketos_shell/games/trophy_tools.hpp"
-#include "aniketos_shell/system_ui/migration_notice.hpp"
-#include "aniketos_shell/home/hen_menu.hpp"
-#include "aniketos_shell/core/frame_profile.hpp"
-#include "aniketos_theme/tiles/home_tiles.hpp"
-#include "aniketos_theme/panel_tint.hpp"
-#include "aniketos_theme/theme_manager.hpp"
-#include "aniketos_theme/clock/shell_clock.hpp"
-#include "aniketos_shell/core/menu_host.hpp"
+#include "aniketos_shell/core/shell_features.hpp"
 #include "hooked_funcs.hpp"
 #include "ipc.hpp"
 #include "external_symbols.hpp"
@@ -620,57 +598,8 @@ void OnRender_Hook(MonoObject* instance) {
 
   /* UI thread: one NPXS40002 reload covers display TIDs and top-nav patch. */
   shellui_poll_home_reload();
-  shellui_poll_presence_reload();
-  AniketosTheme::ToggleStyles::Tick();
-  /* Shell appearance (clock, panels, background) then the Shell Menu itself:
-     resolve its host, drain controller input, animate. All are no-ops until
-     their Install()/Initialize() has succeeded. */
-  namespace Profile = AniketosShell::Profile;
-  {
-    Profile::Scope scope(Profile::kShellClock);
-    ShellClock::Tick();
-  }
-  HomeMenu::Tick();
-  ControlCenterEntry::Tick();
-  MigrationNotice::Tick();
-  HomeTabs::Tick();
-  HomeBookmark::Tick();
-  WebTiles::Tick();
-  OskGlyphs::Tick();
-  HomeVideo::Tick();
-  AccountAvatar::Tick();
-  DevkitOverlay::Tick();
-  HomeParticles::Tick();
-  TrophyTools::Tick();
-  AniketosTheme::CustomFont::Tick();
-  PadSpeaker::Tick();
-  {
-    Profile::Scope scope(Profile::kSharedUi);
-    AniketosTheme::SharedUI::Tick();
-  }
-  {
-    Profile::Scope scope(Profile::kTheme);
-    AniketosTheme::Tick();
-  }
-  {
-    Profile::Scope scope(Profile::kShellManager);
-    AniketosShell::Tick();
-  }
-  KbmCapture::Tick();
-  kbm_toolbox::Tick();
-  MouseControl::Tick();
-  /* Sony rewrites the tile focus settings while it renders Home. Run the tile
-     pass after the native frame, on every exit path of this hook, so ours is
-     the value the outline renderer finally consumes. */
-  struct AfterNativeFrame {
-    ~AfterNativeFrame() {
-      {
-        AniketosShell::Profile::Scope scope(AniketosShell::Profile::kHomeTiles);
-        AniketosTheme::HomeTiles::Tick();
-      }
-      AniketosShell::Profile::EndFrame();
-    }
-  } after_native_frame;
+  ShellFeatures::BeforeNativeFrame();
+  ShellFeatures::AfterNativeFrame after_native_frame;
 
   static bool inited = false;
   static unsigned int idle_thread_id[kCpuCores] = {};

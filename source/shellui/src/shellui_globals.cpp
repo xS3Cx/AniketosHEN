@@ -43,9 +43,3 @@ const char *shellui_debug_settings_toolbox_uri_simple(void) {
 std::string shellui_rewrite_debug_settings_route(const std::string &uri) {
   return g_debug_settings_route.rewrite(uri);
 }
-
-/* libmonosgen module handle, for symbols looked up after start-up. */
-int g_libmono_handle = 0;
-
-/* Looks up a loaded module's handle by file name (set by prx.cpp). */
-int (*g_module_handle_fn)(const char *) = nullptr;

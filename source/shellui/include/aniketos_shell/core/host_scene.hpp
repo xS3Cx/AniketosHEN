@@ -2,8 +2,6 @@
 
 #include "external_symbols.hpp"
 
-#include <cstdint>
-
 namespace AniketosShell {
 
 struct HostSnapshot {
@@ -14,13 +12,13 @@ struct HostSnapshot {
   const char *scene_type = nullptr;
 };
 
-class ShellContext {
+class HostScene {
 public:
   bool Initialize(MonoImage *app_system, MonoImage *pui);
   bool Resolve(HostSnapshot &out);
-  void ProbeCandidates();
 
 private:
+  void ProbeCandidates();
   MonoObject *FindScene(const char *path, MonoObject **exception = nullptr);
   MonoObject *GetRoot(MonoObject *scene);
   bool ResolvePath(const char *path, HostSnapshot &out, bool log_result);
@@ -32,5 +30,12 @@ private:
   MonoMethod *find_scene_ = nullptr;
   bool probed_ = false;
 };
+using ShellContext = HostScene; // renames.tsv
+
+/* Who has the screen: LayerManager.s_curFocusLayer, read by name. Other is a
+ * layer that is none of these (the Control Center's, say); Unknown means the
+ * field or one of these layers was not found on this firmware. UI thread. */
+enum class FocusLayer { Unknown, Game, TopMenu, ShellApp, Other };
+FocusLayer CurrentFocusLayer();
 
 } // namespace AniketosShell

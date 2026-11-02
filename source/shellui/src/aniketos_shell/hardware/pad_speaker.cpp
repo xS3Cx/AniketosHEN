@@ -1,6 +1,6 @@
 #include "aniketos_shell/hardware/pad_speaker.hpp"
 
-#include "shellui_types.hpp"
+#include "hooked_funcs.hpp"
 
 #include <onion/log.h>
 #include <onion/settings.hpp>
@@ -17,7 +17,6 @@
 #include <unistd.h>
 
 extern "C" {
-int sceUserServiceGetForegroundUser(int *user_id);
 int sceKernelOpenEventFlag(void **flag, const char *name);
 int sceKernelWaitEventFlag(void *flag, uint64_t pattern, uint32_t mode,
                            uint64_t *result, uint32_t *timeout_us);
@@ -37,6 +36,8 @@ constexpr int kCaptureFull = 0;
 constexpr int kCapturePadSpeaker = 8;
 /* one tick of the ring: stereo float32 */
 constexpr uint32_t kPeriodBytes = kFrames * 2 * sizeof(float);
+constexpr uint32_t kRingHeader = 0x10; /* a 16-byte header, then data */
+constexpr size_t kMinimumRingBytes = 0x1000;
 constexpr uint32_t kWaitOrClear = 0x22; /* as the capture service waits */
 
 using OpenFn = int (*)(int user, int type, int index, unsigned length,
@@ -74,7 +75,7 @@ struct ModuleInfo {
 };
 static_assert(sizeof(ModuleInfo) == 0x160);
 
-const uint8_t *find(const uint8_t *from, size_t length, const void *needle,
+const uint8_t *find_bytes(const uint8_t *from, size_t length, const void *needle,
                     size_t needle_length) {
   for (size_t i = 0; i + needle_length <= length; ++i)
     if (std::memcmp(from + i, needle, needle_length) == 0)
@@ -110,7 +111,7 @@ CaptureFn find_capture(uint32_t module) {
       text_size = info.segments[i].size;
       text_prot = info.segments[i].prot;
     } else if (!name && (info.segments[i].prot & PROT_READ)) {
-      name = find(start, info.segments[i].size, "socket_audio_%d", 16);
+      name = find_bytes(start, info.segments[i].size, "socket_audio_%d", 16);
     }
   }
   if (!text || !name ||
@@ -130,7 +131,7 @@ CaptureFn find_capture(uint32_t module) {
     for (size_t start = i; start > 0 && i - start < 0x400; --start) {
       if (std::memcmp(text + start, "\x55\x48\x89\xe5", 4) != 0)
         continue;
-      if (find(text + start, i - start, "\xbe\x6e\x00\x00\x00", 5))
+      if (find_bytes(text + start, i - start, "\xbe\x6e\x00\x00\x00", 5))
         found = reinterpret_cast<CaptureFn>(const_cast<uint8_t *>(text + start));
       break;
     }
@@ -165,19 +166,23 @@ bool resolve() {
   return s_api.capture != nullptr;
 }
 
-void relay(const uint8_t *ring, void *flag, int port) {
+void relay(const uint8_t *ring, size_t mapped_size, void *flag, int port) {
   const uint32_t ring_size = *reinterpret_cast<const volatile uint32_t *>(ring);
-  const uint32_t data = ring_size - 0x10; /* a 16-byte header, then data */
   /* +8: timestamp, +0xc: committed write position, stored together */
   const auto *commit = reinterpret_cast<const volatile uint64_t *>(ring + 8);
+  uint32_t read = static_cast<uint32_t>(*commit >> 32);
+  /* found by pattern, so another firmware's layout can land here */
+  if (ring_size > mapped_size || ring_size < kRingHeader + kPeriodBytes ||
+      read < kRingHeader || read >= ring_size)
+    return;
+  const uint32_t data = ring_size - kRingHeader;
   static float out[2][kFrames];
   float in[kFrames * 2];
-  uint32_t read = static_cast<uint32_t>(*commit >> 32);
   for (unsigned k = 0; !s_stop.load(std::memory_order_relaxed); k ^= 1) {
     uint32_t write = 0, available = 0;
     for (int tries = 0;; ++tries) {
       write = static_cast<uint32_t>(*commit >> 32);
-      if (write < 0x10 || write >= ring_size)
+      if (write < kRingHeader || write >= ring_size)
         return; /* not a ring this code understands */
       available = write >= read ? write - read : data - (read - write);
       if (available >= kPeriodBytes || tries > 20)
@@ -191,11 +196,11 @@ void relay(const uint8_t *ring, void *flag, int port) {
       std::memset(out[k], 0, sizeof(out[k])); /* nothing plays: silence */
     } else {
       if (available > 4 * kPeriodBytes) /* fell behind: one tick late at most */
-        read = write >= 0x10 + kPeriodBytes ? write - kPeriodBytes
-                                            : write + data - kPeriodBytes;
+        read = write >= kRingHeader + kPeriodBytes ? write - kPeriodBytes
+                                                   : write + data - kPeriodBytes;
       const uint32_t first = std::min(ring_size - read, kPeriodBytes);
       std::memcpy(in, ring + read, first);
-      std::memcpy(reinterpret_cast<uint8_t *>(in) + first, ring + 0x10,
+      std::memcpy(reinterpret_cast<uint8_t *>(in) + first, ring + kRingHeader,
                   kPeriodBytes - first);
       read += kPeriodBytes;
       if (read >= ring_size)
@@ -223,10 +228,11 @@ void *thread_main(void *) {
       pad_ring) {
     munmap(pad_ring, pad_ring_size);
     LOG_WARN("[PADSPK] the pad speaker is part of the mix here: not relaying");
-  } else if (s_api.capture(kCaptureFull, &ring, &ring_size) != 0 || !ring ||
-             ring_size < 0x1000) {
+  } else if (s_api.capture(kCaptureFull, &ring, &ring_size) != 0 || !ring) {
     LOG_WARN("[PADSPK] no capture ring");
     ring = nullptr;
+  } else if (ring_size < kMinimumRingBytes) {
+    LOG_WARN("[PADSPK] capture ring too small: %zu", ring_size);
   } else if (sceUserServiceGetForegroundUser(&user) != 0 || user <= 0 ||
              (port = s_api.open(user, kPortPadSpeaker, 0, kFrames, kRate,
                                 kFloatMono)) < 0) {
@@ -235,7 +241,7 @@ void *thread_main(void *) {
     if (sceKernelOpenEventFlag(&flag, "/evf_acap.full") != 0)
       flag = nullptr; /* polls every millisecond instead */
     LOG_INFO("[PADSPK] relaying ring=%zu user=0x%x", ring_size, user);
-    relay(static_cast<const uint8_t *>(ring), flag, port);
+    relay(static_cast<const uint8_t *>(ring), ring_size, flag, port);
     s_api.output(port, nullptr); /* lets the last tick play */
     s_api.close(port);
     if (flag)

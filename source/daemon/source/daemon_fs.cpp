@@ -302,8 +302,8 @@ void cmd_restart_shellui(void) {
   LOG_INFO("shutdown: restarting SceShellUI pid=%d", shellui_pid);
   /* A restart asked for here is not Home going down with the script in
      it; the script guard (shellui home_js) must not count it as one. */
-  (void)unlink(ONION_DIST_USER_DATA_ROOT "/js_inject_pending");
-  (void)unlink(ONION_DIST_USER_DATA_ROOT "/js_inject_unconfirmed");
+  (void)unlink(ONION_DIST_JS_PENDING_PATH);
+  (void)unlink(ONION_DIST_JS_UNCONFIRMED_PATH);
   ForceKillProc(shellui_pid);
   /* Home menu is respawned by the system after process death. */
   if (onion_proc_is_alive(shellui_pid)) {

@@ -23,8 +23,6 @@ enum class Volume {
 // running console's libkernel.  Null exports leave the feature unavailable.
 void Configure(void *set_buzzer, void *set_dim_setting);
 
-bool IsSupported();
-
 // Emits one hardware buzzer pattern.  No addresses, firmware offsets, or
 // persisted ICC preference changes are used.
 bool PlayTest(Pattern pattern);

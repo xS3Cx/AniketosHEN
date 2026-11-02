@@ -42,7 +42,6 @@ std::string SettingsToJson(const Settings &settings);
 bool IsValidTitleId(const std::string &title_id);
 std::string TitleProfilePath(const std::string &root, const std::string &title_id); /* "" if invalid */
 std::string DefaultProfilePath(const std::string &root);
-std::string SettingsPath(const std::string &root);
 
 /* False when the file is missing, too large or fails ProfileFromJson. */
 bool LoadProfile(const std::string &path, Profile *out,

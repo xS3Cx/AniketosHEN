@@ -7,7 +7,4 @@
 namespace MigrationNotice {
 /* UI thread, once a frame. */
 void Tick();
-/* Show it now regardless of markers and without recording that it was seen
- * (for previewing it). UI thread. */
-void ShowNow(bool in_english = false);
 }

@@ -14,6 +14,9 @@ namespace AvatarImage {
    them it refuses the file and the image box shows its error picture. */
 constexpr long kMaxPixels = 90000; /* 300x300 */
 constexpr int kMaxFrames = 150;
+/* The most avatar_codec may decode: stb keeps every frame in one buffer, so a
+   small file can ask for far more than ShellUI has. */
+constexpr uint64_t kMaxDecodedBytes = 256 * 1024 * 1024;
 
 enum class Format { Unknown, Gif, WebP, Png, Jpeg };
 enum class Problem { None, NotPicture, TooLarge, TooManyFrames };
@@ -57,7 +60,12 @@ inline void read_gif(const uint8_t *data, size_t size, Info &info) {
   while (at < size && data[at] != 0x3B) {
     const uint8_t block = data[at];
     if (block == 0x21) {
-      at = skip_gif_blocks(data, size, at + 2);
+      /* stb leaves a control block of any other size without its chain and
+         reads a tag next: follow it, or frames behind one go uncounted. */
+      if (at + 2 < size && data[at + 1] == 0xF9 && data[at + 2] != 4)
+        at += 3 + data[at + 2];
+      else
+        at = skip_gif_blocks(data, size, at + 2);
     } else if (block == 0x2C && at + 10 < size) {
       at += 10 + gif_colour_table(data[at + 9]);
       at = skip_gif_blocks(data, size, at + 1);
@@ -118,6 +126,11 @@ inline Problem Check(const Info &info) {
   if (static_cast<long>(info.width) * info.height > kMaxPixels)
     return Problem::TooLarge;
   return info.frames > kMaxFrames ? Problem::TooManyFrames : Problem::None;
+}
+
+inline bool DecodeFits(const Info &info) {
+  return static_cast<uint64_t>(info.width) * info.height * 4 * info.frames <=
+         kMaxDecodedBytes;
 }
 
 } // namespace AvatarImage

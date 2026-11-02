@@ -1,5 +1,6 @@
 #pragma once
 
+#include "aniketos_ui/small_file.hpp" // renames.tsv
 #include "external_symbols.hpp"
 
 #include <string>
@@ -15,10 +16,9 @@ namespace AccountAvatar {
 void Install(MonoImage *pui);
 /* The pictures in the avatars folder, sorted by name. */
 const std::vector<std::string> &Files(bool rescan = false);
-std::string FileName(const std::string &path);
+using AniketosUI::FileName; // renames.tsv
 /* Files of other kinds the last scan of the folder passed over. */
 size_t Unsupported();
-const char *Directory();
 /* UI thread, once a frame. */
 void Tick();
 /* The user signed in now, as the setting keeps it ("0x1EA2F4DA"; empty

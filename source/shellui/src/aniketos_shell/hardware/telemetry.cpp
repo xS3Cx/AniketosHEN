@@ -1,27 +1,32 @@
 #include "aniketos_shell/hardware/telemetry.hpp"
-#include "aniketos_shell/hardware/memory_stats.hpp"
-#include "aniketos_shell/hardware/firmware_version.hpp"
 
+#include "aniketos_shell/hardware/firmware_version.hpp"
+#include "aniketos_shell/hardware/memory_stats.hpp"
+#include "aniketos_ui/monotonic_clock.hpp"
 #include "external_symbols.hpp"
 
-#include <cstdio>
-#include <unistd.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
+#include <onion/log.h>
 #include <onion/net.h>
 #include <onion/platform.h>
 
 #include <atomic>
 #include <cmath>
+#include <cstdio>
 #include <cstring>
 #include <mutex>
+#include <netinet/in.h>
 #include <pthread.h>
+#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
-#include <sys/types.h>
 #include <sys/sysctl.h>
-#include <onion/log.h>
+#include <sys/types.h>
 #include <time.h>
+#include <unistd.h>
+
+#ifndef CLOCK_UPTIME_PRECISE
+#define CLOCK_UPTIME_PRECISE CLOCK_MONOTONIC
+#endif
 
 extern "C" {
 int sceKernelGetCpuTemperature(int *out_celsius);
@@ -44,10 +49,6 @@ constexpr const char *kStoragePath = "/user";
  * user-editable console name. This is an API key, not a firmware offset. */
 constexpr int kConsoleNicknameRegistry = 0x02050000;
 
-#ifndef CLOCK_UPTIME_PRECISE
-#define CLOCK_UPTIME_PRECISE CLOCK_MONOTONIC
-#endif
-
 std::atomic<bool> s_started{false};
 std::atomic<int> s_refresh_seconds{1};
 /* A menu page showing live readings is open: sample twice a second. */
@@ -55,13 +56,6 @@ std::atomic<bool> s_live_view{false};
 std::atomic<uint64_t> s_frame_count{0};
 std::mutex s_snapshot_mutex;
 Snapshot s_snapshot{};
-
-uint64_t monotonic_millis() {
-  timespec now{};
-  clock_gettime(CLOCK_MONOTONIC, &now);
-  return static_cast<uint64_t>(now.tv_sec) * 1000u +
-         static_cast<uint64_t>(now.tv_nsec) / 1000000u;
-}
 
 bool valid_temperature(int value) {
   return value >= kMinimumTemperature && value <= kMaximumTemperature;
@@ -179,8 +173,7 @@ void read_hardware_identity(Snapshot &snapshot) {
   read_hardware_details(snapshot);
 
   OrbisKernelSwVersion firmware{};
-  if (Firmware::Read(firmware))
-{
+  if (Firmware::Read(firmware)) {
     snapshot.firmware = Firmware::Short(firmware);
     LOG_INFO("[TELEMETRY] system software %s (number 0x%08x, system text '%s')",
              snapshot.firmware.c_str(), firmware.version,
@@ -220,7 +213,7 @@ bool read_storage_mount(uint64_t &free_bytes, uint64_t &total_bytes) {
   return true;
 }
 
-void sample(Snapshot &next, float fps) {
+void sample_thermals(Snapshot &next) {
   int value = 0;
   next.cpu_temperature_valid =
       sceKernelGetCpuTemperature(&value) == 0 && valid_temperature(value);
@@ -245,7 +238,9 @@ void sample(Snapshot &next, float fps) {
     next.fan_duty_percent =
         static_cast<float>(raw_duty) * 100.0f / kFanRawMaximum;
   }
+}
 
+void sample_memory(Snapshot &next) {
   Memory::Stats memory{};
   next.memory_valid = Memory::ReadSystem(memory) &&
                       memory.whole_system_memory;
@@ -257,7 +252,9 @@ void sample(Snapshot &next, float fps) {
         static_cast<float>(next.memory_used_mb) * 100.0f /
         static_cast<float>(memory.total_mb);
   }
+}
 
+void sample_storage(Snapshot &next) {
   uint64_t free_bytes = 0;
   uint64_t total_bytes = 0;
   if (!read_user_partition(free_bytes, total_bytes))
@@ -271,56 +268,71 @@ void sample(Snapshot &next, float fps) {
         static_cast<float>(static_cast<double>(next.storage_used_bytes) *
                            100.0 / static_cast<double>(total_bytes));
   }
+}
 
+void sample_uptime(Snapshot &next) {
   timespec uptime{};
   if (clock_gettime(CLOCK_UPTIME_PRECISE, &uptime) == 0 ||
       clock_gettime(CLOCK_MONOTONIC, &uptime) == 0) {
     next.uptime_valid = true;
     next.uptime_seconds = static_cast<uint64_t>(uptime.tv_sec);
   }
+}
 
-  /* NetCtl goes on answering 0.0.0.0 for a while after the connection comes
-     back (and that is not an address worth showing at any time). The
-     address the console would send from says what it really is: a UDP
-     socket "connected" to a public address, which sends nothing. */
-  char ip[64]{};
-  bool have_ip = onion_net_get_ip_address(ip, sizeof(ip)) == 0 && ip[0] &&
-                 std::strcmp(ip, "0.0.0.0") != 0;
-  if (!have_ip) {
-    const int fd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (fd >= 0) {
-      sockaddr_in remote{};
-      remote.sin_family = AF_INET;
-      remote.sin_port = htons(53);
-      remote.sin_addr.s_addr = htonl(0x01010101u); /* 1.1.1.1 */
-      sockaddr_in local{};
-      socklen_t length = sizeof(local);
-      if (connect(fd, reinterpret_cast<sockaddr *>(&remote), sizeof(remote)) ==
-              0 &&
-          getsockname(fd, reinterpret_cast<sockaddr *>(&local), &length) == 0 &&
-          local.sin_addr.s_addr != 0) {
-        const uint32_t address = ntohl(local.sin_addr.s_addr);
-        std::snprintf(ip, sizeof(ip), "%u.%u.%u.%u", address >> 24,
-                      (address >> 16) & 0xff, (address >> 8) & 0xff,
-                      address & 0xff);
-        have_ip = true;
-      }
-      close(fd);
-    }
+/* The address the console would send from: a UDP socket "connected" to a
+   public address, which sends nothing. */
+bool read_routed_ip(char *ip, size_t size) {
+  const int fd = socket(AF_INET, SOCK_DGRAM, 0);
+  if (fd < 0)
+    return false;
+  sockaddr_in remote{};
+  remote.sin_family = AF_INET;
+  remote.sin_port = htons(53);
+  remote.sin_addr.s_addr = htonl(0x01010101u); /* 1.1.1.1 */
+  sockaddr_in local{};
+  socklen_t length = sizeof(local);
+  const bool found =
+      connect(fd, reinterpret_cast<sockaddr *>(&remote), sizeof(remote)) == 0 &&
+      getsockname(fd, reinterpret_cast<sockaddr *>(&local), &length) == 0 &&
+      local.sin_addr.s_addr != 0;
+  if (found) {
+    const uint32_t address = ntohl(local.sin_addr.s_addr);
+    std::snprintf(ip, size, "%u.%u.%u.%u", address >> 24,
+                  (address >> 16) & 0xff, (address >> 8) & 0xff,
+                  address & 0xff);
   }
+  close(fd);
+  return found;
+}
+
+void sample_local_ip(Snapshot &next) {
+  /* NetCtl goes on answering 0.0.0.0 for a while after the connection comes
+     back (and that is not an address worth showing at any time). */
+  char ip[64]{};
+  const bool have_ip = (onion_net_get_ip_address(ip, sizeof(ip)) == 0 && ip[0] &&
+                        std::strcmp(ip, "0.0.0.0") != 0) ||
+                       read_routed_ip(ip, sizeof(ip));
   next.local_ip_valid = have_ip;
   next.local_ip = have_ip ? ip : "";
+}
+
+void sample(Snapshot &next, float fps) {
+  sample_thermals(next);
+  sample_memory(next);
+  sample_storage(next);
+  sample_uptime(next);
+  sample_local_ip(next);
   next.shell_fps = fps;
   next.shell_fps_valid = std::isfinite(fps) && fps > 0.0f && fps < 240.0f;
-  next.sampled_at_ms = monotonic_millis();
+  next.sampled_at_ms = AniketosUI::MonotonicMs();
 }
 
 void *worker(void *) {
-  Snapshot initial{};
-  read_hardware_identity(initial);
+  /* Start published the identity; every sample builds on it. */
+  const Snapshot initial = GetSnapshot();
 
   uint64_t previous_frames = s_frame_count.load(std::memory_order_acquire);
-  uint64_t previous_ms = monotonic_millis();
+  uint64_t previous_ms = AniketosUI::MonotonicMs();
   bool logged = false;
   for (;;) {
     /* Sleep in short slices so a change of interval (or a live page being
@@ -338,7 +350,7 @@ void *worker(void *) {
       slept_ms += 100;
     }
 
-    const uint64_t now_ms = monotonic_millis();
+    const uint64_t now_ms = AniketosUI::MonotonicMs();
     const uint64_t frames = s_frame_count.load(std::memory_order_acquire);
     const uint64_t elapsed = now_ms - previous_ms;
     const float fps = elapsed ? static_cast<float>(frames - previous_frames) *

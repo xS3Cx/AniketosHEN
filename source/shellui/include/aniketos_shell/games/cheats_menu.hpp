@@ -24,8 +24,6 @@ void OpenFromControlCenter(MonoObject *scene);
  * ended, the HEN is going away). Safe to call when it is not open. */
 void Close();
 
-bool IsOpen();
-
 /* A game has the screen (LayerManager's focus layer is the game's). */
 bool GameHasFocus();
 

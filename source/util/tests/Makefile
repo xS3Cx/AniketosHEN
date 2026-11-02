@@ -68,10 +68,14 @@ PROD_C_SRCS := \
 	$(UTIL_ROOT)/source/cheats/cheat_flatten.c \
 	$(REPO_ROOT)/source/libonion_platform/source/boot_safety.c \
 	$(REPO_ROOT)/source/libonion_platform/source/fs.c \
+	$(REPO_ROOT)/source/libonion_platform/source/fs_if_changed.c \
 	$(REPO_ROOT)/source/libonion_platform/source/log.c \
 	$(REPO_ROOT)/source/libonion_platform/source/migrate.c \
+	$(REPO_ROOT)/source/libonion_platform/source/migrate_config.c \
+	$(REPO_ROOT)/source/libonion_platform/source/migrate_tree.c \
 	$(REPO_ROOT)/source/libonion_platform/source/net.c \
 	$(REPO_ROOT)/source/libonion_platform/source/notify.c \
+	$(REPO_ROOT)/source/libonion_platform/source/notify_toast.c \
 	$(REPO_ROOT)/source/libonion_platform/source/notify_i18n.c \
 	$(REPO_ROOT)/source/libonion_platform/source/report.c \
 	$(REPO_ROOT)/source/libonion_ready/source/ready.c \
@@ -187,10 +191,14 @@ TEST_CXX_SRCS := \
 PROD_C_OBJS := $(patsubst $(UTIL_ROOT)/%.c,$(BUILD_DIR)/prod/%.o,$(filter $(UTIL_ROOT)/%,$(PROD_C_SRCS)))
 PROD_C_OBJS += $(BUILD_DIR)/prod/libonion_platform/boot_safety.o
 PROD_C_OBJS += $(BUILD_DIR)/prod/libonion_platform/fs.o
+PROD_C_OBJS += $(BUILD_DIR)/prod/libonion_platform/fs_if_changed.o
 PROD_C_OBJS += $(BUILD_DIR)/prod/libonion_platform/log.o
 PROD_C_OBJS += $(BUILD_DIR)/prod/libonion_platform/migrate.o
+PROD_C_OBJS += $(BUILD_DIR)/prod/libonion_platform/migrate_config.o
+PROD_C_OBJS += $(BUILD_DIR)/prod/libonion_platform/migrate_tree.o
 PROD_C_OBJS += $(BUILD_DIR)/prod/libonion_platform/net.o
 PROD_C_OBJS += $(BUILD_DIR)/prod/libonion_platform/notify.o
+PROD_C_OBJS += $(BUILD_DIR)/prod/libonion_platform/notify_toast.o
 PROD_C_OBJS += $(BUILD_DIR)/prod/libonion_platform/notify_i18n.o
 PROD_C_OBJS += $(BUILD_DIR)/prod/libonion_platform/report.o
 PROD_C_OBJS += $(BUILD_DIR)/prod/libonion_ready/ready.o
@@ -406,11 +414,23 @@ $(BUILD_DIR)/prod/libonion_platform/fs.o: $(REPO_ROOT)/source/libonion_platform/
 	@mkdir -p $(dir $@)
 	$(HOST_CC) $(CFLAGS) -c -o $@ $<
 
+$(BUILD_DIR)/prod/libonion_platform/fs_if_changed.o: $(REPO_ROOT)/source/libonion_platform/source/fs_if_changed.c | $(BUILD_DIR)
+	@mkdir -p $(dir $@)
+	$(HOST_CC) $(CFLAGS) -c -o $@ $<
+
 $(BUILD_DIR)/prod/libonion_platform/log.o: $(REPO_ROOT)/source/libonion_platform/source/log.c | $(BUILD_DIR)
 	@mkdir -p $(dir $@)
 	$(HOST_CC) $(CFLAGS) -c -o $@ $<
 
 $(BUILD_DIR)/prod/libonion_platform/migrate.o: $(REPO_ROOT)/source/libonion_platform/source/migrate.c | $(BUILD_DIR)
+	@mkdir -p $(dir $@)
+	$(HOST_CC) $(CFLAGS) -c -o $@ $<
+
+$(BUILD_DIR)/prod/libonion_platform/migrate_config.o: $(REPO_ROOT)/source/libonion_platform/source/migrate_config.c | $(BUILD_DIR)
+	@mkdir -p $(dir $@)
+	$(HOST_CC) $(CFLAGS) -c -o $@ $<
+
+$(BUILD_DIR)/prod/libonion_platform/migrate_tree.o: $(REPO_ROOT)/source/libonion_platform/source/migrate_tree.c | $(BUILD_DIR)
 	@mkdir -p $(dir $@)
 	$(HOST_CC) $(CFLAGS) -c -o $@ $<
 
@@ -427,6 +447,10 @@ $(BUILD_DIR)/prod/libonion_platform/net.o: $(REPO_ROOT)/source/libonion_platform
 	$(HOST_CC) $(CFLAGS) -c -o $@ $<
 
 $(BUILD_DIR)/prod/libonion_platform/notify.o: $(REPO_ROOT)/source/libonion_platform/source/notify.c | $(BUILD_DIR)
+	@mkdir -p $(dir $@)
+	$(HOST_CC) $(CFLAGS) -c -o $@ $<
+
+$(BUILD_DIR)/prod/libonion_platform/notify_toast.o: $(REPO_ROOT)/source/libonion_platform/source/notify_toast.c | $(BUILD_DIR)
 	@mkdir -p $(dir $@)
 	$(HOST_CC) $(CFLAGS) -c -o $@ $<
 

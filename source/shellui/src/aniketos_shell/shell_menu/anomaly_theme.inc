@@ -49,38 +49,30 @@ void update_anomaly_controls(float menu_x, float controls_y, float menu_width,
   const float icon_y = std::round((height - icon_height) * 0.5f);
   const float icon_width = std::round(icon_height * 1.25f);
   constexpr float kGap = 2.0f;
-  char texts[4][96];
-  if (s_moving) {
-    std::snprintf(texts[0], sizeof(texts[0]), " - %s | ",
-                  tr("vsh.ctrl.move_position"));
-    std::snprintf(texts[1], sizeof(texts[1]), " - %s | ",
-                  tr("vsh.ctrl.finish_move"));
-    std::snprintf(texts[2], sizeof(texts[2]), " - %s",
-                  tr("vsh.ctrl.cancel_move"));
-    texts[3][0] = '\0';
-  } else {
-    std::snprintf(texts[0], sizeof(texts[0]), " - %s | ",
-                  tr("vsh.anomaly.scroll"));
-    std::snprintf(texts[1], sizeof(texts[1]), " - %s | ",
-                  tr("vsh.anomaly.increment"));
-    std::snprintf(texts[2], sizeof(texts[2]), " - %s | ",
-                  tr("vsh.anomaly.select"));
-    std::snprintf(texts[3], sizeof(texts[3]), " - %s",
-                  tr("vsh.anomaly.exit"));
-  }
-  const AnomalyControlIcon icons_open[4] = {
+  static constexpr const char *kOpenKeys[] = {
+      "vsh.anomaly.scroll", "vsh.anomaly.increment", "vsh.anomaly.select",
+      "vsh.anomaly.exit"};
+  static constexpr const char *kMovingKeys[] = {
+      "vsh.ctrl.move_position", "vsh.ctrl.finish_move", "vsh.ctrl.cancel_move"};
+  static constexpr AnomalyControlIcon kOpenIcons[] = {
       AnomalyControlDpad, AnomalyControlDpad2, AnomalyControlCross,
       AnomalyControlCircle};
-  const AnomalyControlIcon icons_moving[3] = {
+  static constexpr AnomalyControlIcon kMovingIcons[] = {
       AnomalyControlL3, AnomalyControlCross, AnomalyControlCircle};
   const int groups = s_moving ? 3 : 4;
-  auto measured = [&](const char *text) {
-    return std::ceil(approximate_text_width(text, static_cast<float>(font_size))) +
-           2.0f;
-  };
+  const char *const *keys = s_moving ? kMovingKeys : kOpenKeys;
+  const AnomalyControlIcon *icons = s_moving ? kMovingIcons : kOpenIcons;
+  char texts[4][96];
+  float text_widths[4];
   float content_width = 0.0f;
-  for (int i = 0; i < groups; ++i)
-    content_width += icon_width + kGap + measured(texts[i]);
+  for (int i = 0; i < groups; ++i) {
+    std::snprintf(texts[i], sizeof(texts[i]),
+                  i + 1 < groups ? " - %s | " : " - %s", tr(keys[i]));
+    text_widths[i] =
+        std::ceil(approximate_text_width(texts[i], static_cast<float>(font_size))) +
+        2.0f;
+    content_width += icon_width + kGap + text_widths[i];
+  }
 
   const float controls_width = std::min(
       s_viewport_width, std::max(menu_width, content_width));
@@ -92,19 +84,17 @@ void update_anomaly_controls(float menu_x, float controls_y, float menu_width,
   int next_label = 0;
   if (show_controls) {
     for (int i = 0; i < groups; ++i) {
-      const AnomalyControlIcon which = s_moving ? icons_moving[i] : icons_open[i];
-      image_geometry(s_widgets.anomaly_control_icons[which], x, icon_y,
+      image_geometry(s_widgets.anomaly_control_icons[icons[i]], x, icon_y,
                      icon_width, icon_height);
-      icon_used[which] = true;
+      icon_used[icons[i]] = true;
       x += icon_width + kGap;
       MonoObject *label = s_widgets.anomaly_control_labels[next_label++];
-      const float width = measured(texts[i]);
       label_text(label, texts[i]);
-      label_geometry(label, x, 0.0f, width, height);
+      label_geometry(label, x, 0.0f, text_widths[i], height);
       Set_Property(cls(label), label, "VerticalAlignment", 2);
       if (font)
         Set_Property_Invoke(cls(label), label, "Font", font);
-      x += width;
+      x += text_widths[i];
     }
   }
 
@@ -114,13 +104,30 @@ void update_anomaly_controls(float menu_x, float controls_y, float menu_width,
   panel_hide(s_widgets.anomaly_controls);
   for (int i = 0; i < kAnomalyControlIconCount; ++i) {
     if (!show_controls || !icon_used[i])
-      image_geometry(s_widgets.anomaly_control_icons[i], 0, 0, 0, 0, false);
+      collapse_image(s_widgets.anomaly_control_icons[i]);
   }
   for (int i = show_controls ? next_label : 0;
-       i < kAnomalyControlLabelCount; ++i) {
-    label_text(s_widgets.anomaly_control_labels[i], "");
-    label_geometry(s_widgets.anomaly_control_labels[i], 0, 0, 0, 0);
-  }
+       i < kAnomalyControlLabelCount; ++i)
+    clear_label(s_widgets.anomaly_control_labels[i]);
+}
+
+void hide_anomaly_row(size_t index) {
+  label_text(s_widgets.rows[index], "");
+  label_text(s_widgets.values[index], "");
+  Set_Property(s_label_class, s_widgets.rows[index], "Opacity", 0.0f);
+  Set_Property(s_label_class, s_widgets.values[index], "Opacity", 0.0f);
+  label_angle(s_widgets.rows[index], 0.0f);
+  label_angle(s_widgets.values[index], 0.0f);
+  clear_selector_markers(index);
+  hide_appendum_option_control(index);
+  hide_color_hint(index);
+}
+
+/* The frame and the selected row: along the gradient with two colours. */
+Color anomaly_slice_color(float t) {
+  return menu_dual_color()
+             ? mix(left_color(), right_color(), gradient_t(t), 1.0f)
+             : right_color();
 }
 
 void update_anomaly_menu_widgets() {
@@ -171,10 +178,9 @@ void update_anomaly_menu_widgets() {
 
   panel_geometry(s_widgets.header, border, header_y, width, line_height);
   panel_geometry(s_widgets.body, border, body_y, width, body_height);
-  panel_geometry(s_widgets.footer, 0.0f, 0.0f, 0.0f, 0.0f);
   panel_color(s_widgets.header, black);
   panel_color(s_widgets.body, black);
-  panel_hide(s_widgets.footer);
+  collapse_panel(s_widgets.footer);
 
   /* the frame: a top line over the header, a bottom line under the body and
      sides along both, with no line between header and body */
@@ -182,21 +188,14 @@ void update_anomaly_menu_widgets() {
     for (int segment = 0; segment < kFrameGradientSlices; ++segment) {
       MonoObject *part = s_widgets.horizontal_borders[line][segment];
       if (line >= 2 || border <= 0.0f) {
-        panel_geometry(part, 0, 0, 0, 0);
-        panel_hide(part);
+        collapse_panel(part);
         continue;
       }
       const float line_y = line == 0 ? frame_y : body_y + body_height;
-      const float x0 = outer_width * static_cast<float>(segment) /
-                       kFrameGradientSlices;
-      const float x1 = outer_width * static_cast<float>(segment + 1) /
-                       kFrameGradientSlices;
-      const float t = (static_cast<float>(segment) + 0.5f) /
-                      kFrameGradientSlices;
-      panel_geometry(part, x0, line_y, x1 - x0, border);
-      panel_color(part, menu_dual_color()
-                            ? mix(left_color(), right_color(), gradient_t(t), 1.0f)
-                            : right_color());
+      const GradientSlice slice =
+          gradient_slice(outer_width, segment, kFrameGradientSlices);
+      panel_geometry(part, slice.x, line_y, slice.width, border);
+      panel_color(part, anomaly_slice_color(slice.t));
     }
   }
   panel_geometry(s_widgets.left_borders[0], 0, header_y, border,
@@ -207,20 +206,14 @@ void update_anomaly_menu_widgets() {
               gradient_edge_color(/*right_edge=*/false));
   panel_color(s_widgets.right_borders[0],
               gradient_edge_color(/*right_edge=*/true));
-  panel_geometry(s_widgets.left_borders[1], 0, 0, 0, 0);
-  panel_geometry(s_widgets.right_borders[1], 0, 0, 0, 0);
-  panel_hide(s_widgets.left_borders[1]);
-  panel_hide(s_widgets.right_borders[1]);
+  collapse_panel(s_widgets.left_borders[1]);
+  collapse_panel(s_widgets.right_borders[1]);
 
   replace_font(font);
   label_font(s_widgets.version);
   label_font(s_widgets.counter);
-  for (size_t i = 0; i < kMaxVisibleOptions; ++i) {
-    label_font(s_widgets.rows[i]);
-    label_font(s_widgets.values[i]);
-    label_font(s_widgets.selector_left[i]);
-    label_font(s_widgets.selector_right[i]);
-  }
+  for (size_t i = 0; i < kMaxVisibleOptions; ++i)
+    option_row_fonts(i);
 
   /* above the frame: who made the look; in the header: the page's name */
   Set_Property(s_label_class, s_widgets.title, "HorizontalAlignment", 1);
@@ -230,19 +223,17 @@ void update_anomaly_menu_widgets() {
   if (MonoObject *header_font = anomaly_font(title_font, 1))
     Set_Property_Invoke(s_label_class, s_widgets.page_title, "Font",
                         header_font);
-  set_color(s_label_class, s_widgets.title, "TextColor", white);
-  set_color(s_label_class, s_widgets.page_title, "TextColor", white);
-  Set_Property(s_label_class, s_widgets.title, "Opacity", 1.0f);
-  Set_Property(s_label_class, s_widgets.page_title, "Opacity", 1.0f);
+  for (MonoObject *label : {s_widgets.title, s_widgets.page_title}) {
+    set_color(s_label_class, label, "TextColor", white);
+    Set_Property(s_label_class, label, "Opacity", 1.0f);
+  }
   label_text(s_widgets.title, "Anomaly - Developed by AlexZero");
   label_geometry(s_widgets.title, 0.0f, 0.0f, outer_width, line_height);
   label_text(s_widgets.page_title, page_title(state.page));
   label_geometry(s_widgets.page_title, border, header_y, width, line_height);
-  label_text(s_widgets.version, "");
-  label_geometry(s_widgets.version, 0, 0, 0, 0);
-  label_text(s_widgets.counter, "");
-  label_geometry(s_widgets.counter, 0, 0, 0, 0);
-  image_geometry(s_widgets.position_edit_icon, 0, 0, 0, 0, false);
+  clear_label(s_widgets.version);
+  clear_label(s_widgets.counter);
+  collapse_image(s_widgets.position_edit_icon);
 
   /* the selected row: a solid bar */
   const float target_highlight =
@@ -250,14 +241,9 @@ void update_anomaly_menu_widgets() {
   update_highlight_target(state, target_highlight);
   panel_geometry(s_widgets.highlight, border, s_highlight_y, width, row);
   for (int i = 0; i < kGradientSlices; ++i) {
-    const float x0 = width * static_cast<float>(i) / kGradientSlices;
-    const float x1 = width * static_cast<float>(i + 1) / kGradientSlices;
-    const float t = (static_cast<float>(i) + 0.5f) / kGradientSlices;
-    panel_geometry(s_widgets.highlight_slices[i], x0, 0, x1 - x0, row);
-    panel_color(s_widgets.highlight_slices[i],
-                menu_dual_color()
-                    ? mix(left_color(), right_color(), gradient_t(t), 1.0f)
-                    : right_color(1.0f));
+    const GradientSlice slice = gradient_slice(width, i, kGradientSlices);
+    panel_geometry(s_widgets.highlight_slices[i], slice.x, 0, slice.width, row);
+    panel_color(s_widgets.highlight_slices[i], anomaly_slice_color(slice.t));
   }
 
   const float base_value_width = width * 0.42f;
@@ -266,17 +252,8 @@ void update_anomaly_menu_widgets() {
   for (size_t visible_index = 0; visible_index < kMaxVisibleOptions;
        ++visible_index) {
     const size_t option_index = state.scroll + visible_index;
-    const bool exists = option_index < options.size();
-    if (!exists) {
-      label_text(s_widgets.rows[visible_index], "");
-      label_text(s_widgets.values[visible_index], "");
-      Set_Property(s_label_class, s_widgets.rows[visible_index], "Opacity", 0.0f);
-      Set_Property(s_label_class, s_widgets.values[visible_index], "Opacity", 0.0f);
-      label_angle(s_widgets.rows[visible_index], 0.0f);
-      label_angle(s_widgets.values[visible_index], 0.0f);
-      clear_selector_markers(visible_index);
-      hide_appendum_option_control(visible_index);
-      hide_color_hint(visible_index);
+    if (option_index >= options.size()) {
+      hide_anomaly_row(visible_index);
       continue;
     }
 
@@ -335,11 +312,11 @@ void update_anomaly_menu_widgets() {
     label_text(s_widgets.values[visible_index], display_value);
     if (control.slider)
       value_label_geometry(s_widgets.values[visible_index], control.value_x,
-                           row_y, control.value_width, row, false);
+                           row_y, control.value_width, row);
     else
       value_label_geometry(s_widgets.values[visible_index],
                            content_right - value_width, row_y, value_width,
-                           row, false);
+                           row);
   }
 
   update_anomaly_controls(x, y + controls_offset, outer_width, line_height,
@@ -348,8 +325,7 @@ void update_anomaly_menu_widgets() {
 }
 
 /* Opening: down from above the screen in a second with Out (Back)'s
-   overshoot, the menu fading in over its first 300 ms; closing: back up.
-   Returns false when another look owns the animation. */
+   overshoot, the menu fading in over its first 300 ms; closing: back up. */
 constexpr float kAnomalySlideMs = 1000.0f;
 
 void update_anomaly_open_close(float elapsed_ms, bool opening) {

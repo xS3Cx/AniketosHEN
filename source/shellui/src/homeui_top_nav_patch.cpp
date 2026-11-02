@@ -15,22 +15,18 @@ along with this program; see the file COPYING. If not, see
 <http://www.gnu.org/licenses/>.  */
 
 #include "homeui_top_nav_patch.hpp"
-#include "aniketos_theme/customization.hpp"
 
 #if SHELLUI_HOMEUI_TOP_NAV_PATCH == 1
 
+#include "aniketos_shell/core/embedded_assets.hpp"
+#include "aniketos_theme/customization.hpp"
 #include "defs.h"
 #include "detour.h"
 #include "external_symbols.hpp"
 #include "hooked_funcs.hpp"
 #include "ipc.hpp"
 #include <sha1.hpp>
-#include <onion/settings.hpp>
 
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <onion/distribution.h>
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -38,19 +34,6 @@ along with this program; see the file COPYING. If not, see
 #include <stdint.h>
 #include <string>
 #include <string.h>
-
-const char *AniketosIconPath(); /* aniketos_shell/home/control_center_entry.cpp */
-
-/* Set when a Home bundle was given the top-bar icon by the patch below. */
-static std::atomic<bool> g_top_nav_patched{false};
-
-/* What the last Home bundle's tiles ended up with: the rounding (percent of
-   a full circle, -1 for Sony's shape; -2 until a Home bundle was seen) and
-   the focus frame's corner in thousandths of a pixel (-1 until then). */
-static std::atomic<int> g_tile_rounding{-2};
-static std::atomic<int> g_tile_focus_radius_milli{-1};
-
-extern onion::Settings g_settings;
 
 namespace {
 
@@ -907,17 +890,6 @@ static void update_hbc_footer_sha1(HbcView &hbc, size_t file_length) {
 
 #include "aniketos_theme/tiles/homeui_tile_patch.inc"
 
-/* Sony's focus-frame corner: the 16 px icon corner scaled to the 168 px
-   focused tile. */
-constexpr double kSonyTileFocusRadius = 16.0 * 168.0 / 106.0;
-
-static void publish_home_tiles(int rounding, double focus_radius) {
-  g_tile_focus_radius_milli.store(
-      static_cast<int>(std::lround(focus_radius * 1000.0)),
-      std::memory_order_relaxed);
-  g_tile_rounding.store(rounding, std::memory_order_relaxed);
-}
-
 /*
  * Focused top-nav buttons use invertedIconSource. Named system icons (Search,
  * Settings) resolve both states from iconId; a custom file URI only fills the
@@ -1228,34 +1200,6 @@ void patch_homeui_top_nav(unsigned char *buffer, int *size_ptr,
 
   HbcView hbc = {};
   const size_t visible_size = (size_t)*size_ptr;
-  { /* Development: keep a copy of the decoded bundle for analysis, when the
-       Shell Menu profiler marker is present. */
-    /* every React app's bundle passes here, each under its own name */
-    static int dumped = 0;
-    struct stat marker {};
-    if (dumped < 16 && visible_size > 64 * 1024 &&
-        stat(ONION_DIST_USER_DATA_ROOT "/shellmenu_profile", &marker) == 0) {
-      char path[128];
-      snprintf(path, sizeof(path),
-               ONION_DIST_USER_DATA_ROOT "/bundle_%02d_%zu.bin", dumped,
-               visible_size);
-      ++dumped;
-      const int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-      if (fd >= 0) {
-        size_t off = 0;
-        while (off < visible_size) {
-          const ssize_t n = write(fd, buffer + off,
-                                  visible_size - off > (1u << 20)
-                                      ? (1u << 20)
-                                      : visible_size - off);
-          if (n <= 0)
-            break;
-          off += (size_t)n;
-        }
-        close(fd);
-      }
-    }
-  }
   const size_t capacity =
       buffer_capacity > *size_ptr ? (size_t)buffer_capacity : visible_size;
 
@@ -1264,7 +1208,7 @@ void patch_homeui_top_nav(unsigned char *buffer, int *size_ptr,
     if (locate_source_bundle(buffer, visible_size, capacity, format,
                              &source_bundle)) {
       if (patch_source_homeui_top_nav(source_bundle, format.kind))
-        g_top_nav_patched.store(true, std::memory_order_relaxed);
+        homeui_note_top_nav_patched(true);
       return;
     }
   }
@@ -1341,57 +1285,27 @@ void patch_homeui_top_nav(unsigned char *buffer, int *size_ptr,
 #endif
   if (!profile)
     LOG_INFO("homeui_top_nav_patch: HomeUI without a profile (version=%u "
-             "file_length=0x%llx): tiles only, top-bar icon left to home_js",
+             "file_length=0x%llx): tiles only, top-bar icon left to "
+             "script_injector",
              hbc_version, (unsigned long long)hbc_file_length);
 
   /* The top-bar icon, on a profiled HomeUI whose patch sites all hold a
-     known shape; otherwise home_js adds it. */
+     known shape; otherwise script_injector adds it. */
   bool top_nav_change = false;
-  /* the patch names a fixed picture; a coloured logo is home_js's */
+  /* the patch names a fixed picture; a coloured logo is script_injector's */
   const bool top_nav_ready =
       profile && !g_settings.logo_color_enabled &&
       top_nav_byte_patches(hbc, *profile, false, &top_nav_change);
   if (!top_nav_ready)
-    g_top_nav_patched.store(false, std::memory_order_relaxed);
+    homeui_note_top_nav_patched(false);
 
-  /* Rounded tiles: the user's rounding, up to a full circle, with the
-     artwork clipped to it. A rounded frame around square artwork would look
-     broken, so the tiles change only when both sites are found. */
-  const int tile_rounding = AniketosTheme::TileRoundingPercent();
-  HomeTileShapePatch tile_shape{};
-  HomeTileContentClipPatch tile_clip{};
-  const bool tile_shape_ready =
-      homeui && locate_home_tile_shape_patch(hbc, hbc_file_length, tile_names,
-                                             &tile_shape);
-  const bool tile_clip_ready =
-      homeui && locate_home_tile_content_clip_patch(hbc, hbc_file_length,
-                                                    tile_names, &tile_clip);
-  const bool round_tiles =
-      tile_rounding >= 0 && tile_shape_ready && tile_clip_ready;
-  HomeTileShape wanted_shape{};
-  if (round_tiles)
-    wanted_shape = home_tile_shape_for(tile_shape, tile_rounding);
-  /* The clip site only matches Sony's layout, so finding it means the edit
-     is still to be made, even for a rounding whose corner equals Sony's. */
-  const bool tile_change = round_tiles;
-  if (homeui) {
-    LOG_INFO("home_tiles: rounding=%d shape_site=%d (radius now %d, wanted "
-             "%d) clip_site=%d",
-             tile_rounding, tile_shape_ready ? 1 : 0,
-             tile_shape_ready ? static_cast<int>(*tile_shape.icon_radius) : -1,
-             round_tiles ? static_cast<int>(wanted_shape.icon_radius) : -1,
-             tile_clip_ready ? 1 : 0);
-    /* The focus outline and the arc labels (aniketos_theme/tiles/home_tiles.cpp)
-       follow the tiles this bundle ends up with. */
-    publish_home_tiles(round_tiles ? tile_rounding : -1,
-                       round_tiles        ? read_double(wanted_shape.focus_radius)
-                       : tile_shape_ready ? read_double(tile_shape.focus_radius)
-                                          : kSonyTileFocusRadius);
-  }
+  HomeTilePlan tiles{};
+  if (homeui)
+    plan_home_tiles(hbc, hbc_file_length, tile_names, &tiles);
 
-  if (!top_nav_change && !tile_change) {
+  if (!top_nav_change && !tiles.round) {
     if (top_nav_ready)
-      g_top_nav_patched.store(true, std::memory_order_relaxed);
+      homeui_note_top_nav_patched(true);
 #if SHELL_DEBUG == 1
     LOG_WARN("homeui_top_nav_patch: already applied profile='%s' "
                 "(hbc_base=0x%llx)",
@@ -1403,17 +1317,12 @@ void patch_homeui_top_nav(unsigned char *buffer, int *size_ptr,
 
   if (top_nav_change)
     top_nav_byte_patches(hbc, *profile, true, nullptr);
-  if (tile_change) {
-    if (!home_tile_shape_is(tile_shape, wanted_shape))
-      apply_home_tile_shape_patch(tile_shape, wanted_shape);
-    apply_home_tile_content_clip_patch(tile_clip);
-    LOG_INFO("home_tiles: shape radius=%u and content mask applied",
-             static_cast<unsigned>(wanted_shape.icon_radius));
-  }
+  if (tiles.round)
+    apply_home_tile_plan(tiles);
   update_hbc_footer_sha1(hbc, hbc_file_length);
 
   if (top_nav_ready)
-    g_top_nav_patched.store(true, std::memory_order_relaxed);
+    homeui_note_top_nav_patched(true);
 #if SHELL_DEBUG == 1
   if (top_nav_change)
     LOG_DEBUG("homeui_top_nav_patch: activated OnionHEN top-nav slot "
@@ -1426,17 +1335,4 @@ void patch_homeui_top_nav(unsigned char *buffer, int *size_ptr,
   (void)size_ptr;
   (void)buffer_capacity;
 #endif
-}
-
-bool homeui_top_nav_patched() {
-  return g_top_nav_patched.load(std::memory_order_relaxed);
-}
-
-int homeui_tile_rounding() {
-  return g_tile_rounding.load(std::memory_order_relaxed);
-}
-
-float homeui_tile_focus_radius() {
-  const int milli = g_tile_focus_radius_milli.load(std::memory_order_relaxed);
-  return milli < 0 ? -1.0f : static_cast<float>(milli) / 1000.0f;
 }

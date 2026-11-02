@@ -19,11 +19,15 @@ set_source_files_properties("${ONION_CJSON_SOURCE}" PROPERTIES
 add_library(${PROJECT_NAME} STATIC
   source/boot_safety.c
   source/fs.c
+  source/fs_if_changed.c
   source/log.c
   source/migrate.c
+  source/migrate_config.c
+  source/migrate_tree.c
   source/net.c
   source/notify.c
   source/notify_i18n.c
+  source/notify_toast.c
   source/report.c
   "${ONION_CJSON_SOURCE}"
 )

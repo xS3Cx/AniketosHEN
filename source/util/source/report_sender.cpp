@@ -53,9 +53,6 @@ constexpr unsigned kRetryAfterSeconds = 600;
 constexpr const char *kDaemonCrashOffset = ONION_REPORT_DIR "/.daemon_crash_offset";
 /* mtime of the ShellUI injection marker already reported. */
 constexpr const char *kShellUiReported = ONION_REPORT_DIR "/.shellui_marker_reported";
-constexpr const char *kHomeJsPending = ONION_DIST_USER_DATA_ROOT "/js_inject_pending";
-constexpr const char *kShellUiLog =
-    ONION_DIST_USER_DATA_ROOT "/" ONION_DIST_NAME "_shellui.log";
 
 long long read_number(const char *path) {
   const int fd = open(path, O_RDONLY | O_NOFOLLOW);
@@ -95,8 +92,6 @@ void report_with_tail(const char *kind, const char *intro, const char *label,
                            body.data());
 }
 
-/* ---- sending ------------------------------------------------------------- */
-
 std::string url_host(const char *url) {
   const char *host = std::strstr(url, "://");
   if (!host)
@@ -128,10 +123,8 @@ std::vector<std::string> pending_reports() {
   if (!dir)
     return names;
   while (dirent *entry = readdir(dir)) {
-    const std::string name = entry->d_name;
-    if (name.size() > 4 && name[0] != '.' &&
-        name.compare(name.size() - 4, 4, ".txt") == 0)
-      names.push_back(name);
+    if (onion_report_is_file_name(entry->d_name))
+      names.emplace_back(entry->d_name);
   }
   closedir(dir);
   std::sort(names.begin(), names.end()); /* oldest first: names start with the time */
@@ -266,10 +259,10 @@ void report_collect_previous_session() {
   /* The daemon's crash log is append-only: report what is new since the last
      report. A shorter file was rotated or removed; start over. */
   const long long size = file_size(ONION_DIST_CRASH_LOG_PATH);
-  long long reported = read_number(kDaemonCrashOffset);
+  const long long stored = read_number(kDaemonCrashOffset);
   if (size >= 0) {
-    if (reported < 0 || reported > size)
-      reported = reported > size ? 0 : size; /* first run: nothing is new */
+    /* No offset yet is a first run: nothing is new. */
+    const long long reported = stored < 0 ? size : stored > size ? 0 : stored;
     if (size > reported) {
       const size_t fresh = static_cast<size_t>(
           std::min<long long>(size - reported, 4000));
@@ -277,19 +270,19 @@ void report_collect_previous_session() {
                                        "crashed in an earlier session.",
                        "daemon crash log", ONION_DIST_CRASH_LOG_PATH, fresh);
     }
-    if (size != read_number(kDaemonCrashOffset))
+    if (size != stored)
       write_number(kDaemonCrashOffset, size);
   }
 
-  /* ShellUI died inside the Home script injection: HomeJs keeps the marker
-     and stays off until it is deleted, so report each marker once. */
+  /* ShellUI died inside the Home script injection. Its next start counts that
+     as a failed start and deletes the marker; until then report it once. */
   struct stat st {};
-  if (lstat(kHomeJsPending, &st) == 0 &&
+  if (lstat(ONION_DIST_JS_PENDING_PATH, &st) == 0 &&
       read_number(kShellUiReported) != static_cast<long long>(st.st_mtime)) {
     report_with_tail("shellui-crash",
                      "ShellUI stopped while the Home script was being "
-                     "injected; the script is now left out.",
-                     "shellui log", kShellUiLog, 4000);
+                     "injected.",
+                     "shellui log", ONION_DIST_SHELLUI_LOG_PATH, 4000);
     write_number(kShellUiReported, static_cast<long long>(st.st_mtime));
   }
 }

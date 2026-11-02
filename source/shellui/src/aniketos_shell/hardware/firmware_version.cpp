@@ -1,7 +1,5 @@
 #include "aniketos_shell/hardware/firmware_version.hpp"
 
-#include "external_symbols.hpp"
-
 #include <ps5/kernel.h>
 
 #include <cstdio>
@@ -60,31 +58,17 @@ bool Read(OrbisKernelSwVersion &out) {
       sceKernelGetProsperoSystemSwVersion(&exported) == 0 &&
       valid_version(exported.version);
 
-  if (valid_version(kernel_version)) {
-    out.version = kernel_version;
-    if (export_read && exported.version == kernel_version &&
-        valid_text(exported.version_str, sizeof(exported.version_str))) {
-      std::memcpy(out.version_str, exported.version_str,
-                  sizeof(out.version_str));
-      out.version_str[sizeof(out.version_str) - 1] = '\0';
-    } else {
-      format_version(kernel_version, out.version_str,
-                     sizeof(out.version_str));
-    }
-    return true;
-  }
-
-  if (!export_read)
+  const bool kernel_read = valid_version(kernel_version);
+  if (!kernel_read && !export_read)
     return false;
 
-  out.version = exported.version;
-  if (valid_text(exported.version_str, sizeof(exported.version_str))) {
-    std::memcpy(out.version_str, exported.version_str,
-                sizeof(out.version_str));
+  out.version = kernel_read ? kernel_version : exported.version;
+  if (export_read && exported.version == out.version &&
+      valid_text(exported.version_str, sizeof(exported.version_str))) {
+    std::memcpy(out.version_str, exported.version_str, sizeof(out.version_str));
     out.version_str[sizeof(out.version_str) - 1] = '\0';
   } else {
-    format_version(exported.version, out.version_str,
-                   sizeof(out.version_str));
+    format_version(out.version, out.version_str, sizeof(out.version_str));
   }
   return true;
 }

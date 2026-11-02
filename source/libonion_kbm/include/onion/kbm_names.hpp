@@ -15,7 +15,6 @@
 #include <onion/kbm_profile.hpp>
 
 #include <string>
-#include <vector>
 
 namespace onion::kbm {
 
@@ -34,10 +33,6 @@ bool ParseButtons(const char *names, uint32_t *out);
  * trigger and the default value (full deflection or pull, signed for axes). */
 std::string OutputName(const OutputDef &output);
 bool ParseOutput(const char *name, OutputDef *out);
-/* "Cross", "Left stick up", "R2", "Hold layer aim" ... */
-std::string OutputDisplayName(const OutputDef &output);
-/* Every output name with a single button, for editor pickers. */
-std::vector<std::string> AllOutputNames();
 
 const char *GestureName(Gesture g);
 bool ParseGesture(const char *name, Gesture *out);

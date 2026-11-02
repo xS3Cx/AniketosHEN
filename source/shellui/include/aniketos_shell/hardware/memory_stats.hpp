@@ -20,7 +20,4 @@ struct Stats {
  */
 bool ReadSystem(Stats &out);
 
-/** Read the largest valid graphics page-table domain for the current firmware. */
-bool ReadGraphics(Stats &out);
-
 } // namespace AniketosShell::Memory

@@ -4,8 +4,6 @@
 
 #include <cstdint>
 
-struct MonoObject;
-
 namespace AniketosTheme::NativeShellBackground {
 
 /* Sony's particle layer as it is, or none. (Its "bottom" and "spread"
@@ -36,20 +34,18 @@ enum class ImageTransition : int {
 bool Resolve();
 bool IsResolved();
 uintptr_t LayerIdentity();
-// Returns Sony's already-loaded BGLayerPlugin instance. BGLayerPlugin is a
-// native UI3.Scene, so callers can attach UI3 widgets without constructing or
-// loading a new managed scene (which is not AOT-safe on the PS5 runtime).
-MonoObject *CurrentUi3Scene();
 
 // These call the real managed setters, which forward into the native AGC VSH
 // renderer. No AniketosHEN PUI background widget is created.
 bool Apply(const RGB &base, const RGB &glow, float glow_intensity,
            bool log_change = true);
 bool SetParticles(ParticleMode mode);
-// Generates the requested sine-wave field and uploads it to Sony's native
-// double-buffered wallpaper texture. This is not an overlay above HomeUI.
-bool ApplyProceduralWave(float time_seconds);
-void DisableProceduralWave();
+// Turns on Sony's own ShowWave for the current layer, keeping the value it had.
+bool ShowStockWave();
+// Puts that value back and drops the image override.
+void RestoreStockWave();
+// False asks for a retry. A file that cannot be read is logged and counts as
+// done: it stays unreadable, and asking every frame would flood the log.
 bool ApplyImage(const char *path, ImageTransition transition);
 // Suppresses Home/Media focused-title artwork while preserving launch,
 // fade-to-black, boot and shutdown transitions.

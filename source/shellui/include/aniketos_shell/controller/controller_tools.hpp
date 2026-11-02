@@ -12,14 +12,14 @@ enum class ControllerAnimation : uint8_t {
   NeonWave,
 };
 
-bool controller_set_lightbar(uint8_t red, uint8_t green, uint8_t blue);
-bool controller_reset_lightbar();
 void controller_set_custom_channel(bool color_b, uint8_t channel, uint8_t value);
 uint8_t controller_get_custom_channel(bool color_b, uint8_t channel);
 bool controller_apply_custom_color(bool color_b);
 void controller_start_animation(ControllerAnimation animation);
 void controller_stop_animation();
-void controller_handle_buttons(uint32_t buttons_down);
+/* Advances the light bar, rumble and player LED animations. */
+void controller_tick();
+inline void controller_handle_buttons(uint32_t) { controller_tick(); } // renames.tsv
 
 /* Rumble tests from the Shell Menu. The strength is the
    controller_vibration_strength setting (percent). */

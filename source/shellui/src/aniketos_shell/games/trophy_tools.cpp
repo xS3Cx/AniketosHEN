@@ -1,6 +1,6 @@
 #include "aniketos_shell/games/trophy_tools.hpp"
 
-#include "aniketos_shell/rn_scripts/script_injector.hpp"
+#include "aniketos_shell/rn_scripts/js_string.hpp"
 #include "aniketos_shell/system_ui/system_dialogs.hpp"
 #include "hooked_funcs.hpp"
 #include "toolbox_i18n.hpp"
@@ -17,18 +17,13 @@
 #include <ps5/kernel.h>
 #include <pthread.h>
 #include <string>
-#include <sys/types.h>
 #include <unistd.h>
 #include <vector>
-
-extern "C" int sceUserServiceGetForegroundUser(int *user_id);
 
 namespace TrophyTools {
 namespace {
 
-const char *tr(const char *key) { return toolbox_i18n::tr(key); }
-
-/* ---- the system's layouts (from its managed declarations) -------------- */
+using toolbox_i18n::tr;
 
 struct CommId { /* SceNpCommunicationId: "NPWR12345", the _00 in num */
   char data[9];
@@ -94,8 +89,6 @@ struct Trophy1Details { /* SceNpTrophySystemWrapTrophyDetails */
   int32_t grade;
   bool hidden;
 };
-
-/* ---- the calls, found by name in the system's trophy libraries -------- */
 
 struct Api {
   bool ready = false;
@@ -168,8 +161,6 @@ void resolve() {
            s_ps4.ready ? 1 : 0);
 }
 
-/* ---- one trophy set ---------------------------------------------------- */
-
 /* A trophy set: PS5 ("trophy2") or PS4 ("trophy1"), by its NPWR id. */
 struct Set {
   bool ps5 = true;
@@ -219,6 +210,7 @@ public:
   Session(const Session &) = delete;
   Session &operator=(const Session &) = delete;
   bool ok() const { return open_; }
+  const Api &api() const { return api_; }
   int error() const { return error_; }
   int handle() const { return handle_; }
   int context() const { return context_; }
@@ -240,31 +232,30 @@ union DetailsBuffer {
 };
 DetailsBuffer s_details;
 
+template <size_t N> std::string fixed_text(const char (&text)[N]) {
+  return std::string(text, strnlen(text, N));
+}
+
 /* The set's name and trophy count; empty when they cannot be read. */
 std::string set_name(const Set &set, const Session &session, int *count) {
   std::memset(&s_details, 0, sizeof(s_details));
-  const Api &api = set.ps5 ? s_ps5 : s_ps4;
-  if (api.title_details(session.handle(), session.context(), &s_details) != 0)
+  if (session.api().title_details(session.handle(), session.context(),
+                                  &s_details) != 0)
     return {};
   if (set.ps5) {
     *count = static_cast<int>(s_details.game2.trophies);
-    return std::string(s_details.game2.title,
-                       strnlen(s_details.game2.title, sizeof(s_details.game2.title)));
+    return fixed_text(s_details.game2.title);
   }
   *count = s_details.title1.trophies;
-  return std::string(s_details.title1.name,
-                     strnlen(s_details.title1.name, sizeof(s_details.title1.name)));
+  return fixed_text(s_details.title1.name);
 }
 
 std::string trophy_name(const Set &set, const Session &session, int trophy) {
   std::memset(&s_details, 0, sizeof(s_details));
-  const Api &api = set.ps5 ? s_ps5 : s_ps4;
-  if (api.trophy_details(session.handle(), session.context(), trophy,
-                         &s_details) == 0) {
-    const char *name =
-        set.ps5 ? s_details.trophy2.name : s_details.trophy1.name;
-    return std::string(name, strnlen(name, 128));
-  }
+  if (session.api().trophy_details(session.handle(), session.context(), trophy,
+                                   &s_details) == 0)
+    return set.ps5 ? fixed_text(s_details.trophy2.name)
+                   : fixed_text(s_details.trophy1.name);
   return "#" + std::to_string(trophy);
 }
 
@@ -308,16 +299,13 @@ std::vector<Set> sets_of(const std::string &title_id) {
       Title1Id ids[16] = {};
       if (api.titles_by_np_title(handle, &np, 0, ids, &count) == 0)
         for (uint64_t i = 0; i < count && i < 8; ++i)
-          sets.push_back(
-              {false, std::string(ids[i].id, strnlen(ids[i].id, sizeof(ids[i].id)))});
+          sets.push_back({false, fixed_text(ids[i].id)});
     }
     api.destroy_handle(handle);
   }
   LOG_INFO("[TROPHY] %s: %zu trophy set(s)", np.id, sets.size());
   return sets;
 }
-
-/* ---- work, done on a thread of its own ---------------------------------- */
 
 enum class Job { Change, PrepareAll };
 
@@ -423,7 +411,6 @@ void *worker(void *) {
     pthread_mutex_unlock(&s_lock);
     run(work);
   }
-  return nullptr;
 }
 
 void queue(Work work) {
@@ -439,8 +426,6 @@ void queue(Work work) {
   pthread_mutex_unlock(&s_lock);
 }
 
-/* ---- the confirmation for "Unlock all trophies" on Home ---------------- */
-
 bool s_confirm_open = false;
 Work s_confirm_work;
 
@@ -450,10 +435,9 @@ void show(const Outcome &outcome) {
       return; /* one at a time */
     SystemDialogs::AlertOptions options;
     options.title = tr("trophy.confirm.unlock_all");
-    char count[16];
-    std::snprintf(count, sizeof(count), "%d", outcome.count);
     options.message = outcome.text + "\n" + tr("trophy.confirm.count") + " " +
-                      count + "\n\n" + tr("trophy.confirm.sync_note");
+                      std::to_string(outcome.count) + "\n\n" +
+                      tr("trophy.confirm.sync_note");
     options.positive = tr("trophy.confirm.unlock");
     options.negative = tr("trophy.confirm.cancel");
     std::string failure;
@@ -553,7 +537,7 @@ const char *InjectedScript() {
 }
 
 std::string ScriptConfig() {
-  const auto text = [](const char *key) { return HomeJs::JsString(tr(key)); };
+  const auto text = [](const char *key) { return JsString(tr(key)); };
   return "globalThis.__aniketosTrophy = {unlock: " + text("trophy.unlock") +
          ", lock: " + text("trophy.lock") +
          ", unlockAll: " + text("trophy.unlock_all") +

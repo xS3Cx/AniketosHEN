@@ -1,18 +1,18 @@
 #include "web_tile_icon.hpp"
 
 #include "cheats/sync/http_transport_ps5.hpp"
+#include "tile_picture.hpp"
 #include "web_icon.hpp"
 
 #include <onion/distribution.h>
+#include <onion/fs.h>
 #include <onion/log.h>
 
 #include <algorithm>
 #include <cerrno>
-#include <cstdio>
 #include <memory>
 #include <pthread.h>
 #include <sys/stat.h>
-#include <unistd.h>
 #include <vector>
 
 namespace {
@@ -45,22 +45,12 @@ std::vector<uint8_t> fetch(const std::string &url, size_t limit) {
   return body;
 }
 
-bool save(const std::string &id, const char *extension,
-          const std::vector<uint8_t> &bytes) {
-  if (mkdir(kDir, 0777) != 0 && errno != EEXIST)
+/* The reader goes by the bytes, so every format has the one file name. */
+bool save(const std::string &id, const std::vector<uint8_t> &bytes) {
+  if (bytes.empty() || (mkdir(kDir, 0777) != 0 && errno != EEXIST))
     return false;
-  const std::string path = std::string(kDir) + "/" + id + extension;
-  const std::string temporary = path + ".tmp";
-  FILE *file = std::fopen(temporary.c_str(), "wb");
-  if (!file)
-    return false;
-  bool written = std::fwrite(bytes.data(), 1, bytes.size(), file) == bytes.size();
-  written = std::fclose(file) == 0 && written;
-  if (!written || std::rename(temporary.c_str(), path.c_str()) != 0) {
-    unlink(temporary.c_str());
-    return false;
-  }
-  return true;
+  const std::string path = std::string(kDir) + "/" + id + ".png";
+  return write_file_atomic(path.c_str(), bytes.data(), bytes.size());
 }
 
 /* Saved in a form the system's reader takes; false when these bytes are no
@@ -68,23 +58,24 @@ bool save(const std::string &id, const char *extension,
 bool save_picture(const std::string &id, const std::vector<uint8_t> &bytes) {
   if (bytes.size() >= WebIcon::kMaxIcon)
     return false;
-  const WebIcon::Format format = WebIcon::Sniff(bytes.data(), bytes.size());
+  const TilePicture::Format format =
+      TilePicture::Sniff(bytes.data(), bytes.size());
   switch (format) {
-  case WebIcon::Format::Png:
-  case WebIcon::Format::Jpeg:
-  case WebIcon::Format::Gif:
-  case WebIcon::Format::WebP:
-    /* the reader goes by the bytes, as the avatar's does */
-    return WebIcon::FitsTile(bytes.data(), bytes.size(), format) &&
-           save(id, ".png", bytes);
-  case WebIcon::Format::Ico: {
+  case TilePicture::Format::Png:
+  case TilePicture::Format::Jpeg:
+  case TilePicture::Format::Gif:
+  case TilePicture::Format::WebP:
+    return TilePicture::FitsTile(bytes.data(), bytes.size(), format) &&
+           save(id, bytes);
+  case TilePicture::Format::Ico: {
     const std::vector<uint8_t> png =
-        WebIcon::IcoToPng(bytes.data(), bytes.size());
-    return WebIcon::FitsTile(png.data(), png.size(), WebIcon::Format::Png) &&
-           save(id, ".png", png);
+        TilePicture::IcoToPng(bytes.data(), bytes.size());
+    return TilePicture::FitsTile(png.data(), png.size(),
+                                 TilePicture::Format::Png) &&
+           save(id, png);
   }
-  case WebIcon::Format::Svg: /* a page's own markup, at every Home start */
-  case WebIcon::Format::Unknown:
+  case TilePicture::Format::Svg: /* a page's own markup, at every Home start */
+  case TilePicture::Format::Unknown:
     break;
   }
   return false;
@@ -102,9 +93,9 @@ void *worker(void *raw) {
   if (!saved && !usual.empty() && usual != named)
     saved = save_picture(job->id, fetch(usual, WebIcon::kMaxIcon));
   const bool plain =
-      !saved && save(job->id, ".png",
-                     WebIcon::LetterTile(
-                         WebIcon::TileLetter(job->title, job->url), job->url));
+      !saved &&
+      save(job->id, TilePicture::LetterTile(
+                        TilePicture::TileLetter(job->title, job->url), job->url));
   LOG_INFO("web tile %s: %s", job->id.c_str(),
            saved ? "site icon" : plain ? "plain tile" : "no picture written");
   return nullptr;

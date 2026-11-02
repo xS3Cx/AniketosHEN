@@ -35,6 +35,7 @@ struct MonoImage;
  * patch. When it did not (a firmware without a profile), the script
  * script_injector.cpp puts into Home adds the icon instead. */
 bool homeui_top_nav_patched();
+void homeui_note_top_nav_patched(bool patched);
 
 /* What the last Home bundle's tiles ended up with, so the focus outline and
  * the arc labels match them: the rounding the patch gave them (percent of a
@@ -43,6 +44,7 @@ bool homeui_top_nav_patched();
  * bundle was seen). */
 int homeui_tile_rounding();
 float homeui_tile_focus_radius();
+void homeui_publish_tiles(int rounding, double focus_radius);
 
 void patch_homeui_top_nav(unsigned char *buffer, int *size_ptr,
                           int buffer_capacity);

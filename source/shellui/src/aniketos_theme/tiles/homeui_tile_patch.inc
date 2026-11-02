@@ -14,8 +14,7 @@
  * bounds helpers). */
 
 static uint16_t read_u16le(const unsigned char *p) {
-  return static_cast<uint16_t>(p[0]) |
-         static_cast<uint16_t>(static_cast<uint16_t>(p[1]) << 8);
+  return static_cast<uint16_t>(p[0] | (p[1] << 8));
 }
 
 static void write_u16le(unsigned char *p, uint16_t value) {
@@ -40,7 +39,7 @@ struct HbcStringTable {
 };
 
 static bool read_hbc_string_table(const HbcView &hbc, HbcStringTable *out) {
-  if (!out || hbc.size < 128)
+  if (hbc.size < 128)
     return false;
   const uint32_t version = read_u32le(hbc.data + kHbcVersionOffset);
   if (version < 56 || version >= 97)
@@ -66,41 +65,27 @@ static bool read_hbc_string_table(const HbcView &hbc, HbcStringTable *out) {
     header_size += 4; // function-source count
   header_size += 5;  // debug offset and packed options
 
+  /* Each table follows the last one, 4-aligned; null when it does not fit. */
   size_t cursor = align_up(header_size, 32);
-  auto advance = [&](size_t count, size_t stride) -> bool {
-    if (count && stride > SIZE_MAX / count)
-      return false;
-    const size_t bytes = count * stride;
-    if (!range_contains(hbc.size, cursor, bytes))
-      return false;
-    cursor += bytes;
-    return true;
+  auto next_table = [&](size_t count, size_t stride) -> const unsigned char * {
+    cursor = align_up(cursor, 4);
+    if (cursor == SIZE_MAX || (count && stride > SIZE_MAX / count) ||
+        !range_contains(hbc.size, cursor, count * stride))
+      return nullptr;
+    const unsigned char *table = hbc.data + cursor;
+    cursor += count * stride;
+    return table;
   };
-  if (cursor == SIZE_MAX || !advance(function_count, 16))
+  if (!next_table(function_count, 16) || !next_table(string_kind_count, 4) ||
+      !next_table(identifier_count, 4))
     return false;
-  cursor = align_up(cursor, 4);
-  if (cursor == SIZE_MAX || !advance(string_kind_count, 4))
-    return false;
-  cursor = align_up(cursor, 4);
-  if (cursor == SIZE_MAX || !advance(identifier_count, 4))
-    return false;
-  cursor = align_up(cursor, 4);
-  out->entries = hbc.data + cursor;
-  if (cursor == SIZE_MAX || !advance(string_count, 4))
-    return false;
-  cursor = align_up(cursor, 4);
-  out->overflow = hbc.data + cursor;
-  if (cursor == SIZE_MAX || !advance(overflow_count, 8))
-    return false;
-  cursor = align_up(cursor, 4);
-  if (cursor == SIZE_MAX ||
-      !range_contains(hbc.size, cursor, string_storage_size))
-    return false;
-  out->storage = hbc.data + cursor;
+  out->entries = next_table(string_count, 4);
+  out->overflow = next_table(overflow_count, 8);
+  out->storage = next_table(string_storage_size, 1);
   out->count = string_count;
   out->overflow_count = overflow_count;
   out->storage_size = string_storage_size;
-  return true;
+  return out->entries && out->overflow && out->storage;
 }
 
 /* The id of an ASCII string. Only ids a 16-bit operand can hold are looked
@@ -201,7 +186,7 @@ struct LearnedOpcode {
       value = op;
     return value == op;
   }
-  bool is(unsigned char op) const { return value >= 0 && value == op; }
+  bool is(unsigned char op) const { return value == op; }
 };
 
 /* Instructions that name a property come in a u8-id ("Short") and a u16-id
@@ -331,10 +316,10 @@ struct HomeTileShapePatch {
   unsigned focus_diameter = 0;           /* SCALED_EXP_SIZE */
 };
 
-/* The bytes the two radius instructions take for one tile shape. */
+/* What the two radius instructions take for one tile shape. */
 struct HomeTileShape {
   unsigned char icon_radius = 0;
-  unsigned char focus_radius[8]{};
+  double focus_radius = 0.0;
 };
 
 /*
@@ -439,7 +424,7 @@ static bool match_tile_constants(unsigned char *p, unsigned char *begin,
 static bool locate_home_tile_shape_patch(const HbcView &hbc, size_t file_length,
                                          const HomeTileNames &names,
                                          HomeTileShapePatch *out) {
-  if (!out || file_length > hbc.size)
+  if (file_length > hbc.size)
     return false;
   unsigned char *const begin = hbc.data;
   unsigned char *const end = hbc.data + file_length;
@@ -470,27 +455,12 @@ static bool locate_home_tile_shape_patch(const HbcView &hbc, size_t file_length,
 static HomeTileShape home_tile_shape_for(const HomeTileShapePatch &patch,
                                          int percent) {
   HomeTileShape shape{};
-  const unsigned icon_diameter = patch.icon_diameter;
-  const double focus_diameter = patch.focus_diameter;
   shape.icon_radius = static_cast<unsigned char>(
-      std::lround(std::min(percent, 100) * (icon_diameter / 2) / 100.0));
-  const double focus_radius =
-      shape.icon_radius * (focus_diameter / static_cast<double>(icon_diameter));
-  memcpy(shape.focus_radius, &focus_radius, sizeof(focus_radius));
+      std::lround(percent * (patch.icon_diameter / 2) / 100.0));
+  const double focus_scale =
+      patch.focus_diameter / static_cast<double>(patch.icon_diameter);
+  shape.focus_radius = shape.icon_radius * focus_scale;
   return shape;
-}
-
-static bool home_tile_shape_is(const HomeTileShapePatch &patch,
-                               const HomeTileShape &shape) {
-  return *patch.icon_radius == shape.icon_radius &&
-         memcmp(patch.focus_radius, shape.focus_radius,
-                sizeof(shape.focus_radius)) == 0;
-}
-
-static void apply_home_tile_shape_patch(const HomeTileShapePatch &patch,
-                                        const HomeTileShape &shape) {
-  *patch.icon_radius = shape.icon_radius;
-  memcpy(patch.focus_radius, shape.focus_radius, sizeof(shape.focus_radius));
 }
 
 /* The longest stretch of stylesheet keys the clip edit rewrites. */
@@ -681,7 +651,7 @@ static bool match_tile_styles(unsigned char *p, unsigned char *end,
 static bool locate_home_tile_content_clip_patch(
     const HbcView &hbc, size_t file_length, const HomeTileNames &names,
     HomeTileContentClipPatch *out) {
-  if (!out || file_length > hbc.size)
+  if (file_length > hbc.size)
     return false;
   unsigned char *const end = hbc.data + file_length;
   const size_t width = id_width(names.border_radius_export);
@@ -706,9 +676,54 @@ static bool locate_home_tile_content_clip_patch(
   return true;
 }
 
-static void apply_home_tile_content_clip_patch(
-    const HomeTileContentClipPatch &patch) {
-  *patch.width_owner = patch.wrapper;
-  *patch.height_owner = patch.wrapper;
-  memcpy(patch.styles, patch.clipped, patch.styles_size);
+/* Sony's focus-frame corner: the 16 px icon corner scaled to the 168 px
+   focused tile. */
+constexpr double kSonyTileFocusRadius = 16.0 * 168.0 / 106.0;
+
+struct HomeTilePlan {
+  HomeTileShapePatch shape;
+  HomeTileContentClipPatch clip;
+  HomeTileShape wanted;
+  /* The clip site only matches Sony's layout, so finding it means the edit
+     is still to be made, even for a rounding whose corner equals Sony's. */
+  bool round = false;
+};
+
+/* Rounded tiles: the user's rounding, up to a full circle, with the artwork
+   clipped to it. A rounded frame around square artwork would look broken, so
+   the tiles change only when both sites are found. Writes nothing into the
+   bundle; publishes what the bundle's tiles will end up with. */
+static void plan_home_tiles(const HbcView &hbc, size_t file_length,
+                            const HomeTileNames &names, HomeTilePlan *plan) {
+  const int rounding = AniketosTheme::TileRoundingPercent();
+  const bool shape_ready =
+      locate_home_tile_shape_patch(hbc, file_length, names, &plan->shape);
+  const bool clip_ready =
+      locate_home_tile_content_clip_patch(hbc, file_length, names, &plan->clip);
+  plan->round = rounding >= 0 && shape_ready && clip_ready;
+  if (plan->round)
+    plan->wanted = home_tile_shape_for(plan->shape, rounding);
+  LOG_INFO("home_tiles: rounding=%d shape_site=%d (radius now %d, wanted "
+           "%d) clip_site=%d",
+           rounding, shape_ready ? 1 : 0,
+           shape_ready ? static_cast<int>(*plan->shape.icon_radius) : -1,
+           plan->round ? static_cast<int>(plan->wanted.icon_radius) : -1,
+           clip_ready ? 1 : 0);
+  /* The focus outline and the arc labels (home_tiles.cpp) follow the tiles
+     this bundle ends up with. */
+  homeui_publish_tiles(plan->round ? rounding : -1,
+                       plan->round   ? plan->wanted.focus_radius
+                       : shape_ready ? read_double(plan->shape.focus_radius)
+                                     : kSonyTileFocusRadius);
+}
+
+static void apply_home_tile_plan(const HomeTilePlan &plan) {
+  *plan.shape.icon_radius = plan.wanted.icon_radius;
+  memcpy(plan.shape.focus_radius, &plan.wanted.focus_radius,
+         sizeof(plan.wanted.focus_radius));
+  *plan.clip.width_owner = plan.clip.wrapper;
+  *plan.clip.height_owner = plan.clip.wrapper;
+  memcpy(plan.clip.styles, plan.clip.clipped, plan.clip.styles_size);
+  LOG_INFO("home_tiles: shape radius=%u and content mask applied",
+           static_cast<unsigned>(plan.wanted.icon_radius));
 }

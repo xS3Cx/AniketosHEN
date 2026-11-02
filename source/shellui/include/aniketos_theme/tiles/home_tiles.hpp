@@ -1,24 +1,17 @@
 #pragma once
 
-#include <string>
+#include "aniketos_theme/tiles/space_switcher_labels.hpp" // renames.tsv
 
 struct MonoImage;
-struct MonoObject;
-struct MonoString;
 
 namespace AniketosTheme::HomeTiles {
 
 void Install(MonoImage *react_pui, MonoImage *pui);
-void RememberArcBadge(MonoObject *raw_text, const char *title_id,
-                      const char *version, bool show_title_id,
-                      bool show_version);
-void PropagateArcBadge(MonoObject *parent, MonoObject *child);
-MonoString *DecorateSpaceSwitcherLabel(MonoObject *label, MonoString *text);
-bool IsSpaceSwitcherTabLabel(const std::string &text);
-bool IsSpaceSwitcherMediaTabLabel(const std::string &text);
-void UpdateSpaceSwitcherFocusBounds(MonoObject *label,
-                                    const std::string &text);
 void Tick();
-void ClearTrackedLayers();
+
+inline MonoString *DecorateSpaceSwitcherLabel(MonoObject *label, MonoString *text) { return SpaceSwitcherLabels::Decorate(label, text); } // renames.tsv
+inline bool IsSpaceSwitcherTabLabel(const std::string &text) { return SpaceSwitcherLabels::IsTabLabel(text); } // renames.tsv
+inline bool IsSpaceSwitcherMediaTabLabel(const std::string &text) { return SpaceSwitcherLabels::IsMediaTabLabel(text); } // renames.tsv
+inline void UpdateSpaceSwitcherFocusBounds(MonoObject *label, const std::string &text) { SpaceSwitcherLabels::UpdateFocusBounds(label, text); } // renames.tsv
 
 } // namespace AniketosTheme::HomeTiles

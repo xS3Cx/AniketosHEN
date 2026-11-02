@@ -18,6 +18,7 @@ along with this program; see the file COPYING. If not, see
 #include "bootstrap_assets.h"
 #include "bootstrap_config.h"
 #include "bootstrap_filesystem.h"
+#include "bootstrap_migration.h"
 #include "bootstrap_notify.h"
 #include "bootstrap_runtime.h"
 #include "bootstrap_safety.h"
@@ -25,9 +26,7 @@ along with this program; see the file COPYING. If not, see
 #include "payload_autostart.h"
 
 #include <onion/conflict.h>
-#include <onion/fs.h>
 #include <onion/log.h>
-#include <onion/notify.h>
 
 int main(void) {
   BootstrapConfig config{};
@@ -38,19 +37,8 @@ int main(void) {
     return -1;
   bootstrap_runtime_enable_remote_logging();
 
-  /* One start at a time. A second bootstrapper (an autoloader plus a manual
-     send, or a send repeated while the first one was still importing data)
-     used to run the whole chain beside the first: both copied the same files
-     and both loaded kstuff. */
-  if (!bootstrap_safety_lock()) {
-    LOG_ERROR("refusing start: another " ONION_DIST_NAME " start is running");
-    if (if_exists(ONION_NOTIFY_ICON_PATH))
-      onion_notify_rich("notify.brand",
-                        ONION_DIST_NAME " is already starting. Please wait "
-                        "for it to finish.",
-                        ONION_NOTIFY_ICON_PATH, "download", "588193134");
+  if (!bootstrap_safety_lock())
     return 0;
-  }
 
   const char *conflict = onion_conflict_detect();
   if (conflict) {

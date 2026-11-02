@@ -1,7 +1,7 @@
 /* Keyboard & mouse for games: the shared contract.
  *
  * A profile (JSON, edited in the Toolbox, kept in /data/AniketosHEN/kbm) is
- * compiled into one flat, pointer-free KbmProfileBlob. The daemon writes the
+ * compiled into one flat, pointer-free ProfileBlob. The daemon writes the
  * blob into the agent's control page inside the game; the agent's engine
  * turns keyboard and mouse input into a controller state every time the game
  * reads its pad. Everything here is plain data: the agent uses it without a
@@ -25,11 +25,11 @@ constexpr Input kMouseButtonFirst = 0x0100;
 constexpr Input kMouseLeft = 0x0100, kMouseRight = 0x0101, kMouseMiddle = 0x0102,
                 kMouseBack = 0x0103, kMouseForward = 0x0104;
 constexpr Input kMouseButtonLast = 0x0107;
-/* wheel notches and tilt: each notch is a short press (KbmBinding.pulse_ms) */
+/* wheel notches and tilt: each notch is a short press (Binding.pulse_ms) */
 constexpr Input kWheelUp = 0x0110, kWheelDown = 0x0111, kWheelLeft = 0x0112,
                 kWheelRight = 0x0113;
 /* mouse motion as digital inputs (held while the mouse moves that way
-   faster than KbmLayer.mouse_digital_threshold) */
+   faster than Layer.mouse_digital_threshold) */
 constexpr Input kMouseMoveRight = 0x0120, kMouseMoveLeft = 0x0121,
                 kMouseMoveDown = 0x0122, kMouseMoveUp = 0x0123;
 constexpr int kInputCount = 0x0124; /* ids are < this */
@@ -230,15 +230,16 @@ constexpr uint64_t kControlHint = 0x3f0000000ull;
 constexpr uint64_t kControlMagic = 0x3243545243424b4dull; /* "MKBCRTC2" */
 constexpr uint32_t kControlLayoutVersion = 2;
 constexpr int kMaxHookSlots = 16;
+/* ControlPage.agent_status */
+constexpr uint32_t kStatusRunning = 1u << 0, kStatusHooked = 1u << 1,
+                   kStatusMouseOpen = 1u << 2, kStatusKeyboardOpen = 1u << 3;
 struct ControlPage {
   uint64_t magic;
   uint32_t layout_version;
   uint32_t page_size;                 /* bytes mapped */
   volatile uint32_t agent_generation; /* a newer agent takes over */
   volatile uint32_t profile_generation; /* seqlock, see above */
-  volatile uint32_t agent_status;     /* bit0 running, bit1 hooked,
-                                         bit2 mouse open, bit3 keyboard open,
-                                         bit4 suspended by the user */
+  volatile uint32_t agent_status;     /* kStatus* bits */
   volatile uint32_t heartbeat;        /* +1 each reader loop */
   uint32_t agent_build;               /* written by the daemon after it
                                          injects: a checksum of the agent

@@ -37,6 +37,16 @@ static void remove_paths(const Paths *p) {
 /* A console restart clears /system_tmp, here the session marker. */
 static void restart(const Paths *p) { unlink(p->session); }
 
+/* Stands in for libc's so a test can see fsync calls on directories. */
+static int s_directory_fsyncs = 0;
+
+int fsync(int fd) {
+  struct stat st;
+  if (fstat(fd, &st) == 0 && S_ISDIR(st.st_mode))
+    ++s_directory_fsyncs;
+  return fdatasync(fd);
+}
+
 static int test_second_instance_is_refused(void) {
   Paths p;
   TEST_ASSERT_TRUE(make_paths(&p));
@@ -216,6 +226,47 @@ static int test_power_action_after_running_changes_nothing(void) {
   return 0;
 }
 
+/* The notice blames a restart only when both fields say so. */
+static int test_raised_level_alone_is_no_failed_start(void) {
+  Paths p;
+  TEST_ASSERT_TRUE(make_paths(&p));
+  OnionBootGuard guard;
+  TEST_ASSERT_TRUE(onion_boot_guard_begin(p.state, p.session, &guard));
+  restart(&p);
+  TEST_ASSERT_TRUE(onion_boot_guard_begin(p.state, p.session, &guard));
+  restart(&p);
+  TEST_ASSERT_TRUE(onion_boot_guard_begin(p.state, p.session, &guard));
+  TEST_ASSERT_EQ_INT(ONION_BOOT_MINIMAL, guard.level);
+  TEST_ASSERT_TRUE(guard.previous_unfinished && guard.previous_rebooted);
+
+  /* A reload in the same session stays raised, without a restart. */
+  TEST_ASSERT_TRUE(onion_boot_guard_begin(p.state, p.session, &guard));
+  TEST_ASSERT_EQ_INT(ONION_BOOT_MINIMAL, guard.level);
+  TEST_ASSERT_TRUE(guard.previous_unfinished && !guard.previous_rebooted);
+
+  /* One step down after a finished start stays raised as well. */
+  TEST_ASSERT_TRUE(onion_boot_guard_mark_running(p.state));
+  restart(&p);
+  TEST_ASSERT_TRUE(onion_boot_guard_begin(p.state, p.session, &guard));
+  TEST_ASSERT_EQ_INT(ONION_BOOT_SAFE, guard.level);
+  TEST_ASSERT_TRUE(!guard.previous_unfinished);
+  remove_paths(&p);
+  return 0;
+}
+
+static int test_state_write_syncs_its_directory(void) {
+  Paths p;
+  TEST_ASSERT_TRUE(make_paths(&p));
+  OnionBootGuard guard;
+  s_directory_fsyncs = 0;
+  TEST_ASSERT_TRUE(onion_boot_guard_begin(p.state, p.session, &guard));
+  TEST_ASSERT_EQ_INT(1, s_directory_fsyncs);
+  TEST_ASSERT_TRUE(onion_boot_guard_mark_running(p.state));
+  TEST_ASSERT_EQ_INT(2, s_directory_fsyncs);
+  remove_paths(&p);
+  return 0;
+}
+
 static int test_garbage_state_is_treated_as_clean(void) {
   Paths p;
   TEST_ASSERT_TRUE(make_paths(&p));
@@ -254,6 +305,10 @@ int test_boot_safety_suite(void) {
                              test_power_action_before_running_keeps_level);
   failures += onion_test_run("boot_level_power_action_after_running",
                              test_power_action_after_running_changes_nothing);
+  failures += onion_test_run("boot_level_raised_is_no_failed_start",
+                             test_raised_level_alone_is_no_failed_start);
+  failures += onion_test_run("boot_state_syncs_directory",
+                             test_state_write_syncs_its_directory);
   failures += onion_test_run("boot_level_garbage_state",
                              test_garbage_state_is_treated_as_clean);
   return failures;

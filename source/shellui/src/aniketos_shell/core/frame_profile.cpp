@@ -7,9 +7,6 @@
 #include <onion/log.h>
 
 #include <cstdio>
-#include "external_symbols.hpp"
-#include <string>
-#include <algorithm>
 #include <cstring>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -18,7 +15,7 @@
 
 namespace AniketosShell::Profile {
 
-bool g_enabled = false;
+bool enabled = false;
 
 namespace {
 
@@ -56,7 +53,7 @@ void load_script() {
   if (got <= 0)
     return; /* still being uploaded: look again on the next poll */
   unlink(kScript);
-  s_script_length = got > 0 ? static_cast<size_t>(got) : 0;
+  s_script_length = static_cast<size_t>(got);
   s_script_at = 0;
   s_script_countdown = 0;
   LOG_INFO("[SHELLMENU:PROFILE] script loaded steps=%zu", s_script_length);
@@ -82,28 +79,21 @@ void step_script() {
     s_script_countdown = 8; /* ~133 ms at 60 fps, close to kListRepeatMs */
     return;
   }
+  switch (step) {
   /* S / H: open system Settings / go back to Home, to reproduce scene
      changes without a controller. */
-  if (step == 'S') {
-    GoToURI("pssettings:play?mode=settings");
-    return;
-  }
-  if (step == 'P') {
+  case 'S': GoToURI("pssettings:play?mode=settings"); break;
+  case 'H': GoToURI("pshomeui:navigateToHome"); break;
+  case 'P':
     ShellClock::DebugDumpPuiImage(ONION_DIST_USER_DATA_ROOT "/pui_dump.dll");
-    return;
-  }
-  if (step == 'C') {
+    break;
+  case 'C': {
     static int dump_index = 0;
     char tag[16];
     std::snprintf(tag, sizeof(tag), "n%d", dump_index++);
     ShellClock::DebugDumpProperties(tag);
-    return;
+    break;
   }
-  if (step == 'H') {
-    GoToURI("pshomeui:navigateToHome");
-    return;
-  }
-  switch (step) {
   case 'T': s_pending_toggle = true; break;
   case 'U': s_pending_buttons |= Up; break;
   case 'D': s_pending_buttons |= Down; break;
@@ -127,8 +117,8 @@ uint64_t NowNs() {
 
 void Initialize() {
   struct stat st {};
-  g_enabled = stat(kMarker, &st) == 0;
-  if (!g_enabled)
+  enabled = stat(kMarker, &st) == 0;
+  if (!enabled)
     return;
   LOG_INFO("[SHELLMENU:PROFILE] enabled by %s", kMarker);
   /* What one log record costs the calling thread on this console. */
@@ -163,7 +153,7 @@ uint32_t ConsumeScriptButtons() {
 }
 
 void EndFrame() {
-  if (!g_enabled)
+  if (!enabled)
     return;
   step_script();
   {

@@ -1,33 +1,29 @@
 #include "aniketos_shell/input/mouse_control.hpp"
 
-#include "aniketos_shell/games/cheats_menu.hpp"
 #include "aniketos_shell/core/host_scene.hpp"
 #include "aniketos_shell/core/menu_host.hpp"
+#include "aniketos_shell/games/cheats_menu.hpp"
 #include "aniketos_shell/system_ui/system_dialogs.hpp"
 #include "aniketos_ui/mono_property_cache.hpp"
+#include "aniketos_ui/mono_reflect.hpp"
+#include "aniketos_ui/monotonic_clock.hpp"
 #include "aniketos_ui/pui_primitives.hpp"
 #include "hooked_funcs.hpp"
 
 #include <onion/log.h>
-#include <onion/settings.hpp>
 
 #include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <cstdint>
 #include <ps5/kernel.h>
-#include <time.h>
 #include <unistd.h>
-
-extern "C" int sceUserServiceGetForegroundUser(int *user_id);
-extern onion::Settings g_settings;
 
 namespace MouseControl {
 namespace {
 
 namespace Pui = AniketosUI::Pui;
-
-/* ---- the system's mouse library ------------------------------------------ */
+namespace Reflect = AniketosUI::Reflect;
 
 struct MouseData { /* SceMouseData */
   uint64_t timestamp;
@@ -118,42 +114,22 @@ void open_mouse() {
            static_cast<unsigned>(user), handle);
 }
 
-/* ---- managed calls --------------------------------------------------------- */
-
-MonoMethod *method_of(MonoClass *klass, const char *name, int parameters) {
-  for (; klass; klass = mono_class_get_parent(klass))
-    if (MonoMethod *method =
-            mono_class_get_method_from_name(klass, name, parameters))
-      return method;
-  return nullptr;
-}
-
 MonoObject *call(MonoObject *object, const char *name, int parameters,
-                 void **arguments, bool *ok = nullptr) {
-  MonoMethod *method =
-      object ? method_of(mono_object_get_class(object), name, parameters)
-             : nullptr;
-  MonoObject *exception = nullptr;
-  MonoObject *result =
-      method ? mono_runtime_invoke(method, object, arguments, &exception)
-             : nullptr;
-  if (ok)
-    *ok = method && !exception;
-  return exception ? nullptr : result;
+                 void **arguments) {
+  MonoObject *result = nullptr;
+  return Reflect::Call(object, name, parameters, arguments, &result) ? result
+                                                                     : nullptr;
 }
 
 bool bool_property(MonoObject *object, const char *getter) {
-  bool ok = false;
-  MonoObject *value = call(object, getter, 0, nullptr, &ok);
-  return ok && value && *static_cast<bool *>(mono_object_unbox(value));
+  MonoObject *value = call(object, getter, 0, nullptr);
+  return value && *static_cast<bool *>(mono_object_unbox(value));
 }
 
 const char *type_name(MonoObject *object) {
   MonoClass *klass = object ? mono_object_get_class(object) : nullptr;
   return klass ? mono_class_get_name(klass) : "?";
 }
-
-/* ---- the pointer on screen -------------------------------------------------- */
 
 /* The system web browser's own pointers: an arrow, and a hand over something
    that can be chosen. 48x56 with their outline and shadow; the hot spot is
@@ -174,18 +150,12 @@ bool s_drawn_hand = false;
 bool s_drawn_visible = false;
 float s_drawn_x = -1.0f, s_drawn_y = -1.0f;
 
-bool retain(MonoObject *, void *) { return true; } /* held by s_arrow/s_hand */
-
-MonoObject *target(uint32_t handle) {
-  return handle ? mono_gchandle_get_target(handle) : nullptr;
-}
+bool already_held(MonoObject *, void *) { return true; } /* by s_arrow/s_hand */
 
 void drop_pointer() {
-  for (uint32_t *handle : {&s_arrow, &s_hand, &s_root})
-    if (*handle) {
-      mono_gchandle_free(*handle);
-      *handle = 0;
-    }
+  Reflect::Release(s_arrow);
+  Reflect::Release(s_hand);
+  Reflect::Release(s_root);
   s_drawn_visible = false;
 }
 
@@ -195,7 +165,7 @@ void drop_pointer() {
 MonoObject *overlay_root() {
   if (MonoObject *root = AniketosShell::HostRoot())
     return root;
-  static AniketosShell::ShellContext context;
+  static AniketosShell::HostScene context;
   static bool context_ready = false;
   static int retry_frames = 0;
   if (!context_ready) {
@@ -208,8 +178,7 @@ MonoObject *overlay_root() {
     if (!context_ready)
       return nullptr;
   }
-  MonoObject *known = target(s_root);
-  if (known)
+  if (MonoObject *known = Reflect::Target(s_root))
     return known; /* still alive: no need to look it up again */
   if (retry_frames-- > 0)
     return nullptr;
@@ -223,8 +192,8 @@ MonoObject *overlay_root() {
 bool ensure_pointer() {
   if (!s_pui_tried) {
     s_pui_tried = true;
-    if (!Pui::Resolve(s_pui, getDLLimage("Sce.PlayStation.PUI.dll"), retain,
-                      nullptr) ||
+    if (!Pui::Resolve(s_pui, getDLLimage("Sce.PlayStation.PUI.dll"),
+                      already_held, nullptr) ||
         !s_pui.image_box)
       LOG_WARN("[MOUSE] PUI image class not found");
   }
@@ -233,29 +202,31 @@ bool ensure_pointer() {
   MonoObject *root = overlay_root();
   if (!root)
     return false;
-  if (target(s_root) == root && target(s_arrow) && target(s_hand))
+  if (Reflect::Target(s_root) == root && Reflect::Target(s_arrow) &&
+      Reflect::Target(s_hand))
     return true;
   drop_pointer();
   MonoObject *arrow = Pui::CreateSystemImage(s_pui, root, "id_aniketos_mouse_arrow",
                                              kArrowIcon);
   MonoObject *hand =
       Pui::CreateSystemImage(s_pui, root, "id_aniketos_mouse_hand", kHandIcon);
-  if (!arrow || !hand)
+  if (!arrow || !hand) {
+    /* tried again next frame: leave no image behind each time */
+    Pui::Remove(s_pui, arrow);
+    Pui::Remove(s_pui, hand);
     return false;
-  s_arrow = mono_gchandle_new(arrow, 0);
-  s_hand = mono_gchandle_new(hand, 0);
-  s_root = mono_gchandle_new_weakref(root, 0);
+  }
+  Reflect::Hold(s_arrow, arrow, true);
+  Reflect::Hold(s_hand, hand, true);
+  Reflect::Hold(s_root, root);
   bool no = false;
   void *arguments[1] = {&no};
   call(arrow, "set_Focusable", 1, arguments);
   call(hand, "set_Focusable", 1, arguments);
-  bool ok = false;
-  if (MonoObject *width = call(root, "get_Width", 0, nullptr, &ok); ok && width)
-    s_width = std::max(*static_cast<float *>(mono_object_unbox(width)), 640.0f);
-  if (MonoObject *height = call(root, "get_Height", 0, nullptr, &ok);
-      ok && height)
-    s_height =
-        std::max(*static_cast<float *>(mono_object_unbox(height)), 360.0f);
+  Reflect::FloatProperty(root, "get_Width", &s_width);
+  Reflect::FloatProperty(root, "get_Height", &s_height);
+  s_width = std::max(s_width, 640.0f);
+  s_height = std::max(s_height, 360.0f);
   s_drawn_x = s_drawn_y = -1.0f;
   LOG_INFO("[MOUSE] pointer placed (%.0fx%.0f)", s_width, s_height);
   return true;
@@ -263,11 +234,11 @@ bool ensure_pointer() {
 
 /* Kept above whatever else the layer shows (the Shell Menu, notices). */
 void raise_pointer() {
-  MonoObject *root = target(s_root);
+  MonoObject *root = Reflect::Target(s_root);
   if (!root)
     return;
   for (const uint32_t handle : {s_arrow, s_hand}) {
-    MonoObject *widget = target(handle);
+    MonoObject *widget = Reflect::Target(handle);
     if (!widget)
       continue;
     call(widget, "RemoveFromParent", 0, nullptr);
@@ -278,7 +249,7 @@ void raise_pointer() {
 
 /* Writes only what changed: two setters while it moves. */
 void draw_pointer(float x, float y, bool visible, bool hand) {
-  MonoObject *arrow = target(s_arrow), *finger = target(s_hand);
+  MonoObject *arrow = Reflect::Target(s_arrow), *finger = Reflect::Target(s_hand);
   if (!arrow || !finger)
     return;
   if (visible == s_drawn_visible && hand == s_drawn_hand && x == s_drawn_x &&
@@ -292,16 +263,14 @@ void draw_pointer(float x, float y, bool visible, bool hand) {
   } else {
     MonoObject *shown = hand ? finger : arrow;
     const float hot_x = hand ? kHandHotX : kArrowHotX;
-    AniketosUI::MonoFast::Set(s_pui.image_box, shown, "X", x - hot_x);
-    AniketosUI::MonoFast::Set(s_pui.image_box, shown, "Y", y - kHotY);
+    AniketosUI::MonoPropertyCache::Set(s_pui.image_box, shown, "X", x - hot_x);
+    AniketosUI::MonoPropertyCache::Set(s_pui.image_box, shown, "Y", y - kHotY);
   }
   s_drawn_visible = visible;
   s_drawn_hand = hand;
   s_drawn_x = x;
   s_drawn_y = y;
 }
-
-/* ---- what is under the pointer --------------------------------------------- */
 
 struct Vector2 {
   float x, y;
@@ -322,8 +291,6 @@ MonoObject *selectable_at(MonoObject *scene, float x, float y) {
   }
   return nullptr;
 }
-
-/* ---- state ------------------------------------------------------------------ */
 
 float s_x = 960.0f, s_y = 540.0f;
 uint64_t s_last_activity_ms = 0;
@@ -354,13 +321,6 @@ std::atomic<bool> s_active{false}; /* the pointer is in use: GetData listens */
 std::atomic<bool> s_circle_is_enter{false};
 CaptureSink s_sink = nullptr;
 
-uint64_t now_ms() {
-  timespec now{};
-  clock_gettime(CLOCK_MONOTONIC, &now);
-  return static_cast<uint64_t>(now.tv_sec) * 1000u +
-         static_cast<uint64_t>(now.tv_nsec) / 1000000u;
-}
-
 uint32_t confirm_buttons() {
   return Enter | (s_circle_is_enter.load() ? Circle : Cross);
 }
@@ -385,28 +345,19 @@ void release_all() {
     s_pad_up.fetch_or(held);
   s_confirm_held = false;
   s_confirm_release_frames = 0;
-  if (s_click_target) {
-    mono_gchandle_free(s_click_target);
-    s_click_target = 0;
-  }
-}
-
-void set_weak(uint32_t &handle, MonoObject *object) {
-  if (handle)
-    mono_gchandle_free(handle);
-  handle = object ? mono_gchandle_new_weakref(object, 0) : 0;
+  Reflect::Release(s_click_target);
 }
 
 /* What is under the pointer now; selects it when `select` is set. */
 MonoObject *test_under_pointer(bool select) {
   s_tested_x = s_x;
   s_tested_y = s_y;
-  s_last_test_ms = now_ms();
+  s_last_test_ms = AniketosUI::MonotonicMs();
   MonoObject *scene = SystemDialogs::FocusedScene();
   MonoObject *widget = scene ? selectable_at(scene, s_x, s_y) : nullptr;
   s_over_selectable = widget != nullptr;
-  if (widget != target(s_hovered)) {
-    set_weak(s_hovered, widget);
+  if (widget != Reflect::Target(s_hovered)) {
+    Reflect::Hold(s_hovered, widget);
     if (widget)
       LOG_INFO("[MOUSE] over %s in %s at %.0f,%.0f", type_name(widget),
                type_name(scene), s_x, s_y);
@@ -437,7 +388,7 @@ void start_click() {
   MonoObject *widget = test_under_pointer(true);
   if (!widget)
     return; /* nothing to choose there: a click on empty space does nothing */
-  set_weak(s_click_target, widget);
+  Reflect::Hold(s_click_target, widget);
   s_click_frames = 0;
   s_click_released = false;
 }
@@ -451,7 +402,7 @@ void advance_click() {
   }
   if (!s_click_target)
     return;
-  MonoObject *widget = target(s_click_target);
+  MonoObject *widget = Reflect::Target(s_click_target);
   const bool focused = widget && bool_property(widget, "get_Focused");
   if (focused) {
     press(confirm_buttons());
@@ -466,14 +417,14 @@ void advance_click() {
     LOG_INFO("[MOUSE] click dropped: %s did not take the focus",
              type_name(widget));
   }
-  mono_gchandle_free(s_click_target);
-  s_click_target = 0;
+  Reflect::Release(s_click_target);
 }
 
 /* The mouse's buttons, as the controller's. */
-void follow_buttons(uint32_t now, uint32_t went_down) {
-  const uint32_t came_up = s_buttons & ~now;
-  s_buttons = now;
+void follow_buttons(uint32_t held, uint32_t went_down) {
+  /* a press and its release in one read are both counted, or the press sticks */
+  const uint32_t came_up = (s_buttons | went_down) & ~held;
+  s_buttons = held;
   if (went_down & (kLeft | kSideForward))
     start_click();
   if (came_up & (kLeft | kSideForward)) {
@@ -486,7 +437,7 @@ void follow_buttons(uint32_t now, uint32_t went_down) {
   }
   if (went_down & (kRight | kSideBack))
     press(back_buttons());
-  if ((came_up & (kRight | kSideBack)) && !(now & (kRight | kSideBack)))
+  if ((came_up & (kRight | kSideBack)) && !(held & (kRight | kSideBack)))
     release(back_buttons());
   if (went_down & kMiddle)
     press(Option);
@@ -551,7 +502,7 @@ void Tick() {
     went_down |= sample.buttons & ~buttons;
     buttons = sample.buttons;
   }
-  const uint64_t now = now_ms();
+  const uint64_t now = AniketosUI::MonotonicMs();
   /* a game, or the screen a game is on, has the mouse: nothing of ours */
   if (intercepted || (count > 0 && !connected) ||
       AniketosShell::CheatsMenu::GameHasFocus()) {
@@ -562,7 +513,7 @@ void Tick() {
   if (dx || dy || wheel || tilt || went_down || buttons != s_buttons)
     s_last_activity_ms = now;
   if (s_sink) {
-    s_sink(buttons & 0xff, went_down & 0xff, wheel, tilt, dx, dy);
+    s_sink(buttons & 0xff, went_down & 0xff, wheel, tilt);
     s_buttons = buttons;
     return;
   }
@@ -588,11 +539,6 @@ void Tick() {
         std::clamp(s_y + static_cast<float>(dy) * speed, 0.0f, s_height - 1.0f);
     s_last_move_ms = now;
   }
-  if (wheel)
-    s_wheel.fetch_add(wheel);
-  if (tilt)
-    s_tilt.fetch_add(tilt);
-
   const bool visible = now - s_last_activity_ms < kHideAfterMs;
   if (visible && --s_raise_frames <= 0) {
     s_raise_frames = 60;
@@ -601,9 +547,14 @@ void Tick() {
   draw_pointer(s_x, s_y, visible, s_over_selectable);
   /* the open Shell Menu has the controller; leave the screen under it be */
   if (AniketosShell::ShouldSuppressShellInput()) {
+    release_all(); /* follow_buttons will not see the button come up */
     s_buttons = buttons;
     return;
   }
+  if (wheel)
+    s_wheel.fetch_add(wheel);
+  if (tilt)
+    s_tilt.fetch_add(tilt);
   follow_buttons(buttons, went_down);
   follow_pointer(now);
   advance_click();

@@ -8,7 +8,6 @@ namespace {
 
 using analog::Clamp;
 
-constexpr int kBytes = (kInputCount + 7) / 8;
 constexpr uint16_t kDefaultTapMs = 200, kDefaultLongMs = 400,
                    kDefaultDoubleMs = 250, kDefaultPulseMs = 60;
 constexpr uint16_t kDefaultSmoothingMs = 12;
@@ -16,8 +15,6 @@ constexpr uint16_t kDefaultMoveThreshold = 1500; /* counts/s */
 constexpr uint64_t kNever = ~0ull;
 
 uint64_t Ms(uint16_t v, uint16_t def) { return uint64_t(v ? v : def) * 1000u; }
-
-bool Bit(const uint8_t *bits, int i) { return bits[i >> 3] & (1u << (i & 7)); }
 
 void SetBit(uint8_t *bits, int i, bool on) {
   if (on)
@@ -334,8 +331,8 @@ void Engine::Tick(const InputFrame &in, PadState *out) {
   }
   const ProfileBlob &p = *p_;
 
-  /* ---- 1. this read's inputs ---------------------------------------- */
-  __builtin_memcpy(down_, in.down, kBytes);
+  /* 1. this read's inputs */
+  __builtin_memcpy(down_, in.down, kInputBytes);
   SetBit(down_, kInputNone, false);
   for (int i = 0; i < kWheelInputs; ++i) {
     SetBit(down_, kWheelUp + i, false);
@@ -385,10 +382,10 @@ void Engine::Tick(const InputFrame &in, PadState *out) {
   }
 
   if (resync_) {
-    __builtin_memcpy(prev_, down_, kBytes);
+    __builtin_memcpy(prev_, down_, kInputBytes);
     resync_ = false;
   }
-  for (int i = 0; i < kBytes; ++i) {
+  for (int i = 0; i < kInputBytes; ++i) {
     pressed_[i] = uint8_t(down_[i] & ~prev_[i]);
     released_[i] = uint8_t(prev_[i] & ~down_[i]);
   }
@@ -399,14 +396,14 @@ void Engine::Tick(const InputFrame &in, PadState *out) {
       in_[i].release_us = now;
     }
 
-  /* ---- 2. suspend ----------------------------------------------------- */
+  /* 2. suspend */
   const int sk = p.suspend_key;
   if (sk != kInputNone && sk < kInputCount && Pressed(sk)) {
     if (!suspended_)
       suspend_mask_ = layer_mask_;
     suspended_ = !suspended_;
     ReleaseAll();
-    __builtin_memcpy(prev_, down_, kBytes);
+    __builtin_memcpy(prev_, down_, kInputBytes);
     resync_ = false; /* prev_ is current: the next press counts */
     *out = o;        /* active = 0 */
     return;
@@ -427,13 +424,13 @@ void Engine::Tick(const InputFrame &in, PadState *out) {
       suspended_ = false;
       ReleaseAll();
     }
-    __builtin_memcpy(prev_, down_, kBytes);
+    __builtin_memcpy(prev_, down_, kInputBytes);
     resync_ = false;
     *out = o; /* active = 0 */
     return;
   }
 
-  /* ---- 3./4. resolve presses, gestures, modes ------------------------- */
+  /* 3./4. resolve presses, gestures, modes */
 
   const uint8_t layer_bits = uint8_t((1u << layer_count_) - 1u);
   uint8_t mask = uint8_t((1u | layer_toggled_ | layer_hold_) & layer_bits);
@@ -475,7 +472,7 @@ void Engine::Tick(const InputFrame &in, PadState *out) {
     mouse_layer_ = mouse_layer;
   }
 
-  /* ---- 5. outputs ----------------------------------------------------- */
+  /* 5. outputs */
   /* opposing keys per axis, side 0 negative, 1 positive */
   bool side_on[4][2] = {};
   uint64_t side_last[4][2] = {}, side_first[4][2] = {{kNever, kNever}, {kNever, kNever},
@@ -567,7 +564,7 @@ void Engine::Tick(const InputFrame &in, PadState *out) {
     suspend_mask_ = layer_mask_;
     suspended_ = true;
     ReleaseAll();
-    __builtin_memcpy(prev_, down_, kBytes);
+    __builtin_memcpy(prev_, down_, kInputBytes);
     resync_ = false;
     *out = o; /* active = 0 */
     return;
@@ -654,7 +651,7 @@ void Engine::Tick(const InputFrame &in, PadState *out) {
               o.ry != 128 || o.l2 || o.r2)
                  ? 1
                  : 0;
-  __builtin_memcpy(prev_, down_, kBytes);
+  __builtin_memcpy(prev_, down_, kInputBytes);
   *out = o;
 }
 

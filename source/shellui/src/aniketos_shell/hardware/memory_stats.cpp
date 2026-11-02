@@ -1,7 +1,5 @@
 #include "aniketos_shell/hardware/memory_stats.hpp"
 
-#include <onion/log.h>
-
 #include <array>
 #include <cstdint>
 #include <mutex>
@@ -23,43 +21,26 @@ constexpr int kVmLast = 3;
 constexpr int kTypeCpu = 1;
 constexpr int kTypeGpu = 2;
 
-struct Domain {
-  bool valid = false;
-  int vm = -1;
-  int type = -1;
-  Stats stats{};
-};
+constexpr uint64_t kMegabyte = 1024u * 1024u;
+
+using PoolList = std::array<Stats, kVmLast - kVmFirst + 1>;
 
 bool valid(int total_mb, int free_mb) {
   return total_mb > 0 && free_mb >= 0 && free_mb <= total_mb;
 }
 
-Domain query(int vm, int type) {
-  Domain result{};
-  result.vm = vm;
-  result.type = type;
+Stats query(int vm, int type) {
+  Stats result{};
   int total_mb = 0;
   int free_mb = 0;
   const int rc = get_page_table_stats(vm, type, &total_mb, &free_mb);
   if (rc != 0 || !valid(total_mb, free_mb))
     return result;
   result.valid = true;
-  result.stats.valid = true;
-  result.stats.total_mb = total_mb;
-  result.stats.free_mb = free_mb;
-  result.stats.used_mb = total_mb - free_mb;
+  result.total_mb = total_mb;
+  result.free_mb = free_mb;
+  result.used_mb = total_mb - free_mb;
   return result;
-}
-
-Domain largest(const std::array<Domain, kVmLast - kVmFirst + 1> &domains) {
-  Domain best{};
-  for (const Domain &candidate : domains) {
-    if (!candidate.valid)
-      continue;
-    if (!best.valid || candidate.stats.total_mb > best.stats.total_mb)
-      best = candidate;
-  }
-  return best;
 }
 
 bool better_system_candidate(const Stats &candidate, bool candidate_pair,
@@ -86,47 +67,45 @@ bool read_physical_system(Stats &out) {
   out = {};
   /* Some retail firmwares reject hw.physmem and print a kernel warning for
    * every attempt. The permission is fixed for this process, so probe once and
-   * cache either the valid system-wide result or the unsupported outcome. */
+   * remember the total; zero marks this source as unsupported. */
   static std::mutex cache_mutex;
   static bool probed = false;
-  static Stats cached{};
+  static uint64_t total_mb = 0;
+  static uint64_t page_size = 0;
   std::lock_guard<std::mutex> lock(cache_mutex);
-  if (probed) {
-    out = cached;
-    return cached.valid;
+  if (!probed) {
+    probed = true;
+    uint64_t physical_bytes = 0;
+    /* Reject missing, partial, or plainly implausible sysctl results instead
+     * of displaying a bogus total. This is a sanity range, not a hardware
+     * offset. */
+    if (read_unsigned_sysctl("hw.physmem", physical_bytes) &&
+        read_unsigned_sysctl("hw.pagesize", page_size) && page_size != 0 &&
+        physical_bytes / kMegabyte >= 1024u &&
+        physical_bytes / kMegabyte <= 131072u)
+      total_mb = physical_bytes / kMegabyte;
   }
-  probed = true;
 
-  uint64_t physical_bytes = 0;
   uint64_t free_pages = 0;
-  uint64_t page_size = 0;
-  if (!read_unsigned_sysctl("hw.physmem", physical_bytes) ||
+  if (total_mb == 0 ||
       !read_unsigned_sysctl("vm.stats.vm.v_free_count", free_pages) ||
-      !read_unsigned_sysctl("hw.pagesize", page_size) || page_size == 0 ||
-      free_pages > UINT64_MAX / page_size)
+      free_pages > UINT64_MAX / page_size ||
+      (free_pages * page_size) / kMegabyte > total_mb) {
+    total_mb = 0;
     return false;
+  }
 
-  constexpr uint64_t kMegabyte = 1024u * 1024u;
-  const uint64_t total_mb = physical_bytes / kMegabyte;
-  const uint64_t free_mb = (free_pages * page_size) / kMegabyte;
-  /* Reject missing, partial, or plainly implausible sysctl results instead of
-   * displaying a bogus total. This is a sanity range, not a hardware offset. */
-  if (total_mb < 1024u || total_mb > 131072u || free_mb > total_mb)
-    return false;
-
-  cached = {};
-  cached.valid = true;
-  cached.whole_system_memory = true;
-  cached.total_mb = static_cast<int>(total_mb);
-  cached.free_mb = static_cast<int>(free_mb);
-  cached.used_mb = cached.total_mb - cached.free_mb;
-  out = cached;
+  out.valid = true;
+  out.whole_system_memory = true;
+  out.total_mb = static_cast<int>(total_mb);
+  out.free_mb = static_cast<int>((free_pages * page_size) / kMegabyte);
+  out.used_mb = out.total_mb - out.free_mb;
   return true;
 }
 
 bool read_page_table_pool(Stats &out) {
-  std::array<Domain, kVmLast - kVmFirst + 1> cpu{};
-  std::array<Domain, kVmLast - kVmFirst + 1> gpu{};
+  PoolList cpu{};
+  PoolList gpu{};
   for (int vm = kVmFirst; vm <= kVmLast; ++vm) {
     cpu[static_cast<size_t>(vm - kVmFirst)] = query(vm, kTypeCpu);
     gpu[static_cast<size_t>(vm - kVmFirst)] = query(vm, kTypeGpu);
@@ -139,8 +118,8 @@ bool read_page_table_pool(Stats &out) {
     Stats candidate{};
     candidate.valid = true;
     candidate.whole_system_memory = true;
-    candidate.total_mb = cpu[index].stats.total_mb + gpu[index].stats.total_mb;
-    candidate.free_mb = cpu[index].stats.free_mb + gpu[index].stats.free_mb;
+    candidate.total_mb = cpu[index].total_mb + gpu[index].total_mb;
+    candidate.free_mb = cpu[index].free_mb + gpu[index].free_mb;
     candidate.used_mb = candidate.total_mb - candidate.free_mb;
     if (better_system_candidate(candidate, true, out, best_pair)) {
       out = candidate;
@@ -148,23 +127,17 @@ bool read_page_table_pool(Stats &out) {
     }
   }
 
-  for (const Domain &candidate : cpu) {
-    if (candidate.valid &&
-        better_system_candidate(candidate.stats, false, out, best_pair)) {
-      out = candidate.stats;
-      best_pair = false;
-    }
-  }
-
-  if (!out.valid) {
-    for (const Domain &candidate : gpu) {
-      if (candidate.valid &&
-          better_system_candidate(candidate.stats, false, out, best_pair)) {
-        out = candidate.stats;
+  const auto consider_single_pools = [&](const PoolList &pools) {
+    for (const Stats &candidate : pools) {
+      if (better_system_candidate(candidate, false, out, best_pair)) {
+        out = candidate;
         best_pair = false;
       }
     }
-  }
+  };
+  consider_single_pools(cpu);
+  if (!out.valid)
+    consider_single_pools(gpu);
   return out.valid;
 }
 
@@ -189,15 +162,6 @@ bool ReadSystem(Stats &out) {
     return true;
   }
   return false;
-}
-
-bool ReadGraphics(Stats &out) {
-  out = {};
-  std::array<Domain, kVmLast - kVmFirst + 1> gpu{};
-  for (int vm = kVmFirst; vm <= kVmLast; ++vm)
-    gpu[static_cast<size_t>(vm - kVmFirst)] = query(vm, kTypeGpu);
-  out = largest(gpu).stats;
-  return out.valid;
 }
 
 } // namespace AniketosShell::Memory

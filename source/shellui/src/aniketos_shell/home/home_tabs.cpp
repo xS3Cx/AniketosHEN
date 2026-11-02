@@ -1,62 +1,33 @@
 #include "aniketos_shell/home/home_tabs.hpp"
+
 #include "aniketos_shell/home/home_bookmark.hpp"
-#include "aniketos_shell/home/hidden_apps.hpp"
-
-#include "hooked_funcs.hpp"
+#include "aniketos_shell/home/home_rows.hpp"
 #include "aniketos_shell/system_ui/system_dialogs.hpp"
-#include "toolbox_i18n.hpp"
-#include "ps5/kernel.h"
 #include "aniketos_theme/clock/shell_clock.hpp"
+#include "aniketos_ui/mono_reflect.hpp"
+#include "hooked_funcs.hpp"
+#include "toolbox_i18n.hpp"
 
-#include <onion/detour.h>
-#include <onion/distribution.h>
 #include <onion/log.h>
 #include <onion/settings.hpp>
 
 #include <algorithm>
-#include <atomic>
-#include <cctype>
 #include <cmath>
-#include <cstdio>
-#include <cstring>
-#include <dirent.h>
 #include <ctime>
 #include <mutex>
 #include <string>
-#include <sys/stat.h>
 #include <vector>
 
-extern int g_libmono_handle;
 extern onion::Settings g_settings;
 
 namespace HomeTabs {
 namespace {
 
+namespace Reflect = AniketosUI::Reflect;
 
-/* Words that mark an installed title as an emulator. More titles can be
-   listed by id, one per line, in <data>/emulators.txt ("!ID" leaves one out). */
-constexpr const char *kEmulatorWords[] = {
-    "emu",     "retroarch", "snes",   "nes9",   "pcsx",   "sx2",   "dolphin",
-    "ppsspp",  "eden",      "yuzu",   "ryujinx", "citra", "mame",  "x360",
-    "xenia",   "duckstation", "flycast", "mgba", "vita3k", "rpcs3",
-    "scummvm", "dosbox",    "mednafen", "mupen", "desmume", "genesis",
-};
-
-struct Emulator {
-  std::string title_id;
-  std::string name;
-};
-
-MonoImage *s_pui = nullptr;
-using BuildWhere = MonoString *(*)(MonoObject *, MonoObject *);
-BuildWhere s_build_where_original = nullptr;
-
+bool s_installed = false;
 uint32_t s_switcher = 0; /* React's 'space-switcher' focus layer */
-std::vector<Emulator> s_emulators;
-std::string s_filter_sql; /* "'ID','ID',..." of the emulators */
 int s_search_countdown = 0;
-/* The Home that is up has the Emulators tab (set by home_js). */
-std::atomic<bool> s_emulators_tab{false};
 
 struct TabPanel {
   uint32_t handle = 0;
@@ -97,341 +68,28 @@ int s_renaming = -1;       /* the tab whose prompt is open (UI thread) */
 std::mutex s_names_mutex;
 std::string s_tab_names[2];
 
-/* ---- small reflection helpers ------------------------------------------ */
-
-MonoObject *target(uint32_t handle) {
-  return handle ? mono_gchandle_get_target(handle) : nullptr;
-}
-
-void keep(uint32_t &handle, MonoObject *object, bool strong = false) {
-  if (handle)
-    mono_gchandle_free(handle);
-  handle = !object ? 0
-           : strong ? mono_gchandle_new(object, 0)
-                    : mono_gchandle_new_weakref(object, 0);
-}
-
-MonoMethod *method_of(MonoObject *object, const char *name, int parameters) {
-  for (MonoClass *k = mono_object_get_class(object); k;
-       k = mono_class_get_parent(k))
-    if (MonoMethod *method =
-            mono_class_get_method_from_name(k, name, parameters))
-      return method;
-  return nullptr;
-}
-
 MonoObject *get(MonoObject *object, const char *getter) {
-  MonoMethod *method = object ? method_of(object, getter, 0) : nullptr;
-  if (!method)
-    return nullptr;
-  MonoObject *exception = nullptr;
-  MonoObject *value = mono_runtime_invoke(method, object, nullptr, &exception);
-  return exception ? nullptr : value;
+  MonoObject *value = nullptr;
+  return Reflect::Call(object, getter, 0, nullptr, &value) ? value : nullptr;
 }
 
 void set(MonoObject *object, const char *setter, void *value) {
-  MonoMethod *method = object ? method_of(object, setter, 1) : nullptr;
-  if (!method)
-    return;
   void *args[1] = {value};
-  MonoObject *exception = nullptr;
-  mono_runtime_invoke(method, object, args, &exception);
+  Reflect::Call(object, setter, 1, args);
 }
-
-
-float get_float(MonoObject *object, const char *getter) {
-  MonoObject *boxed = get(object, getter);
-  return boxed ? *static_cast<float *>(mono_object_unbox(boxed)) : 0.0f;
-}
-
 
 void set_float(MonoObject *object, const char *setter, float value) {
   set(object, setter, &value);
 }
 
-
-
-
-std::string text_of(MonoObject *managed) {
-  if (!managed)
-    return {};
-  const char *utf = mono_string_to_utf8(reinterpret_cast<MonoString *>(managed));
-  std::string text = utf ? utf : "";
-  if (utf && mono_free)
-    mono_free(const_cast<char *>(utf));
-  return text;
+std::string text_property(MonoObject *object, const char *getter) {
+  return Mono_to_String(reinterpret_cast<MonoString *>(get(object, getter)));
 }
-
-
-
-
-/* ---- installed emulators ----------------------------------------------- */
-
-std::string lower(std::string text) {
-  for (char &c : text)
-    c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-  return text;
-}
-
-std::string read_title_name(const std::string &title_id) {
-  const std::string path = "/user/app/" + title_id + "/sce_sys/param.json";
-  FILE *file = std::fopen(path.c_str(), "rb");
-  if (!file)
-    return {};
-  std::string json(64 * 1024, '\0');
-  json.resize(std::fread(json.data(), 1, json.size(), file));
-  std::fclose(file);
-  size_t at = json.find("\"titleName\"");
-  if (at == std::string::npos)
-    return {};
-  at = json.find(':', at);
-  at = at == std::string::npos ? at : json.find('"', at);
-  if (at == std::string::npos)
-    return {};
-  const size_t end = json.find('"', at + 1);
-  return end == std::string::npos ? std::string()
-                                  : json.substr(at + 1, end - at - 1);
-}
-
-void scan_emulators() {
-  s_emulators.clear();
-  std::vector<std::string> listed, excluded;
-  if (FILE *file = std::fopen(ONION_DIST_USER_DATA_ROOT "/emulators.txt", "r")) {
-    char line[64];
-    while (std::fgets(line, sizeof(line), file)) {
-      std::string id(line);
-      while (!id.empty() && std::isspace(static_cast<unsigned char>(id.back())))
-        id.pop_back();
-      if (id.size() == 10 && id[0] == '!')
-        excluded.push_back(id.substr(1));
-      else if (id.size() == 9)
-        listed.push_back(id);
-    }
-    std::fclose(file);
-  }
-  DIR *dir = opendir("/user/app");
-  if (!dir)
-    return;
-  while (dirent *entry = readdir(dir)) {
-    const std::string id = entry->d_name;
-    if (id.size() != 9 || id[0] == '.')
-      continue;
-    if (std::find(excluded.begin(), excluded.end(), id) != excluded.end())
-      continue;
-    const std::string name = read_title_name(id);
-    bool emulator = std::find(listed.begin(), listed.end(), id) != listed.end();
-    const std::string haystack = lower(name);
-    for (const char *word : kEmulatorWords)
-      emulator = emulator || haystack.find(word) != std::string::npos;
-    if (emulator)
-      s_emulators.push_back({id, name.empty() ? id : name});
-  }
-  closedir(dir);
-  std::sort(s_emulators.begin(), s_emulators.end(),
-            [](const Emulator &a, const Emulator &b) {
-              return lower(a.name) < lower(b.name);
-            });
-  LOG_INFO("[HOMETABS] emulators found=%zu", s_emulators.size());
-}
-
-void build_filter() {
-  scan_emulators();
-  s_filter_sql.clear();
-  for (const Emulator &emulator : s_emulators) {
-    /* Title ids go into SQL as literals: letters and digits only. */
-    bool clean = emulator.title_id.size() == 9;
-    for (const char c : emulator.title_id)
-      clean = clean && std::isalnum(static_cast<unsigned char>(c));
-    if (!clean)
-      continue;
-    if (!s_filter_sql.empty())
-      s_filter_sql += ",";
-    s_filter_sql += "'" + emulator.title_id + "'";
-  }
-}
-
-/* ---- the queries behind the tile rows ---------------------------------- */
-
-MonoObject *field_value(MonoObject *object, const char *name) {
-  static MonoObject *(*value_object)(MonoDomain *, MonoClassField *,
-                                     MonoObject *) = nullptr;
-  if (!value_object)
-    value_object = reinterpret_cast<decltype(value_object)>(
-        kernel_dynlib_dlsym(-1, g_libmono_handle,
-                            "mono_field_get_value_object"));
-  for (MonoClass *k = mono_object_get_class(object); k && value_object;
-       k = mono_class_get_parent(k))
-    if (MonoClassField *field = mono_class_get_field_from_name(k, name))
-      return value_object(mono_domain_get(), field, object);
-  return nullptr;
-}
-
-std::string enum_name(MonoObject *boxed) {
-  MonoObject *exception = nullptr;
-  MonoString *shown = boxed ? mono_object_to_string(boxed, &exception) : nullptr;
-  return shown && !exception ? text_of(reinterpret_cast<MonoObject *>(shown))
-                             : std::string();
-}
-
-/* AppBrowseItemAccessor.BuildWhereClause: the WHERE of every list of apps
-   ShellUI shows. Two of them concern us, both made by Home for the "Game"
-   space of its experience switcher:
-     - the Emulators tab's list, which the script in Home marks with a
-       content limit of its own (the database has no such space): its filter
-       becomes the emulators' title ids;
-     - the Games tab's list: the same titles are left out of it, while
-       Home has the Emulators tab to show them.
-   The bookmark tab's list is made like the Emulators one, with a content
-   limit of its own: its filter becomes the bookmark's title ids. The Games
-   and Media rows also get the titles copied or moved into them from a
-   title's Options menu, and lose the ones moved away (HomeBookmark).
-   Every other list is untouched. */
-enum class ListKind { Games, Emulators, Media, MediaOther };
-
-/* Each list once, and again when it changes. */
-void log_list(ListKind kind, const std::string &where) {
-  static std::mutex log_mutex;
-  static std::string logged[4];
-  static int logs[4] = {0, 0, 0, 0};
-  static constexpr const char *kNames[] = {"games", "emulators", "media",
-                                           "other media"};
-  const int at = static_cast<int>(kind);
-  std::lock_guard<std::mutex> lock(log_mutex);
-  if (logged[at] == where || logs[at] >= 8)
-    return;
-  logged[at] = where;
-  ++logs[at];
-  LOG_INFO("[HOMETABS] %s list: %s", kNames[at], where.substr(0, 400).c_str());
-}
-
-/* `where` letting the titles `ids` in as well, as Home shows a title; as it
-   is when there are none or when it is not a WHERE alone. */
-std::string with_added(const std::string &where, const std::string &ids) {
-  const size_t at = where.find("WHERE");
-  if (ids.empty() || at == std::string::npos)
-    return where;
-  std::string upper = where;
-  for (char &c : upper)
-    c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
-  for (const char *clause : {"ORDER BY", "GROUP BY", "LIMIT"})
-    if (upper.find(clause) != std::string::npos)
-      return where;
-  return where.substr(0, at) + "WHERE ((" + where.substr(at + 5) +
-         ") OR (icon.visible = 1 AND icon.titleId IN (" + ids + ") ) ) ";
-}
-
-std::string append_condition(const std::string &where,
-                             const std::string &clause) {
-  if (where.empty())
-    return where;
-  std::string upper = where;
-  for (char &c : upper)
-    c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
-  if (upper.find("WHERE") == std::string::npos)
-    return where;
-  size_t at = std::string::npos;
-  for (const char *bound : {"ORDER BY", "GROUP BY", "LIMIT"}) {
-    const size_t found = upper.find(bound);
-    if (found != std::string::npos && (at == std::string::npos || found < at))
-      at = found;
-  }
-  if (at == std::string::npos)
-    return where + clause;
-  return where.substr(0, at) + clause + where.substr(at);
-}
-
-MonoString *build_where_hook(MonoObject *accessor, MonoObject *binds) {
-  MonoString *where = s_build_where_original
-                          ? s_build_where_original(accessor, binds)
-                          : nullptr;
-  if (!where || !accessor)
-    return where;
-  const std::string space =
-      enum_name(field_value(accessor, "filterTypeDispLocationSpace"));
-  if (space != "Game" && space != "Media")
-    return where;
-  const std::string original = text_of(reinterpret_cast<MonoObject *>(where));
-  const std::string switcher = enum_name(
-      field_value(accessor, "filterTypeDispLocationExperienceSwitcher"));
-  if (switcher != "Display") {
-    if (space == "Media")
-      log_list(ListKind::MediaOther, switcher + ": " + original);
-    return where;
-  }
-  MonoObject *limit = field_value(accessor, "contentLimit");
-  const int32_t content_limit =
-      limit ? *static_cast<int32_t *>(mono_object_unbox(limit)) : 0;
-  const bool emulators_list = content_limit == kEmulatorsContentLimit;
-  using HomeBookmark::Target;
-  if (space == "Media") {
-    std::string changed =
-        with_added(original, HomeBookmark::AddedSql(Target::Media));
-    const std::string hidden = HomeBookmark::HiddenSql(Target::Media);
-    if (!hidden.empty())
-      changed += " AND (icon.titleId NOT IN (" + hidden + ") ) ";
-    const std::string hidden_apps = HomeHidden::SqlList();
-    if (!hidden_apps.empty())
-      changed = append_condition(
-          changed,
-          " AND (icon.titleId NOT IN (" + hidden_apps + ") ) ");
-    log_list(ListKind::Media, changed);
-    return changed == original
-               ? where
-               : mono_string_new(mono_domain_get(), changed.c_str());
-  }
-  /* the bookmark tab's list (HomeBookmark), marked as the Emulators one */
-  if (content_limit == HomeBookmark::kContentLimit) {
-    const std::string bookmarked = HomeBookmark::Where(original);
-    const std::string hidden_apps = HomeHidden::SqlList();
-    const std::string changed =
-        hidden_apps.empty()
-            ? bookmarked
-            : append_condition(bookmarked,
-                               " AND (icon.titleId NOT IN (" + hidden_apps +
-                                   ") ) ");
-    return mono_string_new(mono_domain_get(), changed.c_str());
-  }
-  /* No emulators installed: the Emulators list matches nothing. */
-  const std::string ids = "(" + (s_filter_sql.empty() ? "''" : s_filter_sql) + ")";
-  std::string changed;
-  if (!emulators_list) {
-    /* Without the emulators while they have a tab of their own (installed,
-       switched on, the script in Home), unless copied or moved here, and
-       without the titles moved away; with the ones copied or moved here. */
-    const std::string added = HomeBookmark::AddedSql(Target::Games);
-    std::string left_out;
-    if (!s_filter_sql.empty() && s_emulators_tab)
-      left_out += added.empty()
-                      ? " AND (icon.titleId NOT IN " + ids + " ) "
-                      : " AND (icon.titleId NOT IN " + ids +
-                            " OR icon.titleId IN (" + added + ") ) ";
-    const std::string hidden = HomeBookmark::HiddenSql(Target::Games);
-    if (!hidden.empty())
-      left_out += " AND (icon.titleId NOT IN (" + hidden + ") ) ";
-    changed = with_added(original, added) + left_out;
-  } else if (original.find('?') == std::string::npos) {
-    /* Emulators that are not pinned to Home belong here too, so the
-       condition on where a title is displayed is replaced, not added to. */
-    changed = " WHERE (icon.visible = 1 )  AND (icon.titleId IN " + ids + " ) ";
-  } else {
-    changed = original + " AND (icon.titleId IN " + ids + " ) ";
-  }
-  const std::string hidden_apps = HomeHidden::SqlList();
-  if (!hidden_apps.empty())
-    changed = append_condition(
-        changed, " AND (icon.titleId NOT IN (" + hidden_apps + ") ) ");
-  log_list(emulators_list ? ListKind::Emulators : ListKind::Games, changed);
-  return changed == original
-             ? where
-             : mono_string_new(mono_domain_get(), changed.c_str());
-}
-
-/* ---- the tab bar ------------------------------------------------------- */
 
 MonoObject *find_switcher(MonoObject *widget, int depth, int &budget) {
   if (!widget || depth > 10 || budget-- <= 0)
     return nullptr;
-  if (text_of(get(widget, "get_Name")) == "space-switcher")
+  if (text_property(widget, "get_Name") == "space-switcher")
     return widget;
   MonoObject *child = get(widget, "get_FirstChild");
   for (int guard = 0; child && guard < 32; ++guard) {
@@ -442,7 +100,7 @@ MonoObject *find_switcher(MonoObject *widget, int depth, int &budget) {
   return nullptr;
 }
 
-bool resolve() {
+bool find_tab_bar() {
   MonoObject *root = ShellClock::GetHomeRoot();
   if (!root)
     return false;
@@ -450,15 +108,15 @@ bool resolve() {
   MonoObject *switcher = find_switcher(root, 0, budget);
   if (!switcher)
     return false; /* the clock's scene is not Home (Control Center...) */
-  keep(s_switcher, switcher);
+  Reflect::Hold(s_switcher, switcher);
   for (TabPanel &tab : s_tab_panels)
-    keep(tab.handle, nullptr);
+    Reflect::Release(tab.handle);
   s_tab_panels.clear();
   MonoObject *child = get(switcher, "get_FirstChild");
   for (int guard = 0; child && guard < 8; ++guard) {
     TabPanel panel;
-    panel.handle = mono_gchandle_new_weakref(child, 0);
-    panel.name = text_of(get(child, "get_Name"));
+    Reflect::Hold(panel.handle, child);
+    panel.name = text_property(child, "get_Name");
     s_tab_panels.push_back(panel);
     child = get(child, "get_NextSibling");
   }
@@ -493,25 +151,21 @@ bool stock_tab_of(const std::string &panel_name, StockTab *tab) {
 void fit_tab_panels(const std::string (&captions)[2]) {
   float shift = 0.0f;
   for (TabPanel &tab : s_tab_panels) {
-    MonoObject *panel = target(tab.handle);
+    MonoObject *panel = Reflect::Target(tab.handle);
     if (!panel)
       continue;
-    const float x = get_float(panel, "get_X");
-    const float width = get_float(panel, "get_Width");
+    const float x = Reflect::FloatProperty(panel, "get_X");
+    const float width = Reflect::FloatProperty(panel, "get_Width");
     if (std::fabs(x - tab.written_x) > 0.5f)
       tab.stock_x = x;
     if (std::fabs(width - tab.written_width) > 0.5f)
       tab.stock_width = width;
     MonoObject *label = get(panel, "get_FirstChild");
-    const float label_x = label ? get_float(label, "get_X") : 0.0f;
-    float label_width = label ? get_float(label, "get_Width") : 0.0f;
-    if (label)
-      if (MonoObject *measured = get(label, "GetTextWidth")) {
-        const float text_width =
-            *static_cast<float *>(mono_object_unbox(measured));
-        if (text_width > 8.0f)
-          label_width = text_width;
-      }
+    const float label_x = Reflect::FloatProperty(label, "get_X");
+    float label_width = Reflect::FloatProperty(label, "get_Width");
+    const float text_width = Reflect::FloatProperty(label, "GetTextWidth");
+    if (text_width > 8.0f)
+      label_width = text_width;
     StockTab stock = StockTab::Games;
     const bool renamed = stock_tab_of(tab.name, &stock) &&
                          !captions[index_of(stock)].empty() &&
@@ -538,8 +192,6 @@ void fit_tab_panels(const std::string (&captions)[2]) {
     shift += wanted_width - tab.stock_width;
   }
 }
-
-/* ---- names of the user's for Games and Media --------------------------- */
 
 std::string &name_setting(StockTab tab) {
   return tab == StockTab::Games ? g_settings.home_tab_games_name
@@ -573,7 +225,7 @@ Place place_of(MonoObject *label) {
     if (!node)
       return Place::Unattached;
     StockTab tab = StockTab::Games;
-    const std::string name = text_of(get(node, "get_Name"));
+    const std::string name = text_property(node, "get_Name");
     if (stock_tab_of(name, &tab))
       return tab == StockTab::Games ? Place::Games : Place::Media;
     /* another tab, or the bar itself */
@@ -586,11 +238,20 @@ Place place_of(MonoObject *label) {
 
 bool named_tab(MonoObject *label, StockTab *tab) {
   for (const TabLabel &entry : s_named_labels)
-    if (target(entry.handle) == label) {
+    if (Reflect::Target(entry.handle) == label) {
       *tab = entry.tab;
       return true;
     }
   return false;
+}
+
+void watch_label(std::vector<TabLabel> &labels, MonoObject *label,
+                 StockTab tab) {
+  TabLabel entry;
+  Reflect::Hold(entry.handle, label);
+  entry.tab = tab;
+  if (entry.handle)
+    labels.push_back(entry);
 }
 
 void remember_named(MonoObject *label, StockTab tab) {
@@ -599,23 +260,19 @@ void remember_named(MonoObject *label, StockTab tab) {
     return;
   /* the labels of a Home that is gone first, then the oldest if still full */
   for (size_t i = 0; i < s_named_labels.size();) {
-    MonoObject *other = target(s_named_labels[i].handle);
+    MonoObject *other = Reflect::Target(s_named_labels[i].handle);
     if (other && !ShellClock::IsWidgetDisposed(other)) {
       ++i;
       continue;
     }
-    mono_gchandle_free(s_named_labels[i].handle);
+    Reflect::Release(s_named_labels[i].handle);
     s_named_labels.erase(s_named_labels.begin() + static_cast<long>(i));
   }
   if (s_named_labels.size() >= kMaxNamedLabels) {
-    mono_gchandle_free(s_named_labels.front().handle);
+    Reflect::Release(s_named_labels.front().handle);
     s_named_labels.erase(s_named_labels.begin());
   }
-  TabLabel entry;
-  entry.handle = mono_gchandle_new_weakref(label, 0);
-  entry.tab = tab;
-  if (entry.handle)
-    s_named_labels.push_back(entry);
+  watch_label(s_named_labels, label, tab);
 }
 
 /* The label shows `caption`, sized to it and never cut short (the text hook
@@ -626,7 +283,7 @@ void show_caption(MonoObject *label, StockTab tab,
   if (caption.empty())
     return;
   remember_named(label, tab);
-  if (text_of(get(label, "get_Text")) == caption)
+  if (text_property(label, "get_Text") == caption)
     return;
   bool fit = true;
   set(label, "set_FitWidthToText", &fit);
@@ -646,7 +303,7 @@ void show_caption(MonoObject *label, StockTab tab,
 void name_tab_labels(const std::string (&captions)[2]) {
   for (size_t i = 0; i < s_tab_labels.size();) {
     TabLabel &entry = s_tab_labels[i];
-    MonoObject *label = target(entry.handle);
+    MonoObject *label = Reflect::Target(entry.handle);
     const Place place = label && !ShellClock::IsWidgetDisposed(label)
                             ? place_of(label)
                             : Place::Elsewhere;
@@ -667,7 +324,7 @@ void name_tab_labels(const std::string (&captions)[2]) {
                  static_cast<void *>(label),
                  place == Place::Unattached ? "in no tree" : "elsewhere");
     }
-    mono_gchandle_free(entry.handle);
+    Reflect::Release(entry.handle);
     s_tab_labels.erase(s_tab_labels.begin() + static_cast<long>(i));
   }
 }
@@ -682,7 +339,7 @@ void name_tab_panels(const std::string (&captions)[2]) {
     StockTab stock = StockTab::Games;
     if (!stock_tab_of(tab.name, &stock) || captions[index_of(stock)].empty())
       continue;
-    MonoObject *panel = target(tab.handle);
+    MonoObject *panel = Reflect::Target(tab.handle);
     MonoObject *label = panel ? get(panel, "get_FirstChild") : nullptr;
     if (label && is_label(label))
       show_caption(label, stock, captions[index_of(stock)]);
@@ -710,7 +367,7 @@ void open_rename_prompt(StockTab tab) {
   s_renaming = index_of(tab);
 }
 
-void renamed(bool confirmed, const std::string &typed) {
+void finish_rename(bool confirmed, const std::string &typed) {
   const StockTab tab = s_renaming == 0 ? StockTab::Games : StockTab::Media;
   s_renaming = -1;
   if (!confirmed)
@@ -763,13 +420,46 @@ void rename_tick() {
     bool confirmed = false;
     std::string typed;
     if (SystemDialogs::PollPrompt(&confirmed, &typed))
-      renamed(confirmed, typed);
+      finish_rename(confirmed, typed);
   }
 }
 
-} // namespace
+/* Nothing to show in the Emulators tab: say so, once per arrival on the tab. */
+void emulators_tab_tick() {
+  MonoObject *emulators_tab = nullptr;
+  for (const TabPanel &tab : s_tab_panels) {
+    MonoObject *panel = Reflect::Target(tab.handle);
+    if (panel && tab.name == "space-switcher-emulators")
+      emulators_tab = panel;
+  }
+  static bool was_on_emulators = false;
+  MonoObject *focused = get(emulators_tab, "get_Focused");
+  const bool on_emulators =
+      focused && *static_cast<bool *>(mono_object_unbox(focused));
+  if (on_emulators && !was_on_emulators && !HomeRows::FindEmulators()) {
+    /* A notification, not a dialog: the tab is on the way to the icons on the
+       right of the bar, and a dialog that took the focus back to Games made
+       them unreachable. Not more often than every half minute. */
+    static time_t last_notice = 0;
+    const time_t now = time(nullptr);
+    if (now - last_notice >= 30) {
+      last_notice = now;
+      notify("%s. %s", toolbox_i18n::tr("home_tabs.no_emulators.title"),
+             toolbox_i18n::tr("home_tabs.no_emulators.body"));
+      LOG_INFO("[HOMETABS] no emulators installed: notification sent");
+    }
+  }
+  was_on_emulators = on_emulators;
+}
 
-bool HasEmulators() { return !s_filter_sql.empty(); }
+bool is_under(MonoObject *node, MonoObject *ancestor) {
+  for (; node; node = get(node, "get_Parent"))
+    if (node == ancestor)
+      return true;
+  return false;
+}
+
+} // namespace
 
 bool IconsShown() { return g_settings.home_tab_icons; }
 
@@ -783,38 +473,12 @@ std::string Caption(const char *glyph, const std::string &name) {
   return std::string(glyph) + " " + name;
 }
 
-bool Ready() { return s_build_where_original != nullptr; }
-
 void Install(MonoImage *pui) {
-  if (!pui || s_pui)
+  if (!pui || s_installed)
     return;
-  s_pui = pui;
+  s_installed = true;
   s_label_class = mono_class_from_name(pui, "Sce.PlayStation.PUI.UI3", "Label");
-  if (MonoImage *db = getDLLimage("Sce.Vsh.Accessor.Db.dll")) {
-    MonoClass *accessor = mono_class_from_name(db, "Sce.Vsh.Accessor.Db",
-                                               "AppBrowseItemAccessor");
-    const uint64_t address =
-        accessor ? Get_Address_of_Method(db, accessor, "BuildWhereClause", 1)
-                 : 0;
-    const bool hooked =
-        address &&
-        InstallDetour(address, reinterpret_cast<void *>(&build_where_hook),
-                      reinterpret_cast<void **>(&s_build_where_original));
-    LOG_INFO("[HOMETABS] query hook target=0x%lx installed=%d",
-             static_cast<unsigned long>(address), hooked ? 1 : 0);
-    if (!hooked)
-      s_build_where_original = nullptr;
-  }
-  /* Ready before Home first asks for its lists. Without the query hook
-     there is nothing to fill an Emulators tab with, so none is offered. */
-  if (s_build_where_original)
-    build_filter();
-}
-
-void SetEmulatorsTabShown(bool shown) {
-  s_emulators_tab = shown;
-  LOG_INFO("[HOMETABS] Home starts %s the Emulators tab",
-           shown ? "with" : "without");
+  HomeRows::Install();
 }
 
 std::string TabLabelText(MonoObject *label, StockTab tab,
@@ -829,13 +493,9 @@ std::string TabLabelText(MonoObject *label, StockTab tab,
   if (caption_of(tab).empty() || s_tab_labels.size() >= kMaxTabLabels)
     return {};
   for (const TabLabel &entry : s_tab_labels)
-    if (target(entry.handle) == label)
+    if (Reflect::Target(entry.handle) == label)
       return {};
-  TabLabel entry;
-  entry.handle = mono_gchandle_new_weakref(label, 0);
-  entry.tab = tab;
-  if (entry.handle)
-    s_tab_labels.push_back(entry);
+  watch_label(s_tab_labels, label, tab);
   return {};
 }
 
@@ -880,22 +540,14 @@ bool IsHomeTabLabel(MonoObject *label) {
   MonoObject *home = ShellClock::GetHomeRoot();
   if (!home || ShellClock::IsWidgetDisposed(home))
     return false;
-  bool under_home = false;
-  for (MonoObject *node = label; node; node = get(node, "get_Parent")) {
-    if (node == home) {
-      under_home = true;
-      break;
-    }
-  }
-  if (!under_home)
+  if (!is_under(label, home))
     return false;
-  MonoObject *switcher = target(s_switcher);
+  MonoObject *switcher = Reflect::Target(s_switcher);
   if (switcher && !ShellClock::IsWidgetDisposed(switcher)) {
-    for (MonoObject *node = label; node; node = get(node, "get_Parent"))
-      if (node == switcher)
-        return true;
+    if (is_under(label, switcher))
+      return true;
     for (const TabPanel &tab : s_tab_panels) {
-      MonoObject *panel = target(tab.handle);
+      MonoObject *panel = Reflect::Target(tab.handle);
       if (panel && get(panel, "get_FirstChild") == label)
         return true;
     }
@@ -905,56 +557,24 @@ bool IsHomeTabLabel(MonoObject *label) {
 }
 
 void Tick() {
-  if (!s_pui)
+  if (!s_installed)
     return;
   rename_tick();
   remember_tab_names();
   const std::string captions[2] = {caption_of(StockTab::Games),
                                    caption_of(StockTab::Media)};
   name_tab_labels(captions);
-  MonoObject *switcher = target(s_switcher);
+  MonoObject *switcher = Reflect::Target(s_switcher);
   if (!switcher || ShellClock::IsWidgetDisposed(switcher)) {
     if (--s_search_countdown > 0)
       return;
     s_search_countdown = 90;
-    if (!resolve())
+    if (!find_tab_bar())
       return;
   }
   name_tab_panels(captions);
   fit_tab_panels(captions);
-
-  /* Nothing to show in the Emulators tab: say so, once per arrival on the
-     tab. The list is read again first, in case an emulator has been
-     installed since the last look. */
-  MonoObject *emulators_tab = nullptr;
-  for (const TabPanel &tab : s_tab_panels) {
-    MonoObject *panel = target(tab.handle);
-    if (panel && tab.name == "space-switcher-emulators")
-      emulators_tab = panel;
-  }
-  static bool was_on_emulators = false;
-  MonoObject *focused = emulators_tab ? get(emulators_tab, "get_Focused")
-                                      : nullptr;
-  const bool on_emulators =
-      focused && *static_cast<bool *>(mono_object_unbox(focused));
-  if (on_emulators && !was_on_emulators) {
-    if (s_filter_sql.empty())
-      build_filter();
-    if (s_filter_sql.empty()) {
-      /* A notification, not a dialog: the tab is on the way to the icons on
-         the right of the bar, and a dialog that took the focus back to Games
-         made them unreachable. Not more often than every half minute. */
-      static time_t last_notice = 0;
-      const time_t now = time(nullptr);
-      if (now - last_notice >= 30) {
-        last_notice = now;
-        notify("%s. %s", toolbox_i18n::tr("home_tabs.no_emulators.title"),
-               toolbox_i18n::tr("home_tabs.no_emulators.body"));
-        LOG_INFO("[HOMETABS] no emulators installed: notification sent");
-      }
-    }
-  }
-  was_on_emulators = on_emulators;
+  emulators_tab_tick();
 }
 
 } // namespace HomeTabs

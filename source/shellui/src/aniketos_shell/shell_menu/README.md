@@ -1,23 +1,46 @@
 # Shell Menu implementation partitions
 
-`shell_menu.cpp` owns the frontend state and public lifecycle. The files in
-this directory group the private implementation by responsibility while they
-remain part of the same C++ translation unit:
+`shell_menu.cpp` holds the public lifecycle: bind and release the host, show,
+hide, the per-frame `Tick` and `HandleInput`. It includes the partitions below
+in this order, and they stay one C++ translation unit. A partition that was
+split keeps its file as the ordered list of its parts.
 
-- `background_catalog.inc` — custom background discovery and selection.
+- `state.inc` — constants, enums, `Option`, `Widgets`, every static of the
+  unit, and the coalesced settings save.
+- `background_catalog.inc` — the background folder and the chosen file's place
+  in each file list.
 - `ui_primitives.inc` — Mono/PUI object lifetime and basic widget helpers.
-- `page_model.inc` — page labels, option descriptors, and page construction.
-- `view.inc` — widget creation, layout, overlays, clock, and animations.
-- `option_controls.inc` — the single Appendum-compatible checkbox and slider
-  renderer used by Akari and Anomaly in ShellUI.
-- `anomaly_theme.inc` — presentation-only Anomaly layout and its dedicated
-  under-menu button legend.
-- `apparition_theme.inc` — presentation-only Apparition layout: its layered
-  dark-grey HUD, `#3998FE` accent lines, full-width scroller, title, and
-  compact checkbox treatment are recreated in PUI from CF4x99's reference.
-- `settings_actions.inc` — settings targets, mutations, reset, and actions.
+  - `menu_look.inc` — the active menu style, colours and animation clock.
+  - `text_metrics.inc` — label text measuring.
+- `page_model.inc` — what the pages hold.
+  - `option_format.inc` — labels and value text.
+  - `option_builders.inc` — row builders, the theme list, colour sliders.
+  - `pages.inc` — `build_page` and its page families.
+  - `selection.inc` — selection key, `ensure_selection`, `commit_selection`.
+- `view.inc` — everything drawn.
+  - `widgets.inc` — widget creation; creation order is runtime-sensitive.
+  - `legend.inc` — the open/close legend under the menu.
+  - `option_controls.inc` — the Appendum-compatible checkbox and slider
+    renderer used by Akari and Anomaly.
+  - `anomaly_theme.inc` — the Anomaly layout and its under-menu legend.
+  - `apparition_theme.inc` — the Apparition layout: layered dark-grey HUD,
+    `#3998FE` accent lines, full-width scroller, title and compact checkbox,
+    recreated in PUI from CF4x99's reference.
+  - `menu_view.inc` — laying out the current page.
+  - `overlay.inc` — the Home scene layer and the OSD in it.
+  - `clock_date.inc` — the date under the clock.
+  - `page_transition.inc` — the animation between two pages.
+  - `animations.inc` — open, close and highlight motion.
+- `settings_actions.inc` — what the options do.
+  - `theme_apply.inc` — switching the menu's look.
+  - `option_targets.inc` — which setting each option reads and writes.
+  - `option_groups.inc` — which feature an option belongs to.
+  - `option_change.inc` — Left and Right.
+  - `option_activate.inc` — Cross.
+- `sweety_native.inc` — the same pages drawn by the console's own pop-up menu.
 
-This layout is deliberate. Mono objects are pinned and retained through shared
-handles whose initialization and release order is runtime-sensitive. A later
-refactor can introduce explicit state/view classes and separate translation
-units after this behavior-preserving split has been validated on hardware.
+`easing.cpp` is a separate translation unit: the animation curves.
+
+The single unit is deliberate. Mono objects are pinned and retained through
+shared handles whose initialization and release order is runtime-sensitive.
+Splitting it into real translation units needs a console to validate on.

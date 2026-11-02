@@ -17,10 +17,11 @@
  *    moved to the bookmark asks for its name with a native prompt. A copy
  *    shows in both places; a moved title leaves the stock row it was in
  *    while it shows somewhere else in Home. Nothing is written to the
- *    system's database: the query hook of home_tabs adds the titles to, or
+ *    system's database: the query hook of home_rows adds the titles to, or
  *    leaves them out of, Home's rows;
- *  - the script in Home (home_js) adds the tab the way it adds Emulators,
- *    and the query hook of home_tabs gives its list the bookmark's titles.
+ *  - the script in Home (script_injector) adds the tab the way it adds
+ *    Emulators, and the query hook of home_rows gives its list the bookmark's
+ *    titles.
  *    The tab is there while the bookmark holds a game: Home is reloaded when
  *    it is made, renamed or emptied. The script reads a revision through
  *    Home's registry module, whose Get is hooked here for one key of ours,
@@ -41,8 +42,6 @@ inline constexpr char kGlyph[] = "\xEE\xBE\xAA";
 enum class Target { Games, Media, Bookmark };
 inline constexpr Target kTargets[] = {Target::Games, Target::Media,
                                       Target::Bookmark};
-/* "games", "media", "bookmark": a target in a menu row's id and the log. */
-const char *Key(Target target);
 
 /* Hooks Home's registry module, through which the script follows the
  * bookmark. Without it the bookmark is not offered. */
@@ -53,17 +52,13 @@ bool Enabled();
 bool Allowed(const std::string &title_id);
 /* The bookmark's name; empty while there is none. */
 std::string Name();
-/* A target's name as the tab shows it now (any thread): the user's name
- * for Games or Media, else the system's, or the bookmark's name, empty
- * while there is no bookmark. */
-std::string TargetName(Target target);
 /* A name as typed, made fit for a tab's caption: control characters out,
  * spaces trimmed, cut short at a character boundary. */
 std::string CleanName(const std::string &typed);
 /* The tab belongs in Home: switched on and holding a game. */
 bool Shown();
-/* The tab's WHERE clause, made from Home's for its list. */
-std::string Where(const std::string &where);
+/* The tab's titles as "'ID','ID'" (any thread); empty for none. */
+std::string TitlesSql();
 /* The Home that is starting (set as the script goes in): whether the script
  * is in it, without which the rows stay as the system has them, and whether
  * it has the tab, without which a title moved there stays in its row. */

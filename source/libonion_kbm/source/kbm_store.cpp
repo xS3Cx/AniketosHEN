@@ -29,10 +29,6 @@ using onion_cjson::string_item;
 
 constexpr double kUnit = 32767.0; /* JSON 1.0 == blob 32767 */
 
-void warn(Warnings *w, const std::string &msg) {
-  if (w) w->push_back(msg);
-}
-
 /* Number → integer field, clamped to the field's type (Validate does the
  * real ranges). Absent or non-numeric keeps the current value. */
 template <typename T>
@@ -60,7 +56,7 @@ bool get_enum(const cJSON *o, const char *key, bool (*parse)(const char *, E *),
               E &dst, const std::string &where, Warnings *w) {
   const char *s = string_item(o, key);
   if (!s || parse(s, &dst)) return true;
-  warn(w, where + ": unknown " + key + " '" + s + "'");
+  Warn(w, where + ": unknown " + key + " '" + s + "'");
   return false;
 }
 
@@ -75,7 +71,7 @@ bool unset(const char *name) { return !name || !*name; }
 void parse_output(const cJSON *j, OutputDef *o, const std::string &where, Warnings *w) {
   const char *name = cJSON_IsString(j) ? j->valuestring : string_item(j, "out");
   if (!name || !ParseOutput(name, o)) {
-    warn(w, where + ": unknown output '" + (name ? name : "") + "', kept as is");
+    Warn(w, where + ": unknown output '" + (name ? name : "") + "', kept as is");
     o->raw = raw_json(j);
     return;
   }
@@ -101,13 +97,13 @@ void parse_binding(const cJSON *j, BindingDef *b, const std::string &lwhere, War
   const char *in = string_item(j, "input");
   const std::string where = lwhere + " " + (unset(in) ? "binding" : in);
   bool known = unset(in) || ParseInput(in, &b->input);
-  if (!known) warn(w, where + ": unknown input");
+  if (!known) Warn(w, where + ": unknown input");
   int n = 0;
   const cJSON *m = nullptr;
   cJSON_ArrayForEach(m, item(j, "modifiers")) {
     Input mod = kInputNone;
     if (!cJSON_IsString(m) || !ParseInput(m->valuestring, &mod) || n == kMaxModifiers) {
-      warn(w, where + ": unknown modifier");
+      Warn(w, where + ": unknown modifier");
       known = false;
       break;
     }
@@ -116,7 +112,7 @@ void parse_binding(const cJSON *j, BindingDef *b, const std::string &lwhere, War
   known = get_enum(j, "gesture", ParseGesture, b->gesture, where, w) && known;
   known = get_enum(j, "mode", ParseMode, b->mode, where, w) && known;
   if (!known) {
-    warn(w, where + ": binding kept as is, not used");
+    Warn(w, where + ": binding kept as is, not used");
     b->raw = raw_json(j);
     return;
   }
@@ -140,7 +136,7 @@ void parse_mouse(const cJSON *j, MouseParams &m, bool &inherit, const std::strin
   if (!cJSON_IsObject(j)) return;
   get_bool(j, "inherit", inherit);
   get_enum(j, "mode", ParseMouseMode, m.mode, where, w);
-  if (const char *s = string_item(j, "stick")) m.stick = strcmp(s, "left") == 0 ? 0 : 1;
+  if (const char *s = string_item(j, "stick")) m.stick = strcasecmp(s, "left") == 0 ? 0 : 1;
   get_enum(j, "deadzone_shape", ParseDeadzoneShape, m.deadzone_shape, where, w);
   bool ix = m.invert & 1, iy = m.invert & 2;
   get_bool(j, "invert_x", ix);
@@ -254,11 +250,14 @@ bool read_file(const std::string &path, std::string *out, std::string *error) {
 }
 
 bool write_file(const std::string &path, const std::string &text) {
+  if (text.empty()) return false; /* printing failed: keep the file there is */
   const size_t slash = path.rfind('/');
   if (slash != std::string::npos && slash > 0 && !mkdir_tree(path.substr(0, slash).c_str()))
     return false;
   return write_file_atomic(path.c_str(), text.data(), text.size());
 }
+
+std::string settings_path(const std::string &root) { return root + "/settings.json"; }
 
 } // namespace
 
@@ -313,7 +312,7 @@ bool ProfileFromJson(const char *text, size_t length, Profile *out, Warnings *w,
       s.duration_ms = 60; /* "ms" left out: one short step */
       const char *buttons = string_item(sj, "buttons");
       if (buttons && *buttons && !ParseButtons(buttons, &s.buttons))
-        warn(w, "macro '" + m.name + "': unknown buttons '" + buttons + "'");
+        Warn(w, "macro '" + m.name + "': unknown buttons '" + buttons + "'");
       for (int a = 0; a < 4; ++a)
         if (cJSON_IsNumber(item(sj, kAxisKeys[a]))) {
           get_num(sj, kAxisKeys[a], s.axes[a], kUnit);
@@ -385,7 +384,7 @@ bool SettingsFromJson(const char *text, size_t length, Settings *out, Warnings *
     else if (ParseInput(name, &key) && IsValidSuspendKey(key))
       s.suspend_key = key;
     else
-      warn(w, std::string("suspend key '") + name + "' refused, using " +
+      Warn(w, std::string("suspend key '") + name + "' refused, using " +
                   InputName(kDefaultSuspendKey));
   }
   *out = s;
@@ -412,7 +411,6 @@ std::string TitleProfilePath(const std::string &root, const std::string &id) {
   return IsValidTitleId(id) ? root + "/titles/" + id + ".json" : std::string();
 }
 std::string DefaultProfilePath(const std::string &root) { return root + "/default.json"; }
-std::string SettingsPath(const std::string &root) { return root + "/settings.json"; }
 
 bool LoadProfile(const std::string &path, Profile *out, Warnings *w, std::string *error) {
   std::string text;
@@ -441,7 +439,7 @@ Profile ResolveProfile(const std::string &root, const std::string &title_id, War
     if (path.empty()) continue;
     std::string error;
     if (LoadProfile(path, &p, w, &error)) return p;
-    if (!error.empty()) warn(w, error); /* broken file: say so, fall back */
+    if (!error.empty()) Warn(w, error); /* broken file: say so, fall back */
   }
   return DefaultProfile();
 }
@@ -471,13 +469,13 @@ std::vector<std::string> ListTitleProfiles(const std::string &root) {
 Settings LoadSettings(const std::string &root, Warnings *w) {
   Settings s;
   std::string text;
-  if (read_file(SettingsPath(root), &text, nullptr))
+  if (read_file(settings_path(root), &text, nullptr))
     SettingsFromJson(text.data(), text.size(), &s, w);
   return s;
 }
 
 bool SaveSettings(const std::string &root, const Settings &s) {
-  return write_file(SettingsPath(root), SettingsToJson(s));
+  return write_file(settings_path(root), SettingsToJson(s));
 }
 
 } // namespace onion::kbm

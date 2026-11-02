@@ -1,40 +1,38 @@
 #include "aniketos_shell/rn_scripts/script_injector.hpp"
-#include "aniketos_theme/customization.hpp"
 
+#include "aniketos_shell/games/content_info.hpp"
+#include "aniketos_shell/games/trophy_tools.hpp"
+#include "aniketos_shell/home/hen_menu.hpp"
+#include "aniketos_shell/home/home_bookmark.hpp"
+#include "aniketos_shell/home/home_tabs.hpp"
+#include "aniketos_shell/home/web_tiles.hpp"
+#include "aniketos_shell/rn_scripts/js_string.hpp"
+#include "aniketos_shell/rn_scripts/rn_reload.hpp"
+#include "aniketos_theme/clock/shell_clock.hpp"
+#include "aniketos_theme/customization.hpp"
+#include "aniketos_ui/mono_reflect.hpp"
 #include "hooked_funcs.hpp"
 #include "homeui_top_nav_patch.hpp"
-#include "aniketos_shell/games/content_info.hpp"
-#include "aniketos_shell/home/home_bookmark.hpp"
-#include "aniketos_shell/home/hen_menu.hpp"
-#include "aniketos_shell/home/home_tabs.hpp"
-#include "aniketos_shell/games/trophy_tools.hpp"
-#include "aniketos_shell/home/web_tiles.hpp"
-#include "aniketos_theme/clock/shell_clock.hpp"
 #include "toolbox_i18n.hpp"
 
 #include <onion/detour.h>
 #include <onion/distribution.h>
+#include <onion/fs.h>
 #include <onion/log.h>
-#include <onion/settings.hpp>
 
 #include <algorithm>
 #include <cstdio>
-#include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
 #include <string>
-#include <sys/stat.h>
 #include <unistd.h>
 
-extern onion::Settings g_settings;
-
-namespace HomeJs {
+namespace ScriptInjector {
 namespace {
 
 /* Present while an injection is in flight. If ShellUI dies inside it the
-   file stays, and the next start leaves the JavaScript side alone instead
-   of dying the same way again. */
-constexpr const char *kPending = ONION_DIST_USER_DATA_ROOT "/js_inject_pending";
+   file stays, and the next start counts that as a failed start. */
+constexpr const char *kPending = ONION_DIST_JS_PENDING_PATH;
 /* Present from an injection until the script reports, eight seconds on,
    that Home is running with it. Still there at the next start: Home did not
    get that far. It holds how many starts in a row that has happened, since
@@ -47,8 +45,7 @@ constexpr const char *kPending = ONION_DIST_USER_DATA_ROOT "/js_inject_pending";
    (a HEN reload, a power cut, another module) cost one start, not the
    script for good. "<count> <pause> <left>"; an older file holds the count
    alone. The daemon removes it before a restart it asks for itself. */
-constexpr const char *kUnconfirmed =
-    ONION_DIST_USER_DATA_ROOT "/js_inject_unconfirmed";
+constexpr const char *kUnconfirmed = ONION_DIST_JS_UNCONFIRMED_PATH;
 /* Starts in a row that may end unconfirmed before the script is left out. */
 constexpr int kUnconfirmedStartsAllowed = 2;
 constexpr int kPauseMax = 32;
@@ -64,6 +61,8 @@ using RunScript = void (*)(MonoObject *, MonoObject *);
 RunScript s_run_script_original = nullptr;
 using ConsoleLog = void (*)(MonoString *, int, void *, void *);
 ConsoleLog s_console_log_original = nullptr;
+using FlushQueue = void (*)(MonoString *, void *, void *);
+FlushQueue s_flush_original = nullptr;
 MonoClass *s_executor_class = nullptr;
 bool s_disabled = false;
 /* The record kept in kUnconfirmed, as read at this start. */
@@ -95,27 +94,10 @@ void note_app_start(AppStarts &starts, const char *app,
   }
 }
 
-std::string text_of(MonoObject *managed) {
-  if (!managed)
-    return {};
-  const char *utf = mono_string_to_utf8(reinterpret_cast<MonoString *>(managed));
-  std::string text = utf ? utf : "";
-  if (utf && mono_free)
-    mono_free(const_cast<char *>(utf));
-  return text;
-}
-
 std::string describe(MonoObject *object) {
   MonoObject *exception = nullptr;
-  MonoString *shown = object ? mono_object_to_string(object, &exception)
-                             : nullptr;
-  return shown && !exception ? text_of(reinterpret_cast<MonoObject *>(shown))
-                             : std::string();
-}
-
-bool exists(const char *path) {
-  struct stat st {};
-  return stat(path, &st) == 0;
+  MonoString *shown = mono_object_to_string(object, &exception);
+  return exception ? std::string() : Mono_to_String(shown);
 }
 
 /* The record in kUnconfirmed; a file written before it held one counts once. */
@@ -150,16 +132,16 @@ bool write_unconfirmed(const Unconfirmed &record) {
 
 /* The JS side reports through the executor's own logging hook. */
 void console_log_hook(MonoString *message, int level, void *a, void *b) {
-  const std::string text = text_of(reinterpret_cast<MonoObject *>(message));
+  const std::string text = Mono_to_String(message);
   /* the pages the user keeps stay out of the log */
-  const bool web_tile = text.compare(0, 13, "ANIKETOS:web|") == 0;
+  const bool web_tile = text.starts_with("ANIKETOS:web|");
   if (web_tile)
     WebTiles::HandleScriptMessage(text.substr(13));
-  if (text.compare(0, 8, "ANIKETOS") == 0 && !web_tile) {
+  if (text.starts_with("ANIKETOS") && !web_tile) {
     LOG_INFO("[HOMEJS] js: %s", text.substr(0, 400).c_str());
-    if (text.compare(0, 18, "ANIKETOS web alive") == 0)
+    if (text.starts_with("ANIKETOS web alive"))
       s_browser_starts = {};
-    if (text.compare(0, 14, "ANIKETOS alive") == 0) {
+    if (text.starts_with("ANIKETOS alive")) {
       unlink(kUnconfirmed); /* Home survived with the script in it */
       s_unconfirmed = {};
       AppStarts &starts = text.find("app=control-center") != std::string::npos
@@ -168,10 +150,10 @@ void console_log_hook(MonoString *message, int level, void *a, void *b) {
       starts = {};
     }
     /* the top-bar icon the script added was pressed */
-    if (text.compare(0, 13, "ANIKETOS:menu") == 0)
+    if (text.starts_with("ANIKETOS:menu"))
       HomeMenu::Request();
     /* a choice in the Trophies app's options menu */
-    if (text.compare(0, 16, "ANIKETOS:trophy|") == 0)
+    if (text.starts_with("ANIKETOS:trophy|"))
       TrophyTools::HandleScriptMessage(text.substr(16));
   }
   if (s_console_log_original)
@@ -179,18 +161,8 @@ void console_log_hook(MonoString *message, int level, void *a, void *b) {
 }
 
 bool eval(MonoObject *executor, const char *source, const char *url) {
-  MonoMethod *method = nullptr;
-  void *iter = nullptr;
-  while (MonoMethod *candidate =
-             mono_class_get_methods(s_executor_class, &iter)) {
-    if (std::strcmp(mono_method_get_name(candidate), "EvalScript") != 0)
-      continue;
-    MonoMethodSignature *signature = mono_method_signature(candidate);
-    if (signature && mono_signature_get_param_count(signature) == 2) {
-      method = candidate;
-      break;
-    }
-  }
+  MonoMethod *method =
+      AniketosUI::Reflect::MethodOf(s_executor_class, "EvalScript", 2);
   if (!method) {
     LOG_WARN("[HOMEJS] EvalScript(string, string) not found");
     return false;
@@ -224,6 +196,66 @@ const char *presence_name() {
   }
 }
 
+/* The config ahead of Home's script, and of the same script in the Control
+   Center. */
+std::string home_script_config(bool home, bool emulators, bool bookmark) {
+  const std::string caption = HomeTabs::Caption(
+      HomeTabs::kEmulatorsGlyph, toolbox_i18n::tr("home_tabs.emulators"));
+  /* Games and Media as the bar shows them, for React to lay it out by */
+  std::string games_name, games_glyph, media_name, media_glyph;
+  HomeTabs::ScriptCaption(HomeTabs::StockTab::Games, &games_name, &games_glyph);
+  HomeTabs::ScriptCaption(HomeTabs::StockTab::Media, &media_name, &media_glyph);
+  /* the bookmark has no identity but the user's name: shown as typed, with
+     no glyph of ours (one the user typed shows as typed) */
+  const std::string bookmark_name = HomeBookmark::Name();
+  return std::string("globalThis.__aniketosConfig = {app: ") +
+         (home ? "'home'" : "'control-center'") + ", space: " +
+         (home ? "'emulators'" : "''") +
+         ", emulators: " + (emulators ? "true" : "false") + ", caption: " +
+         JsString(caption) + ", label: " +
+         JsString(toolbox_i18n::tr("home_tabs.emulators")) + ", limit: " +
+         std::to_string(HomeTabs::kEmulatorsContentLimit) +
+         /* the top-bar icon, for a Home the byte patch has no profile for;
+            taken back once that is known */
+         ", icon: " + JsString(home ? AniketosIconPath() : "") +
+         /* the presence dot to show on avatars while not online */
+         ", presence: " + JsString(presence_name()) +
+         /* the custom clock's settings, drawn by the script in Sony's own
+            clock (asked for again while it is up: aniketos.clock) */
+         ", clock: " + ShellClock::ScriptConfig() +
+         /* the bookmark tab: its caption (empty for none) and its name */
+         ", bookmark: " + JsString(bookmark ? bookmark_name : std::string()) +
+         ", bookmarkLabel: " + JsString(bookmark_name) +
+         ", bookmarkLimit: " + std::to_string(HomeBookmark::kContentLimit) +
+         ", bookmarkWatch: " +
+         (home && HomeBookmark::Enabled() ? "true" : "false") +
+         ", stockCaptions: {game: [" + JsString(games_name) + ", " +
+         JsString(games_glyph) + "], media: [" + JsString(media_name) + ", " +
+         JsString(media_glyph) + "]}" +
+         /* the websites kept among the games, asked for again while it is up:
+            aniketos.web_tiles */
+         ", webTiles: " + WebTiles::HomeState() + "};";
+}
+
+bool scripts_allowed() { return !s_disabled && !if_exists(kOff); }
+
+/* The config is built with the in-flight marker up, as the evals are: it
+   reads other modules' state, and dying there counts the same. */
+template <typename BuildConfig>
+bool inject(MonoObject *executor, const std::string &app,
+            BuildConfig build_config, const char *config_url,
+            const char *script, const char *script_url) {
+  const int fd = open(kPending, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  if (fd >= 0)
+    close(fd);
+  const std::string config = build_config();
+  const bool ok = eval(executor, config.c_str(), config_url) &&
+                  eval(executor, script, script_url);
+  unlink(kPending);
+  LOG_INFO("[HOMEJS] injected into '%s' ok=%d", app.c_str(), ok ? 1 : 0);
+  return ok;
+}
+
 void run_script_hook(MonoObject *executor, MonoObject *bundle) {
   MonoMethod *name_getter =
       mono_class_get_method_from_name(s_executor_class, "get_Name", 0);
@@ -231,14 +263,18 @@ void run_script_hook(MonoObject *executor, MonoObject *bundle) {
   MonoObject *name = name_getter ? mono_runtime_invoke(name_getter, executor,
                                                        nullptr, &exception)
                                  : nullptr;
-  const std::string app = exception ? std::string() : text_of(name);
+  const std::string app =
+      exception ? std::string()
+                : Mono_to_String(reinterpret_cast<MonoString *>(name));
+  const auto is_app = [&app](const char *bundle_name) {
+    return app.find(bundle_name) != std::string::npos;
+  };
   bool injected = false;
   LOG_INFO("[HOMEJS] RunScript in '%s'", app.c_str());
-  const bool home = app.find("rnps-home") != std::string::npos;
+  const bool home = is_app("rnps-home");
   /* Home, when the new tab's tile row can be filled; Control Center for the
      presence dot, the custom clock and the browser's full screen. */
-  const bool control_center =
-      app.find("rnps-control-center") != std::string::npos;
+  const bool control_center = is_app("rnps-control-center");
   if (home) {
     shellui_note_home_start();
     note_app_start(s_home_starts, "Home");
@@ -249,8 +285,7 @@ void run_script_hook(MonoObject *executor, MonoObject *bundle) {
      holds a game */
   const bool emulators = home && g_settings.home_tab_emulators;
   const bool bookmark = home && HomeBookmark::Shown();
-  if (!s_disabled && !exists(kOff) &&
-      ((home && HomeTabs::Ready()) || control_center)) {
+  if (scripts_allowed() && ((home && HomeTabs::Ready()) || control_center)) {
     /* this start counted, and the pause to follow should it fail too */
     Unconfirmed next = s_unconfirmed;
     ++next.count;
@@ -260,57 +295,14 @@ void run_script_hook(MonoObject *executor, MonoObject *bundle) {
     }
     if (!write_unconfirmed(next))
       LOG_WARN("[HOMEJS] could not record the start count");
-    const int fd = open(kPending, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    if (fd >= 0)
-      close(fd);
-    const std::string caption = HomeTabs::Caption(
-        HomeTabs::kEmulatorsGlyph, toolbox_i18n::tr("home_tabs.emulators"));
-    /* Games and Media as the bar shows them, for React to lay it out by */
-    std::string games_name, games_glyph, media_name, media_glyph;
-    HomeTabs::ScriptCaption(HomeTabs::StockTab::Games, &games_name,
-                            &games_glyph);
-    HomeTabs::ScriptCaption(HomeTabs::StockTab::Media, &media_name,
-                            &media_glyph);
-    /* the bookmark has no identity but the user's name: shown as typed, with
-       no glyph of ours (one the user typed shows as typed) */
-    const std::string bookmark_name = HomeBookmark::Name();
-    const std::string config =
-        std::string("globalThis.__aniketosConfig = {app: ") +
-        (home ? "'home'" : "'control-center'") + ", space: " +
-        (home ? "'emulators'" : "''") +
-        ", emulators: " + (emulators ? "true" : "false") + ", caption: " +
-        JsString(caption) + ", label: " +
-        JsString(toolbox_i18n::tr("home_tabs.emulators")) + ", limit: " +
-        std::to_string(HomeTabs::kEmulatorsContentLimit) +
-        /* the top-bar icon, for a Home the byte patch has no profile for;
-           taken back below once that is known */
-        ", icon: " + JsString(home ? AniketosIconPath() : "") +
-        /* the presence dot to show on avatars while not online */
-        ", presence: " + JsString(presence_name()) +
-        /* the custom clock's settings, drawn by the script in Sony's own
-           clock (asked for again while it is up: aniketos.clock) */
-        ", clock: " + ShellClock::ScriptConfig() +
-        /* the bookmark tab: its caption (empty for none) and its name */
-        ", bookmark: " + JsString(bookmark ? bookmark_name : std::string()) +
-        ", bookmarkLabel: " + JsString(bookmark_name) +
-        ", bookmarkLimit: " + std::to_string(HomeBookmark::kContentLimit) +
-        ", bookmarkWatch: " + (home && HomeBookmark::Enabled() ? "true" : "false") +
-        ", stockCaptions: {game: [" + JsString(games_name) + ", " +
-        JsString(games_glyph) + "], media: [" + JsString(media_name) + ", " +
-        JsString(media_glyph) + "]}" +
-        /* the websites kept among the games, asked for again while it is up:
-           aniketos.web_tiles */
-        ", webTiles: " + WebTiles::HomeState() +
-        "};";
-    const bool ok = eval(executor, config.c_str(), "aniketos-config.js") &&
-                    eval(executor, kInjectedScript, "aniketos-home.js");
-    unlink(kPending);
-    if (!ok)
-      unlink(kUnconfirmed); /* nothing went in, so nothing to confirm */
-    LOG_INFO("[HOMEJS] injected into '%s' ok=%d", app.c_str(), ok ? 1 : 0);
-    injected = ok;
-    if (ok)
+    injected = inject(
+        executor, app,
+        [=] { return home_script_config(home, emulators, bookmark); },
+        "aniketos-config.js", kInjectedScript, "aniketos-home.js");
+    if (injected)
       (home ? s_home_starts : s_control_center_starts).unconfirmed = true;
+    else
+      unlink(kUnconfirmed); /* nothing went in, so nothing to confirm */
   }
   /* Before the bundle runs and asks for its rows: the emulators, and the
      games moved to the bookmark, leave the Games row only for a tab of
@@ -320,48 +312,26 @@ void run_script_hook(MonoObject *executor, MonoObject *bundle) {
     HomeBookmark::SetHome(injected, injected && bookmark);
   }
   /* The web browser's card: full screen and the Home tile row. */
-  const bool browser = app.find("rnps-action-cards") != std::string::npos;
+  const bool browser = is_app("rnps-action-cards");
   if (browser)
     note_app_start(s_browser_starts, "The action cards", s_browser_disabled);
-  if (browser && !s_disabled && !s_browser_disabled && !exists(kOff)) {
-    const int fd = open(kPending, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    if (fd >= 0)
-      close(fd);
-    const std::string config = WebTiles::ScriptConfig();
-    const bool ok = eval(executor, config.c_str(), "aniketos-web-config.js") &&
-                    eval(executor, WebTiles::InjectedScript(), "aniketos-web.js");
-    unlink(kPending);
-    s_browser_starts.unconfirmed = ok;
-    LOG_INFO("[HOMEJS] injected into '%s' ok=%d", app.c_str(), ok ? 1 : 0);
-  }
+  if (browser && !s_browser_disabled && scripts_allowed())
+    s_browser_starts.unconfirmed =
+        inject(executor, app, WebTiles::ScriptConfig, "aniketos-web-config.js",
+               WebTiles::InjectedScript(), "aniketos-web.js");
   /* The Trophies app: View, Unlock and Lock in its options menus. A failure
-     there costs that app alone, so only the in-flight marker guards it. */
-  if (!s_disabled && !exists(kOff) && g_settings.onionhen_game_opts &&
-      app.find("rnps-trophy") != std::string::npos) {
-    const int fd = open(kPending, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    if (fd >= 0)
-      close(fd);
-    const std::string config = TrophyTools::ScriptConfig();
-    const bool ok =
-        eval(executor, config.c_str(), "aniketos-trophy-config.js") &&
-        eval(executor, TrophyTools::InjectedScript(), "aniketos-trophy.js");
-    unlink(kPending);
-    LOG_INFO("[HOMEJS] injected into '%s' ok=%d", app.c_str(), ok ? 1 : 0);
-  }
+     there costs that app alone, so the start counters stay out of it. */
+  if (scripts_allowed() && g_settings.onionhen_game_opts &&
+      is_app("rnps-trophy"))
+    inject(executor, app, TrophyTools::ScriptConfig,
+           "aniketos-trophy-config.js", TrophyTools::InjectedScript(),
+           "aniketos-trophy.js");
   /* The Information screen of a game or app: AniketosHEN's rows under the
      system's. Guarded like the Trophies app. */
-  if (!s_disabled && !exists(kOff) && g_settings.onionhen_game_opts &&
-      app.find("rnps-content-information") != std::string::npos) {
-    const int fd = open(kPending, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    if (fd >= 0)
-      close(fd);
-    const std::string config = ContentInfo::ScriptConfig();
-    const bool ok =
-        eval(executor, config.c_str(), "aniketos-info-config.js") &&
-        eval(executor, ContentInfo::InjectedScript(), "aniketos-info.js");
-    unlink(kPending);
-    LOG_INFO("[HOMEJS] injected into '%s' ok=%d", app.c_str(), ok ? 1 : 0);
-  }
+  if (scripts_allowed() && g_settings.onionhen_game_opts &&
+      is_app("rnps-content-information"))
+    inject(executor, app, ContentInfo::ScriptConfig, "aniketos-info-config.js",
+           ContentInfo::InjectedScript(), "aniketos-info.js");
   if (s_run_script_original)
     s_run_script_original(executor, bundle);
   /* The bundle is patched while the original reads it, so only now is it
@@ -374,12 +344,8 @@ void run_script_hook(MonoObject *executor, MonoObject *bundle) {
   }
 }
 
-} // namespace
-
-using FlushQueue = void (*)(MonoString *, void *, void *);
-FlushQueue s_flush_original = nullptr;
 void flush_hook(MonoString *queue, void *a, void *b) {
-  const std::string text = text_of(reinterpret_cast<MonoObject *>(queue));
+  const std::string text = Mono_to_String(queue);
   if (text.find("ANIKETOS-FLUSH") != std::string::npos) {
     LOG_INFO("[HOMEJS] js(flush): %s", text.substr(0, 400).c_str());
     return; /* ours: not a queue of native calls */
@@ -388,9 +354,19 @@ void flush_hook(MonoString *queue, void *a, void *b) {
     s_flush_original(queue, a, b);
 }
 
-/* A reload asked for by the HEN (a setting changed, the radius slider)
-   restarts the app before the script can report it running; that start is
-   not a fall-over, so it does not count towards kRestartsAllowed. */
+template <typename Detour>
+bool hook_executor(MonoImage *react_pui, const char *method, int parameters,
+                   Detour detour, Detour *original) {
+  const uint64_t address =
+      s_executor_class ? Get_Address_of_Method(react_pui, s_executor_class,
+                                               method, parameters)
+                       : 0;
+  return address && InstallDetour(address, reinterpret_cast<void *>(detour),
+                                  reinterpret_cast<void **>(original));
+}
+
+} // namespace
+
 void NoteRequestedReload(const char *title_id) {
   if (!title_id)
     return;
@@ -400,54 +376,13 @@ void NoteRequestedReload(const char *title_id) {
     s_control_center_starts.unconfirmed = false;
 }
 
-/* A JavaScript string literal in plain ASCII. The executor sizes the source
-   by characters, not bytes, so anything outside ASCII (the glyph, most
-   translations) has to travel as \uXXXX escapes or the script arrives cut
-   short. */
-std::string JsString(const std::string &text) {
-  std::string out = "\"";
-  const auto escape = [&out](unsigned unit) {
-    char buffer[8];
-    std::snprintf(buffer, sizeof(buffer), "\\u%04x", unit & 0xffffu);
-    out += buffer;
-  };
-  for (size_t i = 0; i < text.size();) {
-    const unsigned char lead = static_cast<unsigned char>(text[i]);
-    unsigned code = lead;
-    size_t length = 1;
-    if (lead >= 0xf0 && i + 3 < text.size()) {
-      code = lead & 0x07;
-      length = 4;
-    } else if (lead >= 0xe0 && i + 2 < text.size()) {
-      code = lead & 0x0f;
-      length = 3;
-    } else if (lead >= 0xc0 && i + 1 < text.size()) {
-      code = lead & 0x1f;
-      length = 2;
-    }
-    for (size_t k = 1; k < length; ++k)
-      code = (code << 6) | (static_cast<unsigned char>(text[i + k]) & 0x3f);
-    i += length;
-    if (code >= 0x10000) {
-      code -= 0x10000;
-      escape(0xd800 + (code >> 10));
-      escape(0xdc00 + (code & 0x3ff));
-    } else if (code < 0x20 || code > 0x7e || code == '"' || code == '\\') {
-      escape(code);
-    } else {
-      out += static_cast<char>(code);
-    }
-  }
-  return out + "\"";
-}
-
 void Install(MonoImage *react_pui) {
   if (!react_pui || s_run_script_original)
     return;
-  /* Died inside an injection, or unconfirmed twice running: the script
-     is left out for a pause of starts, then tried again (see kUnconfirmed). */
+  /* Unconfirmed twice running: the script is left out for a pause of starts,
+     then tried again (see kUnconfirmed). */
   s_unconfirmed = read_unconfirmed();
-  if (exists(kPending)) {
+  if (if_exists(kPending)) {
     /* ShellUI died with the injection in flight: a failed start as well */
     unlink(kPending);
     if (s_unconfirmed.count < 1)
@@ -472,30 +407,16 @@ void Install(MonoImage *react_pui) {
   }
   s_executor_class = mono_class_from_name(
       react_pui, "ReactNative.JavaScriptCore.Executor", "JSJavaScriptExecutor");
-  const uint64_t run =
-      s_executor_class
-          ? Get_Address_of_Method(react_pui, s_executor_class, "RunScript", 1)
-          : 0;
-  const uint64_t log =
-      s_executor_class
-          ? Get_Address_of_Method(react_pui, s_executor_class, "ConsoleLog", 4)
-          : 0;
-  const bool run_hooked =
-      run && InstallDetour(run, reinterpret_cast<void *>(&run_script_hook),
-                           reinterpret_cast<void **>(&s_run_script_original));
+  const bool run_hooked = hook_executor(react_pui, "RunScript", 1,
+                                        run_script_hook, &s_run_script_original);
   const bool log_hooked =
-      log && InstallDetour(log, reinterpret_cast<void *>(&console_log_hook),
-                           reinterpret_cast<void **>(&s_console_log_original));
-  const uint64_t flush =
-      s_executor_class
-          ? Get_Address_of_Method(react_pui, s_executor_class,
-                                  "NativeFlushQueueImmediate", 3)
-          : 0;
+      hook_executor(react_pui, "ConsoleLog", 4, console_log_hook,
+                    &s_console_log_original);
   const bool flush_hooked =
-      flush && InstallDetour(flush, reinterpret_cast<void *>(&flush_hook),
-                             reinterpret_cast<void **>(&s_flush_original));
+      hook_executor(react_pui, "NativeFlushQueueImmediate", 3, flush_hook,
+                    &s_flush_original);
   LOG_INFO("[HOMEJS] hooks RunScript=%d ConsoleLog=%d Flush=%d",
            run_hooked ? 1 : 0, log_hooked ? 1 : 0, flush_hooked ? 1 : 0);
 }
 
-} // namespace HomeJs
+} // namespace ScriptInjector

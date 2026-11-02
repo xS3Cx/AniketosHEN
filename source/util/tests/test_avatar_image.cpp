@@ -126,6 +126,22 @@ int test_a_wild_block_length_stays_in_bounds() {
   return 0;
 }
 
+int test_a_control_block_of_another_size_hides_no_frames() {
+  Bytes bytes = gif(32, 32, 3);
+  const Bytes control = {0x21, 0xF9, 5, 0, 0, 0, 0, 0};
+  bytes.insert(bytes.begin() + 31, control.begin(), control.end());
+  TEST_ASSERT_EQ_INT(3, inspect(bytes).frames);
+  return 0;
+}
+
+int test_a_gif_too_big_to_decode_is_turned_down() {
+  /* 921600 bytes a frame: 291 of them fit in 256 MiB */
+  TEST_ASSERT_TRUE(DecodeFits(inspect(gif(480, 480, 291))));
+  TEST_ASSERT_TRUE(!DecodeFits(inspect(gif(480, 480, 292))));
+  TEST_ASSERT_TRUE(!DecodeFits(inspect(gif(65535, 65535, 1))));
+  return 0;
+}
+
 int test_webp_size_and_frames() {
   const Info info = inspect(webp(498, 498, 40));
   TEST_ASSERT_TRUE(info.format == Format::WebP);
@@ -172,6 +188,10 @@ extern "C" int test_avatar_image_suite(void) {
                              test_a_gif_without_frames_is_no_picture);
   failures += onion_test_run("avatar_image.a_wild_block_length_stays_in_bounds",
                              test_a_wild_block_length_stays_in_bounds);
+  failures += onion_test_run("avatar_image.a_control_block_of_another_size_hides_no_frames",
+                             test_a_control_block_of_another_size_hides_no_frames);
+  failures += onion_test_run("avatar_image.a_gif_too_big_to_decode_is_turned_down",
+                             test_a_gif_too_big_to_decode_is_turned_down);
   failures += onion_test_run("avatar_image.webp_size_and_frames",
                              test_webp_size_and_frames);
   failures += onion_test_run("avatar_image.a_wild_webp_chunk_length_stays_in_bounds",

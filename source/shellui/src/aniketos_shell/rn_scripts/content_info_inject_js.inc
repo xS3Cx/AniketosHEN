@@ -1,8 +1,8 @@
 /* JavaScript evaluated in the Information screen (rnps-content-information,
  * Options > Information of a game or app) right before its bundle (see
- * script_injector.cpp). `__aniketosInfo` is defined by the native side just ahead
- * of it and holds the labels and the folders dumped games are mounted from
- * (ContentInfo::ScriptConfig).
+ * script_injector.cpp). `__aniketosInfo` is defined by the native side just
+ * ahead of it and holds the labels and the folders dumped games are mounted
+ * from (ContentInfo::ScriptConfig).
  *
  * The screen's ContentInfo component rebuilds `this.infoList`, its rows
  * ({testID, firstLineLabel, firstLineValue}), on every render and maps it

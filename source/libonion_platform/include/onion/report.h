@@ -48,6 +48,10 @@ size_t onion_report_sanitize(const char *in, size_t in_len, char *out,
 bool onion_report_write(const char *dir, const char *kind, const char *build,
                         const char *body);
 
+/* True for the name of a report in ONION_REPORT_DIR: a visible ".txt" file.
+ * The dot files beside them hold the sender's own progress. */
+bool onion_report_is_file_name(const char *name);
+
 /* Append up to @max_bytes from the end of the file at @path to @out (of
  * @out_cap bytes, NUL-terminated, appended after its current text), starting
  * at a line boundary, under a "== <label> ==" heading. Missing files add

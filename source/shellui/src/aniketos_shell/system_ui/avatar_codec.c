@@ -1,5 +1,7 @@
 #include "aniketos_shell/system_ui/avatar_codec.h"
 
+#include <onion/fs.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -41,30 +43,18 @@ static int read_file(const char *path, unsigned char **out, size_t *out_size) {
   unsigned char *data = NULL;
   if (!file)
     return -1;
-  if (fseek(file, 0, SEEK_END) != 0) {
-    fclose(file);
-    return -1;
-  }
-  length = ftell(file);
-  if (length <= 0 || length > AVATAR_CODEC_MAX_INPUT) {
-    fclose(file);
-    return -1;
-  }
-  if (fseek(file, 0, SEEK_SET) != 0) {
-    fclose(file);
-    return -1;
-  }
-  data = (unsigned char *)malloc((size_t)length);
-  if (!data) {
-    fclose(file);
-    return -1;
-  }
-  if (fread(data, 1, (size_t)length, file) != (size_t)length) {
+  if (fseek(file, 0, SEEK_END) == 0)
+    length = ftell(file);
+  if (length > 0 && length <= AVATAR_CODEC_MAX_INPUT &&
+      fseek(file, 0, SEEK_SET) == 0)
+    data = (unsigned char *)malloc((size_t)length);
+  if (data && fread(data, 1, (size_t)length, file) != (size_t)length) {
     free(data);
-    fclose(file);
-    return -1;
+    data = NULL;
   }
   fclose(file);
+  if (!data)
+    return -1;
   *out = data;
   *out_size = (size_t)length;
   return 0;
@@ -81,28 +71,28 @@ static int file_info(const char *path, long long *size, long long *mtime) {
   return 0;
 }
 
-static int meta_matches(const char *source, const char *cache) {
+static int meta_path_of(const char *cache, char *path) {
+  return snprintf(path, AVATAR_CODEC_PATH_SIZE, "%s.meta", cache) <
+         AVATAR_CODEC_PATH_SIZE;
+}
+
+static int meta_matches(const char *cache, long long source_size,
+                        long long source_mtime) {
   char meta_path[AVATAR_CODEC_PATH_SIZE];
   char tag[32];
   long long size = 0;
   long long mtime = 0;
-  long long source_size = 0;
-  long long source_mtime = 0;
   FILE *file = NULL;
   int count = 0;
-  if (snprintf(meta_path, sizeof(meta_path), "%s.meta", cache) >=
-      (int)sizeof(meta_path))
+  if (!meta_path_of(cache, meta_path))
     return 0;
   file = fopen(meta_path, "r");
   if (!file)
     return 0;
   count = fscanf(file, "%31s %lld %lld", tag, &size, &mtime);
   fclose(file);
-  if (count != 3 || strcmp(tag, "aniketos-avatar") != 0)
-    return 0;
-  if (file_info(source, &source_size, &source_mtime) != 0)
-    return 0;
-  return size == source_size && mtime == source_mtime;
+  return count == 3 && strcmp(tag, "aniketos-avatar") == 0 &&
+         size == source_size && mtime == source_mtime;
 }
 
 int avatar_codec_should_fit(const char *path) {
@@ -145,13 +135,13 @@ int avatar_codec_cache_valid(const char *source, const char *cache) {
     return 0;
   if (cache_mtime < source_mtime)
     return 0;
-  return meta_matches(source, cache);
+  return meta_matches(cache, source_size, source_mtime);
 }
 
-static int encode_target(const unsigned char *frames, int width, int height,
-                         int sample_count, const int *sample_index,
-                         const int *sample_delay, int target,
-                         unsigned char **out_data, size_t *out_size) {
+static MsfGifResult encode_target(const unsigned char *frames, int width,
+                                  int height, int sample_count,
+                                  const int *sample_index,
+                                  const int *sample_delay, int target) {
   const int side = width < height ? width : height;
   const int crop_x = (width - side) / 2;
   const int crop_y = (height - side) / 2;
@@ -159,21 +149,16 @@ static int encode_target(const unsigned char *frames, int width, int height,
   unsigned char *crop = (unsigned char *)malloc(row_bytes * (size_t)side);
   unsigned char *resized =
       (unsigned char *)malloc((size_t)target * (size_t)target * 4u);
-  MsfGifState state;
-  MsfGifResult result;
-  if (!crop || !resized) {
-    free(crop);
-    free(resized);
-    return -1;
-  }
-  memset(&state, 0, sizeof(state));
+  MsfGifState state = {0};
+  MsfGifResult result = {0};
+  int ok = 1;
   msf_gif_alpha_threshold = 128;
-  if (!msf_gif_begin(&state, target, target)) {
+  if (!crop || !resized || !msf_gif_begin(&state, target, target)) {
     free(crop);
     free(resized);
-    return -1;
+    return result;
   }
-  for (int i = 0; i < sample_count; ++i) {
+  for (int i = 0; ok && i < sample_count; ++i) {
     const unsigned char *frame =
         frames + (size_t)sample_index[i] * (size_t)width * (size_t)height * 4u;
     for (int y = 0; y < side; ++y) {
@@ -182,108 +167,82 @@ static int encode_target(const unsigned char *frames, int width, int height,
                  ((size_t)(crop_y + y) * (size_t)width + (size_t)crop_x) * 4u,
              row_bytes);
     }
-    if (!stbir_resize_uint8_srgb(crop, side, side, 0, resized, target, target,
-                                 0, STBIR_RGBA)) {
-      msf_gif_free(msf_gif_end(&state));
-      free(crop);
-      free(resized);
-      return -1;
-    }
-    if (!msf_gif_frame(&state, resized, sample_delay[i], 8, 0)) {
-      msf_gif_free(msf_gif_end(&state));
-      free(crop);
-      free(resized);
-      return -1;
-    }
+    ok = stbir_resize_uint8_srgb(crop, side, side, 0, resized, target, target,
+                                 0, STBIR_RGBA) &&
+         msf_gif_frame(&state, resized, sample_delay[i], 8, 0);
   }
   free(crop);
   free(resized);
   result = msf_gif_end(&state);
-  if (!result.data || result.dataSize == 0) {
+  if (!ok || !result.data || result.dataSize == 0) {
     msf_gif_free(result);
-    return -1;
+    result = (MsfGifResult){0};
   }
-  *out_data = (unsigned char *)result.data;
-  *out_size = result.dataSize;
-  return 0;
+  return result;
 }
 
-static int write_atomic(const char *path, const unsigned char *data,
-                        size_t size) {
-  char tmp_path[AVATAR_CODEC_PATH_SIZE];
-  FILE *file = NULL;
-  int ok = 1;
-  if (snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path) >=
-      (int)sizeof(tmp_path))
-    return -1;
-  file = fopen(tmp_path, "wb");
-  if (!file)
-    return -1;
-  if (fwrite(data, 1, size, file) != size)
-    ok = 0;
-  if (fflush(file) != 0)
-    ok = 0;
-  if (fclose(file) != 0)
-    ok = 0;
-  if (!ok) {
-    remove(tmp_path);
-    return -1;
+/* The largest size that stays under the limit; no data when none does. */
+static MsfGifResult encode_within_limit(const unsigned char *frames, int width,
+                                        int height, int sample_count,
+                                        const int *sample_index,
+                                        const int *sample_delay) {
+  static const int targets[] = {256, 192, 128};
+  MsfGifResult encoded = {0};
+  for (size_t i = 0; i < sizeof(targets) / sizeof(targets[0]); ++i) {
+    encoded = encode_target(frames, width, height, sample_count, sample_index,
+                            sample_delay, targets[i]);
+    if (encoded.dataSize <= AVATAR_CODEC_MAX_BYTES && encoded.data)
+      return encoded;
+    msf_gif_free(encoded);
   }
-  if (rename(tmp_path, path) != 0) {
-    remove(tmp_path);
-    return -1;
-  }
-  return 0;
+  return (MsfGifResult){0};
 }
 
 static int write_meta(const char *source, const char *cache) {
   char meta_path[AVATAR_CODEC_PATH_SIZE];
-  char tmp_path[AVATAR_CODEC_PATH_SIZE];
+  char text[64];
   long long size = 0;
   long long mtime = 0;
-  FILE *file = NULL;
-  int ok = 1;
-  if (file_info(source, &size, &mtime) != 0)
+  if (file_info(source, &size, &mtime) != 0 || !meta_path_of(cache, meta_path))
     return -1;
-  if (snprintf(meta_path, sizeof(meta_path), "%s.meta", cache) >=
-      (int)sizeof(meta_path))
-    return -1;
-  if (snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", meta_path) >=
-      (int)sizeof(tmp_path))
-    return -1;
-  file = fopen(tmp_path, "wb");
-  if (!file)
-    return -1;
-  if (fprintf(file, "aniketos-avatar %lld %lld\n", size, mtime) <= 0)
-    ok = 0;
-  if (fflush(file) != 0)
-    ok = 0;
-  if (fclose(file) != 0)
-    ok = 0;
-  if (!ok) {
-    remove(tmp_path);
-    return -1;
+  const int length =
+      snprintf(text, sizeof(text), "aniketos-avatar %lld %lld\n", size, mtime);
+  return write_file_atomic(meta_path, text, (size_t)length) ? 0 : -1;
+}
+
+/* Spreads the frames over at most AVATAR_CODEC_MAX_FRAMES samples, each
+   lasting as long as the frames it stands for. */
+static int sample_frames(const int *delays, int frames, int *sample_index,
+                         int *sample_delay) {
+  const int sample_count =
+      frames < AVATAR_CODEC_MAX_FRAMES ? frames : AVATAR_CODEC_MAX_FRAMES;
+  for (int i = 0; i < sample_count; ++i) {
+    const int begin = (int)((long long)i * frames / sample_count);
+    const int end = (int)((long long)(i + 1) * frames / sample_count);
+    long long total = 0;
+    int centiseconds = 0;
+    for (int j = begin; j < end; ++j)
+      total += delays[j];
+    centiseconds = (int)(total / 10);
+    if (centiseconds < 2)
+      centiseconds = 2;
+    if (centiseconds > 65535)
+      centiseconds = 65535;
+    sample_index[i] = begin;
+    sample_delay[i] = centiseconds;
   }
-  if (rename(tmp_path, meta_path) != 0) {
-    remove(tmp_path);
-    return -1;
-  }
-  return 0;
+  return sample_count;
 }
 
 int avatar_codec_fit(const char *source, const char *cache, char *error,
                      unsigned long error_size) {
-  static const int targets[] = {256, 192, 128};
   unsigned char *data = NULL;
   unsigned char *pixels = NULL;
-  unsigned char *encoded = NULL;
-  unsigned char *chosen_data = NULL;
   int *delays = NULL;
-  int *sample_index = NULL;
-  int *sample_delay = NULL;
+  int sample_index[AVATAR_CODEC_MAX_FRAMES];
+  int sample_delay[AVATAR_CODEC_MAX_FRAMES];
+  MsfGifResult encoded;
   size_t data_size = 0;
-  size_t encoded_size = 0;
-  size_t chosen_size = 0;
   int width = 0;
   int height = 0;
   int frames = 0;
@@ -312,77 +271,35 @@ int avatar_codec_fit(const char *source, const char *cache, char *error,
     set_error(error, error_size, "dimensions rejected");
     return -1;
   }
+  if (!avatar_codec_decode_fits(data, data_size)) {
+    free(data);
+    set_error(error, error_size, "too many frames");
+    return -1;
+  }
   pixels = stbi_load_gif_from_memory(data, (int)data_size, &delays, &width,
                                      &height, &frames, &comp, 4);
   free(data);
-  data = NULL;
   if (!pixels || !delays || frames <= 0 || width <= 0 || height <= 0) {
     stbi_image_free(pixels);
     free(delays);
     set_error(error, error_size, "decode failed");
     return -1;
   }
-  sample_count = frames < AVATAR_CODEC_MAX_FRAMES ? frames
-                                                  : AVATAR_CODEC_MAX_FRAMES;
-  sample_index = (int *)malloc((size_t)sample_count * sizeof(int));
-  sample_delay = (int *)malloc((size_t)sample_count * sizeof(int));
-  if (!sample_index || !sample_delay) {
-    set_error(error, error_size, "out of memory");
-    goto cleanup;
-  }
-  for (int i = 0; i < sample_count; ++i) {
-    const int begin = (int)((long long)i * frames / sample_count);
-    const int end = (int)((long long)(i + 1) * frames / sample_count);
-    long long total = 0;
-    int centiseconds = 0;
-    for (int j = begin; j < end; ++j)
-      total += delays[j];
-    centiseconds = (int)(total / 10);
-    if (centiseconds < 2)
-      centiseconds = 2;
-    if (centiseconds > 65535)
-      centiseconds = 65535;
-    sample_index[i] = begin;
-    sample_delay[i] = centiseconds;
-  }
-  for (size_t i = 0; i < sizeof(targets) / sizeof(targets[0]); ++i) {
-    if (encode_target(pixels, width, height, sample_count, sample_index,
-                      sample_delay, targets[i], &encoded, &encoded_size) != 0) {
-      encoded = NULL;
-      continue;
-    }
-    if (encoded_size <= AVATAR_CODEC_MAX_BYTES) {
-      chosen_data = encoded;
-      chosen_size = encoded_size;
-      encoded = NULL;
-      break;
-    }
-    msf_gif_free((MsfGifResult){encoded, encoded_size, encoded_size, NULL});
-    encoded = NULL;
-  }
-  if (!chosen_data) {
+  sample_count = sample_frames(delays, frames, sample_index, sample_delay);
+  encoded = encode_within_limit(pixels, width, height, sample_count,
+                                sample_index, sample_delay);
+  if (!encoded.data) {
     set_error(error, error_size, "output too large");
-    goto cleanup;
-  }
-  if (write_atomic(cache, chosen_data, chosen_size) != 0) {
+  } else if (!write_file_atomic(cache, encoded.data, encoded.dataSize)) {
     set_error(error, error_size, "write failed");
-    goto cleanup;
-  }
-  if (write_meta(source, cache) != 0) {
+  } else if (write_meta(source, cache) != 0) {
     remove(cache);
     set_error(error, error_size, "meta failed");
-    goto cleanup;
+  } else {
+    result = 0;
   }
-  result = 0;
-cleanup:
-  if (chosen_data)
-    msf_gif_free(
-        (MsfGifResult){chosen_data, chosen_size, chosen_size, NULL});
-  if (encoded)
-    msf_gif_free((MsfGifResult){encoded, encoded_size, encoded_size, NULL});
+  msf_gif_free(encoded);
   stbi_image_free(pixels);
   free(delays);
-  free(sample_index);
-  free(sample_delay);
   return result;
 }

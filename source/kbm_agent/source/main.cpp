@@ -5,10 +5,7 @@
  * process, which here is the game.
  */
 #include <stdarg.h>
-#include <stdio.h>
 #include <unistd.h>
-
-#include <ps5/kernel.h>
 
 #include "kbm_hooks.hpp"
 #include "kbm_input.hpp"
@@ -18,23 +15,13 @@ using namespace onion::kbm;
 
 namespace {
 
-int (*s_out)(int, const char *);
 Engine s_engine; /* driven by the hooks only, one game thread at a time */
 
 __attribute__((format(printf, 1, 2))) void Log(const char *fmt, ...) {
-  if (!s_out)
-    return;
-  char line[256];
-  int n = snprintf(line, sizeof(line), "[KBM-AGENT] ");
   va_list ap;
   va_start(ap, fmt);
-  n += vsnprintf(line + n, sizeof(line) - n - 1, fmt, ap);
+  agent::LogLine("[KBM-AGENT] ", fmt, ap);
   va_end(ap);
-  if (n > static_cast<int>(sizeof(line)) - 2)
-    n = sizeof(line) - 2;
-  line[n] = '\n';
-  line[n + 1] = 0;
-  s_out(0, line);
 }
 
 void Tick(const ProfileBlob *profile, bool profile_changed, PadState *out) {
@@ -55,12 +42,7 @@ void Tick(const ProfileBlob *profile, bool profile_changed, PadState *out) {
 } // namespace
 
 int main() {
-  uint32_t kernel = 0;
-  if (kernel_dynlib_handle(getpid(), "libkernel.sprx", &kernel) != 0)
-    kernel_dynlib_handle(getpid(), "libkernel_sys.sprx", &kernel);
-  const intptr_t out = kernel_dynlib_dlsym(getpid(), kernel, "sceKernelDebugOutText");
-  if (out > 0)
-    s_out = reinterpret_cast<decltype(s_out)>(out);
+  agent::LogInit();
   Log("agent in pid %d", getpid());
 
   if (!agent::InputInit()) {
@@ -73,7 +55,6 @@ int main() {
   while (!hooks::Init(Tick, Log)) {
     if (++tries >= 30) {
       Log("hooks not installed after %d tries; the game is left alone", tries);
-      agent::InputStop();
       Park();
     }
     sleep(1);
@@ -83,7 +64,7 @@ int main() {
     hooks::Unhook();
     Park();
   }
-  __atomic_or_fetch(&control->agent_status, 1u, __ATOMIC_RELEASE);
+  __atomic_or_fetch(&control->agent_status, kStatusRunning, __ATOMIC_RELEASE);
 
   /* the reader beats the control page's heartbeat; this loop picks up new
      profiles and modules loaded later, and steps aside for a newer agent */

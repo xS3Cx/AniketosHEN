@@ -23,8 +23,6 @@ struct Runtime {
 
 bool Resolve(Runtime &runtime, MonoImage *image, RetainCallback retain,
              void *retain_context);
-MonoString *String(const std::string &value);
-MonoObject *Find(const Runtime &runtime, MonoObject *root, const char *name);
 void RemoveNamed(const Runtime &runtime, MonoObject *root, const char *name);
 void Remove(const Runtime &runtime, MonoObject *object);
 /* True for a widget created through CreatePanel/CreateLabel here. The theme
@@ -37,8 +35,6 @@ void Adopt(MonoObject *object);
 void Disown(MonoObject *object);
 void SetColor(MonoClass *klass, MonoObject *object, const char *property,
               Color color);
-bool AppendChild(const Runtime &runtime, MonoObject *parent,
-                 MonoObject *child);
 MonoObject *CreatePanel(const Runtime &runtime, MonoObject *parent,
                         const char *name);
 MonoObject *CreateLabel(const Runtime &runtime, MonoObject *parent,

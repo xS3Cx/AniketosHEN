@@ -1,17 +1,17 @@
 #include "aniketos_shell/home/home_particles.hpp"
-#include "aniketos_theme/customization.hpp"
 
+#include "aniketos_theme/clock/shell_clock.hpp"
+#include "aniketos_theme/customization.hpp"
+#include "aniketos_ui/mono_reflect.hpp"
 #include "external_symbols.hpp"
 #include "hooked_funcs.hpp"
-#include "aniketos_theme/clock/shell_clock.hpp"
 
 #include <onion/distribution.h>
+#include <onion/fs.h>
 #include <onion/log.h>
-#include <onion/settings.hpp>
 
 #include <algorithm>
 #include <cmath>
-#include <cstdio>
 #include <cstring>
 #include <dirent.h>
 #include <fcntl.h>
@@ -19,8 +19,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <vector>
-
-extern onion::Settings g_settings;
 
 #define EMBEDDED(name)                                                         \
   extern const unsigned char particle_##name##_png_start[];                    \
@@ -35,6 +33,8 @@ EMBEDDED(dot)
 namespace HomeParticles {
 namespace {
 
+namespace Reflect = AniketosUI::Reflect;
+
 constexpr const char *kDirectory =
     ONION_DIST_USER_DATA_ROOT "/ShellUI/particles";
 constexpr const char *kLayerName = "id_aniketos_home_particles";
@@ -42,12 +42,12 @@ constexpr int kMinCount = 20;
 constexpr int kMaxCount = 300;
 constexpr size_t kMaxPictures = 16;
 
-struct Default {
+struct DefaultPicture {
   const char *file;
   const unsigned char *start;
   const unsigned char *end;
 };
-const Default kDefaults[] = {
+const DefaultPicture kDefaultPictures[] = {
     {"triangle.png", particle_triangle_png_start, particle_triangle_png_end},
     {"circle.png", particle_circle_png_start, particle_circle_png_end},
     {"cross.png", particle_cross_png_start, particle_cross_png_end},
@@ -87,43 +87,9 @@ float random01() {
 
 float between(float low, float high) { return low + (high - low) * random01(); }
 
-MonoObject *target(uint32_t handle) {
-  return handle ? mono_gchandle_get_target(handle) : nullptr;
-}
-
-MonoMethod *method_of(MonoClass *klass, const char *name, int parameters) {
-  for (; klass; klass = mono_class_get_parent(klass))
-    if (MonoMethod *method =
-            mono_class_get_method_from_name(klass, name, parameters))
-      return method;
-  return nullptr;
-}
-
-bool call(MonoObject *object, const char *name, int parameters,
-          void **arguments = nullptr, MonoObject **result = nullptr) {
-  MonoMethod *method =
-      object ? method_of(mono_object_get_class(object), name, parameters)
-             : nullptr;
-  if (!method)
-    return false;
-  MonoObject *exception = nullptr;
-  MonoObject *value = mono_runtime_invoke(method, object, arguments, &exception);
-  if (result)
-    *result = value;
-  return !exception;
-}
-
 MonoObject *object_property(MonoObject *object, const char *getter) {
   MonoObject *value = nullptr;
-  return call(object, getter, 0, nullptr, &value) ? value : nullptr;
-}
-
-bool float_property(MonoObject *object, const char *getter, float *out) {
-  MonoObject *value = nullptr;
-  if (!call(object, getter, 0, nullptr, &value) || !value)
-    return false;
-  *out = *static_cast<float *>(mono_object_unbox(value));
-  return true;
+  return Reflect::Call(object, getter, 0, nullptr, &value) ? value : nullptr;
 }
 
 void set_float(MonoObject *object, MonoMethod *setter, float value) {
@@ -135,9 +101,8 @@ void set_float(MonoObject *object, MonoMethod *setter, float value) {
 
 /* The defaults, where the user can see and replace them. */
 void write_defaults() {
-  (void)mkdir(ONION_DIST_USER_DATA_ROOT "/ShellUI", 0777);
-  (void)mkdir(kDirectory, 0777);
-  for (const Default &picture : kDefaults) {
+  (void)mkdir_tree(kDirectory);
+  for (const DefaultPicture &picture : kDefaultPictures) {
     const std::string path = std::string(kDirectory) + "/" + picture.file;
     struct stat info {};
     if (stat(path.c_str(), &info) == 0)
@@ -151,7 +116,7 @@ void write_defaults() {
   }
 }
 
-std::vector<std::string> pictures() {
+std::vector<std::string> picture_paths() {
   std::vector<std::string> found;
   if (DIR *directory = opendir(kDirectory)) {
     while (dirent *entry = readdir(directory)) {
@@ -169,24 +134,18 @@ std::vector<std::string> pictures() {
   return found;
 }
 
-void release(uint32_t &handle) {
-  if (handle)
-    mono_gchandle_free(handle);
-  handle = 0;
-}
-
 void teardown() {
-  MonoObject *layer = target(s_layer);
+  MonoObject *layer = Reflect::Target(s_layer);
   if (layer && !ShellClock::IsWidgetDisposed(layer)) {
-    call(layer, "RemoveFromParent", 0);
-    call(layer, "Dispose", 0); /* takes its children with it */
+    Reflect::Call(layer, "RemoveFromParent", 0);
+    Reflect::Call(layer, "Dispose", 0); /* takes its children with it */
   }
-  release(s_layer);
+  Reflect::Release(s_layer);
   for (Particle &particle : s_particles)
-    release(particle.widget);
+    Reflect::Release(particle.widget);
   s_particles.clear();
   for (uint32_t &asset : s_assets)
-    release(asset);
+    Reflect::Release(asset);
   s_assets.clear();
   s_asset_is_dot.clear();
 }
@@ -233,23 +192,16 @@ void spawn(Particle &particle, bool dot, bool anywhere_in_life) {
   particle.shown = -1.0f;
 }
 
-bool build(MonoObject *root) {
-  MonoImage *pui = getDLLimage("Sce.PlayStation.PUI.dll");
-  MonoClass *widget_class =
-      pui ? mono_class_from_name(pui, "Sce.PlayStation.PUI.UI3", "Widget")
-          : nullptr;
-  MonoClass *box_class =
-      pui ? mono_class_from_name(pui, "Sce.PlayStation.PUI.UI3", "ImageBox")
-          : nullptr;
-  MonoClass *asset_class =
-      pui ? mono_class_from_name(pui, "Sce.PlayStation.PUI", "ImageAsset")
-          : nullptr;
-  MonoMethod *asset_ctor = nullptr;
+int wanted_count() {
+  return std::clamp(g_settings.home_particles_count, kMinCount, kMaxCount);
+}
+
+/* ImageAsset(string), among its other one-argument constructors. */
+MonoMethod *find_asset_ctor(MonoClass *asset_class) {
+  if (!asset_class)
+    return nullptr;
   void *iter = nullptr;
-  while (asset_class && !asset_ctor) {
-    MonoMethod *method = mono_class_get_methods(asset_class, &iter);
-    if (!method)
-      break;
+  while (MonoMethod *method = mono_class_get_methods(asset_class, &iter)) {
     MonoMethodSignature *signature = mono_method_signature(method);
     if (std::strcmp(mono_method_get_name(method), ".ctor") || !signature ||
         mono_signature_get_param_count(signature) != 1)
@@ -257,27 +209,17 @@ bool build(MonoObject *root) {
     void *param_iter = nullptr;
     char *type =
         mono_type_get_name(mono_signature_get_params(signature, &param_iter));
-    if (type && std::strstr(type, "String"))
-      asset_ctor = method;
+    const bool takes_string = type && std::strstr(type, "String");
+    if (type && mono_free)
+      mono_free(type);
+    if (takes_string)
+      return method;
   }
-  if (!widget_class || !box_class || !asset_ctor ||
-      !mono_class_get_method_from_name(widget_class, ".ctor", 0) ||
-      !mono_class_get_method_from_name(box_class, ".ctor", 0)) {
-    LOG_ERROR("[PARTICLES] classes widget=%d box=%d asset=%d",
-              widget_class ? 1 : 0, box_class ? 1 : 0, asset_ctor ? 1 : 0);
-    return false;
-  }
-  s_set_x = method_of(box_class, "set_X", 1);
-  s_set_y = method_of(box_class, "set_Y", 1);
-  s_set_opacity = method_of(box_class, "set_Opacity", 1);
-  if (!s_set_x || !s_set_y || !s_set_opacity) {
-    LOG_ERROR("[PARTICLES] setters x=%d y=%d opacity=%d", s_set_x ? 1 : 0,
-              s_set_y ? 1 : 0, s_set_opacity ? 1 : 0);
-    return false;
-  }
+  return nullptr;
+}
 
-  write_defaults();
-  for (const std::string &path : pictures()) {
+void load_assets(MonoClass *asset_class, MonoMethod *asset_ctor) {
+  for (const std::string &path : picture_paths()) {
     MonoObject *asset = mono_object_new(mono_domain_get(), asset_class);
     void *arguments[1] = {mono_string_new(mono_domain_get(), path.c_str())};
     MonoObject *exception = nullptr;
@@ -291,22 +233,54 @@ bool build(MonoObject *root) {
     s_assets.push_back(mono_gchandle_new(asset, /*pinned=*/1));
     s_asset_is_dot.push_back(path.find("dot") != std::string::npos);
   }
+}
+
+bool build(MonoObject *root) {
+  MonoImage *pui = getDLLimage("Sce.PlayStation.PUI.dll");
+  MonoClass *widget_class =
+      pui ? mono_class_from_name(pui, "Sce.PlayStation.PUI.UI3", "Widget")
+          : nullptr;
+  MonoClass *box_class =
+      pui ? mono_class_from_name(pui, "Sce.PlayStation.PUI.UI3", "ImageBox")
+          : nullptr;
+  MonoClass *asset_class =
+      pui ? mono_class_from_name(pui, "Sce.PlayStation.PUI", "ImageAsset")
+          : nullptr;
+  MonoMethod *asset_ctor = find_asset_ctor(asset_class);
+  if (!widget_class || !box_class || !asset_ctor ||
+      !mono_class_get_method_from_name(widget_class, ".ctor", 0) ||
+      !mono_class_get_method_from_name(box_class, ".ctor", 0)) {
+    LOG_ERROR("[PARTICLES] classes widget=%d box=%d asset=%d",
+              widget_class ? 1 : 0, box_class ? 1 : 0, asset_ctor ? 1 : 0);
+    return false;
+  }
+  s_set_x = Reflect::MethodOf(box_class, "set_X", 1);
+  s_set_y = Reflect::MethodOf(box_class, "set_Y", 1);
+  s_set_opacity = Reflect::MethodOf(box_class, "set_Opacity", 1);
+  if (!s_set_x || !s_set_y || !s_set_opacity) {
+    LOG_ERROR("[PARTICLES] setters x=%d y=%d opacity=%d", s_set_x ? 1 : 0,
+              s_set_y ? 1 : 0, s_set_opacity ? 1 : 0);
+    return false;
+  }
+
+  write_defaults();
+  load_assets(asset_class, asset_ctor);
   if (s_assets.empty()) {
     LOG_ERROR("[PARTICLES] no pictures in %s", kDirectory);
     return false;
   }
 
-  float_property(root, "get_Width", &s_width);
-  float_property(root, "get_Height", &s_height);
+  Reflect::FloatProperty(root, "get_Width", &s_width);
+  Reflect::FloatProperty(root, "get_Height", &s_height);
   MonoObject *layer = mono_object_new(mono_domain_get(), widget_class);
   if (!layer)
     return false;
   mono_runtime_object_init(layer);
   s_layer = mono_gchandle_new(layer, /*pinned=*/1);
   void *name_arguments[1] = {mono_string_new(mono_domain_get(), kLayerName)};
-  call(layer, "set_Name", 1, name_arguments);
-  MonoMethod *set_width = method_of(widget_class, "set_Width", 1);
-  MonoMethod *set_height = method_of(widget_class, "set_Height", 1);
+  Reflect::Call(layer, "set_Name", 1, name_arguments);
+  MonoMethod *set_width = Reflect::MethodOf(widget_class, "set_Width", 1);
+  MonoMethod *set_height = Reflect::MethodOf(widget_class, "set_Height", 1);
   set_float(layer, set_width, s_width);
   set_float(layer, set_height, s_height);
 
@@ -314,14 +288,13 @@ bool build(MonoObject *root) {
   std::vector<size_t> dots, symbols;
   for (size_t index = 0; index < s_assets.size(); ++index)
     (s_asset_is_dot[index] ? dots : symbols).push_back(index);
-  const int count =
-      std::clamp(g_settings.home_particles_count, kMinCount, kMaxCount);
+  const int count = wanted_count();
   s_particles.resize(static_cast<size_t>(count));
   bool no = false;
   void *focus_arguments[1] = {&no};
-  MonoMethod *set_focusable = method_of(box_class, "set_Focusable", 1);
-  MonoMethod *set_image = method_of(box_class, "set_Image", 1);
-  MonoMethod *append = method_of(widget_class, "AppendChild", 1);
+  MonoMethod *set_focusable = Reflect::MethodOf(box_class, "set_Focusable", 1);
+  MonoMethod *set_image = Reflect::MethodOf(box_class, "set_Image", 1);
+  MonoMethod *append = Reflect::MethodOf(widget_class, "AppendChild", 1);
   for (Particle &particle : s_particles) {
     bool dot = !dots.empty() && (symbols.empty() || random01() < 0.55f);
     const std::vector<size_t> &pool = dot ? dots : symbols;
@@ -336,7 +309,7 @@ bool build(MonoObject *root) {
     spawn(particle, dot, true);
     set_float(box, set_width, particle.size);
     set_float(box, set_height, particle.size);
-    void *image_arguments[1] = {target(s_assets[picture])};
+    void *image_arguments[1] = {Reflect::Target(s_assets[picture])};
     MonoObject *exception = nullptr;
     if (set_image)
       mono_runtime_invoke(set_image, box, image_arguments, &exception);
@@ -366,18 +339,18 @@ void place(MonoObject *root, MonoObject *layer) {
   }
   if (!react)
     return;
-  if (object_property(layer, "get_Parent") == root &&
-      object_property(layer, "get_NextSibling") == react)
+  MonoObject *parent = object_property(layer, "get_Parent");
+  if (parent == root && object_property(layer, "get_NextSibling") == react)
     return;
-  if (object_property(layer, "get_Parent"))
-    call(layer, "RemoveFromParent", 0);
+  if (parent)
+    Reflect::Call(layer, "RemoveFromParent", 0);
   void *arguments[2] = {layer, react};
-  call(root, "InsertChildBelow", 2, arguments);
+  Reflect::Call(root, "InsertChildBelow", 2, arguments);
 }
 
 void animate(float seconds) {
   for (Particle &particle : s_particles) {
-    MonoObject *box = target(particle.widget);
+    MonoObject *box = Reflect::Target(particle.widget);
     if (!box)
       continue;
     particle.age += seconds;
@@ -408,24 +381,6 @@ void animate(float seconds) {
 
 } // namespace
 
-const char *Directory() { return kDirectory; }
-
-void Restart() {
-  teardown();
-  s_failures = 0;
-}
-
-std::string Status() {
-  char text[160];
-  std::snprintf(text, sizeof(text),
-                "enabled=%d wanted=%d particles=%zu pictures=%zu layer=%d "
-                "failures=%d",
-                (AniketosTheme::CustomizationOn() && g_settings.home_particles_enabled) ? 1 : 0,
-                g_settings.home_particles_count, s_particles.size(),
-                s_assets.size(), target(s_layer) ? 1 : 0, s_failures);
-  return text;
-}
-
 void Tick() {
   ++s_frame;
   if (!(AniketosTheme::CustomizationOn() && g_settings.home_particles_enabled)) {
@@ -433,7 +388,7 @@ void Tick() {
       teardown();
     return;
   }
-  MonoObject *layer = target(s_layer);
+  MonoObject *layer = Reflect::Target(s_layer);
   if (s_frame % 30 == 0) {
     MonoObject *root = ShellClock::GetHomeRoot();
     if (!root || ShellClock::IsWidgetDisposed(root))
@@ -442,9 +397,7 @@ void Tick() {
       teardown(); /* Home rebuilt its scene */
       layer = nullptr;
     }
-    const int wanted =
-        std::clamp(g_settings.home_particles_count, kMinCount, kMaxCount);
-    if (layer && static_cast<int>(s_particles.size()) != wanted) {
+    if (layer && static_cast<int>(s_particles.size()) != wanted_count()) {
       teardown();
       layer = nullptr;
     }
@@ -456,7 +409,7 @@ void Tick() {
         ++s_failures;
         return;
       }
-      layer = target(s_layer);
+      layer = Reflect::Target(s_layer);
     }
     place(root, layer);
   }
@@ -464,7 +417,8 @@ void Tick() {
     return;
   /* nothing to move while Home is out of sight */
   float opacity = 1.0f;
-  if (float_property(layer, "get_FinalOpacity", &opacity) && opacity <= 0.02f)
+  if (Reflect::FloatProperty(layer, "get_FinalOpacity", &opacity) &&
+      opacity <= 0.02f)
     return;
   animate(1.0f / 60.0f);
 }

@@ -10,6 +10,7 @@
 
 #include <onion/fps_formula.hpp>
 #include <onion/distribution.h>
+#include <onion/fs.h>
 #include <onion/kbm_store.hpp>
 #include <onion/log.h>
 #include <onion/proc_dmap.h>
@@ -26,7 +27,6 @@
 #include <mutex>
 #include <pthread.h>
 #include <string>
-#include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/sysctl.h>
 #include <sys/types.h>
@@ -66,20 +66,20 @@ struct Game {
   std::string title_id;
 };
 
-std::mutex g_mutex;
-std::condition_variable g_wake;
-Game g_game;         /* the running game; pid -1 when none */
-uint32_t g_gen = 0;  /* bumped on every start/exit: cancels waits */
-bool g_pending = false; /* start or reload: serve g_game */
-pid_t g_injected_pid = -1;   /* the last game the agent went into ... */
-std::string g_injected_title;
-time_t g_injected_at = 0;    /* ... and when */
+std::mutex s_game_mutex;
+std::condition_variable s_game_changed;
+Game s_current_game;           /* the running game; pid -1 when none */
+uint32_t s_game_generation = 0; /* bumped on every start/exit: cancels waits */
+bool s_serve_pending = false;  /* start or reload: serve s_current_game */
+pid_t s_injected_pid = -1;     /* the last game the agent went into ... */
+std::string s_injected_title;
+time_t s_injected_at = 0;      /* ... and when */
 
 /* Wait up to `ms`; false once a lifecycle event replaced this job. */
 bool nap(uint32_t gen, int ms) {
-  std::unique_lock<std::mutex> lock(g_mutex);
-  return !g_wake.wait_for(lock, std::chrono::milliseconds(ms),
-                          [gen] { return g_gen != gen; });
+  std::unique_lock<std::mutex> lock(s_game_mutex);
+  return !s_game_changed.wait_for(lock, std::chrono::milliseconds(ms),
+                          [gen] { return s_game_generation != gen; });
 }
 
 template <typename Ready>
@@ -155,11 +155,6 @@ uint32_t agent_checksum() {
   return value;
 }
 
-bool exists(const std::string &path) {
-  struct stat st{};
-  return stat(path.c_str(), &st) == 0;
-}
-
 time_t mtime(const std::string &path) {
   struct stat st{};
   return stat(path.c_str(), &st) == 0 ? st.st_mtime : 0;
@@ -213,19 +208,24 @@ bool inject_agent(const Game &game, uint32_t gen, bool replacing) {
     /* libNineS keeps global ptrace state and swaps our authid while it
        works: one injection at a time across the daemon. */
     std::lock_guard<std::mutex> lock(inject_mutex());
+    {
+      /* before it goes in: a game that dies during the injection counts */
+      std::lock_guard<std::mutex> game_lock(s_game_mutex);
+      s_injected_pid = pid;
+      s_injected_title = game.title_id;
+      s_injected_at = time(nullptr);
+    }
     injected = Inject_Toolbox(static_cast<int>(pid),
                               const_cast<uint8_t *>(kbm_agent_elf_start));
   }
   if (!injected) {
     LOG_ERROR("[kbm] %s pid=%d: agent injection failed", game.title_id.c_str(),
               static_cast<int>(pid));
+    if (isProcessAlive(pid)) {
+      std::lock_guard<std::mutex> lock(s_game_mutex);
+      s_injected_pid = -1;
+    }
     return false;
-  }
-  {
-    std::lock_guard<std::mutex> lock(g_mutex);
-    g_injected_pid = pid;
-    g_injected_title = game.title_id;
-    g_injected_at = time(nullptr);
   }
   uint64_t page = 0;
   if (!wait_until(game, gen, kAgentWaitMs,
@@ -288,23 +288,21 @@ bool push_profile(const Game &game, uint64_t page,
 void serve(const Game &game, uint32_t gen) {
   const store::Settings settings = store::LoadSettings(store::kStoreRoot);
   uint64_t page = find_page(game.pid);
-  const bool wanted = settings.enabled && !exists(kKillFile) &&
+  const bool wanted = settings.enabled && !if_exists(kKillFile) &&
                       store::TitleEnabled(store::kStoreRoot, game.title_id) &&
                       !blocked(game.title_id);
-  if (!page || !wanted) {
-    if (!page) {
-      if (!wanted) {
-        LOG_DEBUG("[kbm] %s pid=%d: not for this game", game.title_id.c_str(),
-                  static_cast<int>(game.pid));
-        return;
-      }
-      if (!inject_agent(game, gen, /*replacing=*/false))
-        return;
-      page = find_page(game.pid);
-      if (!page)
-        return;
+  if (!page) {
+    if (!wanted) {
+      LOG_DEBUG("[kbm] %s pid=%d: not for this game", game.title_id.c_str(),
+                static_cast<int>(game.pid));
+      return;
     }
-  } else {
+    if (!inject_agent(game, gen, /*replacing=*/false))
+      return;
+    page = find_page(game.pid);
+    if (!page)
+      return;
+  } else if (wanted) {
     /* an agent from an older HEN: the one we carry takes over from it */
     uint32_t build = 0;
     if (game_read(game.pid, page + offsetof(ControlPage, agent_build), &build,
@@ -325,12 +323,12 @@ void serve(const Game &game, uint32_t gen) {
 }
 
 void *worker(void *) {
-  std::unique_lock<std::mutex> lock(g_mutex);
+  std::unique_lock<std::mutex> lock(s_game_mutex);
   for (;;) {
-    g_wake.wait(lock, [] { return g_pending; });
-    g_pending = false;
-    const Game game = g_game;
-    const uint32_t gen = g_gen;
+    s_game_changed.wait(lock, [] { return s_serve_pending; });
+    s_serve_pending = false;
+    const Game game = s_current_game;
+    const uint32_t gen = s_game_generation;
     lock.unlock();
     if (game.pid > 1)
       serve(game, gen);
@@ -339,7 +337,7 @@ void *worker(void *) {
   return nullptr;
 }
 
-/* Callers hold g_mutex. */
+/* Callers hold s_game_mutex. */
 void ensure_worker_locked() {
   static bool started = false;
   if (started)
@@ -354,43 +352,43 @@ void ensure_worker_locked() {
 
 class Subscriber final : public onion::lifecycle::ISubscriber {
 public:
-  /* first: it only queues, and a failing AppJailbreak (10) stops dispatch */
+  /* first: nothing slow here, and a failing AppJailbreak (10) stops dispatch */
   int priority() const noexcept override { return 5; }
 
   bool on_event(const onion::lifecycle::Event &event) noexcept override {
     const onion::lifecycle::BigApp &app = event.app;
-    std::lock_guard<std::mutex> lock(g_mutex);
+    std::lock_guard<std::mutex> lock(s_game_mutex);
     if (event.type == onion::lifecycle::EventType::BigAppExited) {
-      if (app.pid == g_injected_pid &&
-          time(nullptr) - g_injected_at < kCrashWindowS) {
-        /* touched only by this thread and the worker under g_mutex */
-        const std::string path = block_path(g_injected_title);
+      if (app.pid == s_injected_pid &&
+          time(nullptr) - s_injected_at < kCrashWindowS) {
+        /* touched only by this thread and the worker under s_game_mutex */
+        const std::string path = block_path(s_injected_title);
         if (FILE *f = fopen(path.c_str(), "w"))
           fclose(f);
         LOG_WARN("[kbm] %s ended %lds after the agent went in: KB+M is off "
                  "for it until its profile is saved again",
-                 g_injected_title.c_str(),
-                 static_cast<long>(time(nullptr) - g_injected_at));
+                 s_injected_title.c_str(),
+                 static_cast<long>(time(nullptr) - s_injected_at));
       }
-      if (app.pid == g_injected_pid)
-        g_injected_pid = -1;
-      if (g_game.pid == app.pid) {
-        g_game = Game{};
-        ++g_gen;
-        g_wake.notify_all();
+      if (app.pid == s_injected_pid)
+        s_injected_pid = -1;
+      if (s_current_game.pid == app.pid) {
+        s_current_game = Game{};
+        ++s_game_generation;
+        s_game_changed.notify_all();
       }
       return true;
     }
-    ++g_gen; /* a new Big App always cancels the previous one's waits */
+    ++s_game_generation; /* a new Big App always cancels the previous one's waits */
     if (!is_game(app.title_id)) {
-      g_game = Game{};
-      g_wake.notify_all();
+      s_current_game = Game{};
+      s_game_changed.notify_all();
       return true;
     }
-    g_game = Game{app.pid, app.title_id};
-    g_pending = true;
+    s_current_game = Game{app.pid, app.title_id};
+    s_serve_pending = true;
     ensure_worker_locked();
-    g_wake.notify_all();
+    s_game_changed.notify_all();
     return true;
   }
 };
@@ -403,14 +401,14 @@ onion::lifecycle::ISubscriber &subscriber() {
 }
 
 void request_reload() {
-  std::lock_guard<std::mutex> lock(g_mutex);
-  if (g_game.pid <= 1) {
+  std::lock_guard<std::mutex> lock(s_game_mutex);
+  if (s_current_game.pid <= 1) {
     LOG_DEBUG("[kbm] reload: no game running");
     return;
   }
-  g_pending = true;
+  s_serve_pending = true;
   ensure_worker_locked();
-  g_wake.notify_all();
+  s_game_changed.notify_all();
 }
 
 } // namespace kbm

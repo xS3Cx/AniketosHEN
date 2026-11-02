@@ -1,6 +1,8 @@
 #include "aniketos_theme/custom_font.hpp"
 
 #include "aniketos_theme/customization.hpp"
+#include "aniketos_ui/mono_reflect.hpp"
+#include "aniketos_ui/monotonic_clock.hpp"
 #include "external_symbols.hpp"
 #include "hooked_funcs.hpp"
 
@@ -24,6 +26,9 @@
 
 namespace AniketosTheme::CustomFont {
 namespace {
+
+using AniketosUI::MonotonicMs;
+using AniketosUI::Reflect::MethodOf;
 
 /* libkernel's description of a loaded module (sceKernelGetModuleInfo). */
 struct ModuleSegment {
@@ -79,13 +84,6 @@ time_t s_pending_since = 0;
 uint64_t s_relayout_at_ms = 0;
 constexpr uint64_t kRelayoutDelayMs = 600;
 constexpr int kReloadDelayMs = 1500;
-
-uint64_t monotonic_ms() {
-  timespec now{};
-  clock_gettime(CLOCK_MONOTONIC, &now);
-  return static_cast<uint64_t>(now.tv_sec) * 1000u +
-         static_cast<uint64_t>(now.tv_nsec) / 1000000u;
-}
 bool s_held_back = false;
 
 std::vector<std::string> s_files;
@@ -260,8 +258,7 @@ bool call_static(const char *name_space, const char *klass, const char *method,
                  int count, void **args) {
   MonoClass *type =
       pui_img ? mono_class_from_name(pui_img, name_space, klass) : nullptr;
-  MonoMethod *found =
-      type ? mono_class_get_method_from_name(type, method, count) : nullptr;
+  MonoMethod *found = MethodOf(type, method, count);
   MonoObject *exception = nullptr;
   if (found)
     mono_runtime_invoke(found, nullptr, args, &exception);
@@ -270,7 +267,39 @@ bool call_static(const char *name_space, const char *klass, const char *method,
   return found && !exception;
 }
 
-void relayout_labels();
+/* UI3 labels lay their text out again when the layout's forced locale
+   changes: toggling it between null and "" (which the string loader
+   ignores) redraws every label with the fonts PUI hands out now. */
+void relayout_labels() {
+  MonoClass *system =
+      mono_class_from_name(pui_img, "Sce.PlayStation.PUI", "UISystem");
+  MonoMethod *get_layout = MethodOf(system, "get_LayoutSettings", 0);
+  MonoObject *exception = nullptr;
+  MonoObject *layout = get_layout ? mono_runtime_invoke(get_layout, nullptr,
+                                                        nullptr, &exception)
+                                  : nullptr;
+  MonoMethod *get_locale = MethodOf(layout, "get_ForceOverriddenLocale", 0);
+  MonoMethod *set_locale = MethodOf(layout, "set_ForceOverriddenLocale", 1);
+  if (!get_locale || !set_locale || exception) {
+    LOG_WARN("[FONT] LayoutSettings.ForceOverriddenLocale not found");
+    return;
+  }
+  MonoObject *locale =
+      mono_runtime_invoke(get_locale, layout, nullptr, &exception);
+  /* only our own toggle: a locale someone really forced stays */
+  const char *text =
+      locale ? mono_string_to_utf8(reinterpret_cast<MonoString *>(locale))
+             : nullptr;
+  const bool ours = !locale || (text && text[0] == '\0');
+  if (text)
+    mono_free(const_cast<char *>(text));
+  void *args[1] = {locale ? nullptr
+                          : mono_string_new(mono_domain_get(), "")};
+  if (ours && !exception)
+    mono_runtime_invoke(set_locale, layout, args, &exception);
+  LOG_INFO("[FONT] labels relaid out=%d exception=%d", ours ? 1 : 0,
+           exception ? 1 : 0);
+}
 
 /* Makes the text on screen take the font now in the table (UI thread).
    PUI keeps the Core fonts it made in an LRU; disposing them lets the engine
@@ -304,49 +333,6 @@ void refresh_text() {
   relayout_labels();
 }
 
-/* UI3 labels lay their text out again when the layout's forced locale
-   changes: toggling it between null and "" (which the string loader
-   ignores) redraws every label with the fonts PUI hands out now. */
-void relayout_labels() {
-  MonoClass *system =
-      mono_class_from_name(pui_img, "Sce.PlayStation.PUI", "UISystem");
-  MonoMethod *get_layout =
-      system ? mono_class_get_method_from_name(system, "get_LayoutSettings", 0)
-             : nullptr;
-  MonoObject *exception = nullptr;
-  MonoObject *layout = get_layout ? mono_runtime_invoke(get_layout, nullptr,
-                                                        nullptr, &exception)
-                                  : nullptr;
-  MonoClass *layout_class = layout ? mono_object_get_class(layout) : nullptr;
-  MonoMethod *get_locale =
-      layout_class ? mono_class_get_method_from_name(
-                         layout_class, "get_ForceOverriddenLocale", 0)
-                   : nullptr;
-  MonoMethod *set_locale =
-      layout_class ? mono_class_get_method_from_name(
-                         layout_class, "set_ForceOverriddenLocale", 1)
-                   : nullptr;
-  if (!get_locale || !set_locale || exception) {
-    LOG_WARN("[FONT] LayoutSettings.ForceOverriddenLocale not found");
-    return;
-  }
-  MonoObject *locale =
-      mono_runtime_invoke(get_locale, layout, nullptr, &exception);
-  /* only our own toggle: a locale someone really forced stays */
-  const char *text =
-      locale ? mono_string_to_utf8(reinterpret_cast<MonoString *>(locale))
-             : nullptr;
-  const bool ours = !locale || (text && text[0] == '\0');
-  if (text)
-    mono_free(const_cast<char *>(text));
-  void *args[1] = {locale ? nullptr
-                          : mono_string_new(mono_domain_get(), "")};
-  if (ours && !exception)
-    mono_runtime_invoke(set_locale, layout, args, &exception);
-  LOG_INFO("[FONT] labels relaid out=%d exception=%d", ours ? 1 : 0,
-           exception ? 1 : 0);
-}
-
 } // namespace
 
 const std::vector<std::string> &Files(bool rescan) {
@@ -373,11 +359,6 @@ const std::vector<std::string> &Files(bool rescan) {
 
 int Generation() { return s_generation; }
 
-std::string FileName(const std::string &path) {
-  const size_t slash = path.rfind('/');
-  return slash == std::string::npos ? path : path.substr(slash + 1);
-}
-
 void Install() {
   if (unlink(kPending) == 0) {
     s_held_back = true;
@@ -390,7 +371,7 @@ void Install() {
 void Tick() {
   if (!s_slot)
     return;
-  if (s_relayout_at_ms && monotonic_ms() >= s_relayout_at_ms) {
+  if (s_relayout_at_ms && MonotonicMs() >= s_relayout_at_ms) {
     s_relayout_at_ms = 0;
     relayout_labels();
   }
@@ -423,7 +404,7 @@ void Tick() {
   LOG_INFO("[FONT] text in %s (generation %d)",
            wanted.empty() ? "the system font" : wanted.c_str(), s_generation);
   refresh_text();
-  s_relayout_at_ms = monotonic_ms() + kRelayoutDelayMs;
+  s_relayout_at_ms = MonotonicMs() + kRelayoutDelayMs;
   /* Home and Control Center stay loaded and keep the text boxes React
      measured with the old font: a wider font is cut off with "...". They
      are reloaded once the choice rests (each switch pushes the time back);

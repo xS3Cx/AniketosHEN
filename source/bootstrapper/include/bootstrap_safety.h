@@ -15,9 +15,13 @@
 extern "C" {
 #endif
 
-/* Take the instance lock. False when another bootstrapper is running; the
- * caller must then stop without touching anything. */
+/* Take the instance lock. False when another bootstrapper is running (the
+ * user has been told); the caller must then stop without touching anything. */
 bool bootstrap_safety_lock(void);
+
+/* True when the built-in kstuff has no support for @firmware_version, after
+ * logging that and telling the user. */
+bool bootstrap_kstuff_too_new(uint32_t firmware_version);
 
 /* Decide this start's level from the previous start, and report a previous
  * start that was cut short by a restart (with the tails of the logs it left,

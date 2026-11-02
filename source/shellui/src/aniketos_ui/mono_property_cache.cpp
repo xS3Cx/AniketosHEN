@@ -5,10 +5,7 @@
 #include <atomic>
 #include <cstring>
 
-MonoObject *CreateUIColor(float r, float g, float b, float a);
-MonoObject *CreateUIColorBoxed(float r, float g, float b, float a);
-
-namespace AniketosUI::MonoFast {
+namespace AniketosUI::MonoPropertyCache {
 namespace {
 
 constexpr size_t kSlots = 1024; /* power of two; ~60 entries are used */
@@ -31,6 +28,11 @@ struct Guard {
   }
   ~Guard() { s_lock.clear(std::memory_order_release); }
 };
+
+bool matches(const Slot &slot, MonoClass *klass, int kind, const char *name) {
+  return slot.klass == klass && slot.kind == kind &&
+         std::strcmp(slot.name, name) == 0;
+}
 
 size_t hash_key(MonoClass *klass, const char *name, int kind) {
   uint64_t hash = 1469598103934665603ull ^ reinterpret_cast<uintptr_t>(klass);
@@ -75,8 +77,7 @@ void *Accessor(MonoClass *klass, const char *property, Kind kind) {
       const Slot &slot = s_slots[(index + probe) & (kSlots - 1)];
       if (!slot.klass)
         break;
-      if (slot.klass == klass && slot.kind == kind_id &&
-          std::strcmp(slot.name, property) == 0)
+      if (matches(slot, klass, kind_id, property))
         return slot.value;
     }
   }
@@ -91,8 +92,7 @@ void *Accessor(MonoClass *klass, const char *property, Kind kind) {
   Guard guard;
   for (size_t probe = 0; probe < 16; ++probe) {
     Slot &slot = s_slots[(index + probe) & (kSlots - 1)];
-    if (slot.klass == klass && slot.kind == kind_id &&
-        std::strcmp(slot.name, property) == 0)
+    if (matches(slot, klass, kind_id, property))
       return slot.value;
     if (!slot.klass) {
       std::memcpy(slot.name, property, length + 1);
@@ -106,16 +106,15 @@ void *Accessor(MonoClass *klass, const char *property, Kind kind) {
 }
 
 MonoObject *ScratchColor(float r, float g, float b, float a) {
-  static MonoClass *color_class = nullptr;
   static void (*constructor)(MonoObject *, float, float, float, float) =
       nullptr;
   static MonoObject *payload = nullptr;
   static bool failed = false;
 
   if (!payload && !failed) {
-    color_class = pui_img ? mono_class_from_name(pui_img, "Sce.PlayStation.PUI",
-                                                 "UIColor")
-                          : nullptr;
+    MonoClass *color_class =
+        pui_img ? mono_class_from_name(pui_img, "Sce.PlayStation.PUI", "UIColor")
+                : nullptr;
     MonoObject *boxed = CreateUIColorBoxed(0.0f, 0.0f, 0.0f, 0.0f);
     const uint64_t address =
         color_class ? Get_Address_of_Method(pui_img, color_class, ".ctor", 4)
@@ -134,4 +133,4 @@ MonoObject *ScratchColor(float r, float g, float b, float a) {
   return payload;
 }
 
-} // namespace AniketosUI::MonoFast
+} // namespace AniketosUI::MonoPropertyCache

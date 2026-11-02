@@ -670,6 +670,8 @@ std::string toolbox_val(const char* id, const char* fallback = "0") {
   return v.empty() ? fallback : v;
 }
 
+#include "aniketos_shell/toolbox/aniketos_rows.inc"
+
 void append_toolbox_pkg_group(ps5ui::Group& g) {
   g.link("id_game_package_installer", toolbox_i18n::tr("pkg.installer"),
          "PkgInstaller/data/pkginstaller.xml",
@@ -692,30 +694,9 @@ void append_toolbox_game_group(ps5ui::Group& g) {
          toolbox_i18n::tr("cheats.link.sub"), kIconCheats)
       .link("id_kbm", toolbox_i18n::tr("kbm.link"), "kbm.xml",
             toolbox_i18n::tr("kbm.link.sub"), kIconGame)
-      .group(
-          "id_cheats_visual_opts", toolbox_i18n::tr("cheats.visual_menu"),
-          [](ps5ui::Group& o) {
-            o.label("id_cheats_visual_about",
-                    toolbox_i18n::tr("cheats.visual_menu.about"))
-                .toggle("id_cheats_visual_menu",
-                        toolbox_i18n::tr("cheats.visual_menu.enabled"),
-                        toolbox_on("id_cheats_visual_menu"), std::nullopt,
-                        toolbox_i18n::tr("cheats.visual_menu.enabled.desc"))
-                .list("id_cheats_visual_render",
-                      toolbox_i18n::tr("cheats.visual_menu.render"),
-                      [](ps5ui::ListBuilder& L) {
-                        L.item("id_cheats_visual_render_pui2",
-                               toolbox_i18n::tr("cheats.visual_menu.render.pui2"),
-                               "0")
-                            .item("id_cheats_visual_render_pui3",
-                                  toolbox_i18n::tr(
-                                      "cheats.visual_menu.render.pui3"),
-                                  "1");
-                      },
-                      toolbox_i18n::tr("cheats.visual_menu.render.sub"),
-                      toolbox_val("id_cheats_visual_render"));
-          },
-          toolbox_i18n::tr("cheats.visual_menu.sub"), kIconCheats)
+      .group("id_cheats_visual_opts", toolbox_i18n::tr("cheats.visual_menu"),
+             append_cheats_visual_options,
+             toolbox_i18n::tr("cheats.visual_menu.sub"), kIconCheats)
       .button("id_download_cheats", toolbox_i18n::tr("cheats.repo.download"),
               toolbox_i18n::tr("cheats.repo.download.desc"), std::nullopt,
               kIconDownload, ps5ui::Style::None,
@@ -950,23 +931,7 @@ void append_toolbox_about_group(ps5ui::Group& g) {
 
   g.label("id_about_build", build_line, ps5ui::Style::Center)
       .group(
-          "id_find_me", toolbox_i18n::tr("about.find_me"),
-          [](ps5ui::Group& d) {
-            /* one row per place: its mark, its name and the handle under
-               it; pressing a row shows the address (onpress_misc) */
-            d.label("id_find_me_info", toolbox_i18n::tr("about.find_me.info"),
-                    ps5ui::Style::Center)
-                .button("id_find_me_x", "X", "@Alex0_SH", std::nullopt,
-                        kIconSocialX)
-                .button("id_find_me_youtube", "YouTube", "AlexZero",
-                        std::nullopt, kIconSocialYouTube)
-                .button("id_find_me_discord", "Discord", "alex0sh",
-                        std::nullopt, kIconSocialDiscord)
-                .button("id_find_me_telegram", "Telegram", "@missgoodpussy",
-                        std::nullopt, kIconSocialTelegram)
-                .button("id_find_me_tiktok", "TikTok", "@mealexzero",
-                        std::nullopt, kIconSocialTikTok);
-          },
+          "id_find_me", toolbox_i18n::tr("about.find_me"), append_find_me_rows,
           toolbox_i18n::tr("about.find_me.sub"), kIconAbout)
       .group(
           "id_onionhen_credits", toolbox_i18n::tr("about.credits"),

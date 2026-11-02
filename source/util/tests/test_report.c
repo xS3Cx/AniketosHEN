@@ -192,6 +192,43 @@ static int test_tail_starts_on_a_line(void) {
   return 0;
 }
 
+static int test_tail_keeps_a_whole_first_line(void) {
+  char base[] = "/tmp/onion-tail-XXXXXX";
+  TEST_ASSERT_TRUE(mkdtemp(base) != NULL);
+  char path[128];
+  snprintf(path, sizeof(path), "%s/log.txt", base);
+  FILE *file = fopen(path, "wb");
+  TEST_ASSERT_TRUE(file != NULL);
+  fputs("old line\nnew line\n", file);
+  fclose(file);
+
+  /* Exactly the new bytes, as the daemon crash report asks for. */
+  char out[64] = "";
+  onion_report_append_tail(out, sizeof(out), "log", path,
+                           strlen("new line\n"));
+  TEST_ASSERT_STREQ("== log ==\nnew line\n", out);
+
+  /* A tail with no line break at all stays, at the size asked for. */
+  file = fopen(path, "wb");
+  TEST_ASSERT_TRUE(file != NULL);
+  fputs("abcdefghij", file);
+  fclose(file);
+  out[0] = '\0';
+  onion_report_append_tail(out, sizeof(out), "log", path, 4);
+  TEST_ASSERT_STREQ("== log ==\nghij\n", out);
+  unlink(path);
+  rmdir(base);
+  return 0;
+}
+
+static int test_report_file_names(void) {
+  TEST_ASSERT_TRUE(onion_report_is_file_name("0000000001-7-0-boot.txt"));
+  TEST_ASSERT_TRUE(!onion_report_is_file_name(".daemon_crash_offset"));
+  TEST_ASSERT_TRUE(!onion_report_is_file_name(".txt"));
+  TEST_ASSERT_TRUE(!onion_report_is_file_name("report.log"));
+  return 0;
+}
+
 int test_report_suite(void) {
   int failures = 0;
   failures += onion_test_run("report_console_identifiers",
@@ -206,5 +243,8 @@ int test_report_suite(void) {
   failures += onion_test_run("report_write_and_prune",
                              test_reports_are_written_scrubbed_and_pruned);
   failures += onion_test_run("report_tail", test_tail_starts_on_a_line);
+  failures += onion_test_run("report_tail_whole_first_line",
+                             test_tail_keeps_a_whole_first_line);
+  failures += onion_test_run("report_file_names", test_report_file_names);
   return failures;
 }

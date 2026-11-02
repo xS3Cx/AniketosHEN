@@ -5,34 +5,20 @@
 
 #include <atomic>
 #include <pthread.h>
-#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
-#include <time.h>
 #include <unistd.h>
 
 #include <ps5/kernel.h>
 
-namespace onion::kbm::hooks {
-/* W5's helper: the import slots in the game's own modules (not .sprx) that
-   hold `fn`, made writable. Weak: without it the game's IME is not
-   forwarded and only our pump runs. */
-__attribute__((weak)) int FindImportSlots(const void *fn, uint64_t **out,
-                                          int max);
-} // namespace onion::kbm::hooks
+#include "kbm_hooks.hpp"
 
 namespace onion::kbm::agent {
 namespace {
 
-uint64_t NowUs() {
-  timespec t;
-  clock_gettime(CLOCK_MONOTONIC, &t);
-  return static_cast<uint64_t>(t.tv_sec) * 1000000u +
-         static_cast<uint64_t>(t.tv_nsec) / 1000u;
-}
-
 /* ---- log (klog, at most a few lines a second) ----------------------------- */
 
+uint32_t s_kernel;
 int (*s_out)(int, const char *);
 uint64_t s_log_window_us;
 int s_log_count, s_log_dropped;
@@ -41,10 +27,10 @@ constexpr int kLogsPerSecond = 8;
 __attribute__((format(printf, 1, 2))) void Log(const char *fmt, ...) {
   if (!s_out)
     return;
-  char line[256];
   const uint64_t now = NowUs();
   if (now - s_log_window_us >= 1000000) {
     if (s_log_dropped) {
+      char line[64];
       snprintf(line, sizeof(line), "[KBM-INPUT] (%d lines dropped)\n",
                s_log_dropped);
       s_out(0, line);
@@ -56,16 +42,10 @@ __attribute__((format(printf, 1, 2))) void Log(const char *fmt, ...) {
     ++s_log_dropped;
     return;
   }
-  int n = snprintf(line, sizeof(line), "[KBM-INPUT] ");
   va_list ap;
   va_start(ap, fmt);
-  n += vsnprintf(line + n, sizeof(line) - n - 1, fmt, ap);
+  LogLine("[KBM-INPUT] ", fmt, ap);
   va_end(ap);
-  if (n > static_cast<int>(sizeof(line)) - 2)
-    n = sizeof(line) - 2;
-  line[n] = '\n';
-  line[n + 1] = 0;
-  s_out(0, line);
 }
 
 /* ---- libraries -------------------------------------------------------------- */
@@ -75,12 +55,12 @@ int (*s_load_start)(const char *, size_t, const void *, uint32_t, void *,
                     int *);
 int (*s_set_priority)(pthread_t, int);
 
-void *Sym(uint32_t module, const char *name) {
+template <typename Fn> void Bind(Fn &target, uint32_t module, const char *name) {
   const intptr_t address =
       module ? kernel_dynlib_dlsym(getpid(), module, name) : 0;
   if (address <= 0)
     Log("%s not found", name);
-  return address > 0 ? reinterpret_cast<void *>(address) : nullptr;
+  target = address > 0 ? reinterpret_cast<Fn>(address) : nullptr;
 }
 
 /* A system library by name; when the game has not loaded it, from where this
@@ -280,10 +260,6 @@ void PatchSlots(const void *real, const void *ours) {
 
 /* Done before our keyboard opens: GameUpdate passes through until then. */
 void HookGameIme() {
-  if (!hooks::FindImportSlots) {
-    Log("no import-slot helper: the game's own IME is not forwarded");
-    return;
-  }
   PatchSlots(reinterpret_cast<const void *>(s_api.ime_update),
              reinterpret_cast<const void *>(&GameUpdate));
   PatchSlots(reinterpret_cast<const void *>(s_api.ime_open),
@@ -323,7 +299,6 @@ constexpr uint64_t kRetryUs = 1000000, kBusyRetryUs = 5000000;
 constexpr uint64_t kMouseGoneUs = 200000;
 constexpr int kReaderPriority = 767; /* the lowest: never in the game's way */
 
-constexpr uint32_t kStatusMouse = 1u << 2, kStatusKeyboard = 1u << 3;
 void SetStatus(uint32_t bit, bool on) {
   if (!s_control)
     return;
@@ -390,7 +365,7 @@ void CloseMouse() {
   }
   s_mouse = -1;
   s_mouse_buttons = 0;
-  SetStatus(kStatusMouse, false);
+  SetStatus(kStatusMouseOpen, false);
 }
 
 void OpenMouse(uint64_t now) {
@@ -408,7 +383,7 @@ void OpenMouse(uint64_t now) {
   s_mouse_error = 0;
   s_mouse_connected = false;
   s_mouse_seen_us = now;
-  SetStatus(kStatusMouse, true);
+  SetStatus(kStatusMouseOpen, true);
   Log("mouse open for user 0x%x (handle %d)", static_cast<unsigned>(s_user),
       handle);
 }
@@ -469,7 +444,7 @@ void ReadMouse(uint64_t now) {
 void Disown() {
   s_owned.store(false, std::memory_order_release);
   s_ime_user = -1;
-  SetStatus(kStatusKeyboard, false);
+  SetStatus(kStatusKeyboardOpen, false);
 }
 
 /* Closes our IME keyboard, only while it is still ours. */
@@ -518,7 +493,7 @@ void OpenKeyboard(uint64_t now) {
   s_ime_busy_count = 0;
   s_ime_lost = false;
   s_owned.store(true, std::memory_order_release);
-  SetStatus(kStatusKeyboard, true);
+  SetStatus(kStatusKeyboardOpen, true);
   Log("keyboard open for user 0x%x", static_cast<unsigned>(s_user));
 }
 
@@ -563,10 +538,10 @@ void WaitForOlderAgent() {
     return;
   const uint64_t until = NowUs() + 500000;
   while (__atomic_load_n(&s_control->agent_status, __ATOMIC_ACQUIRE) &
-         (kStatusMouse | kStatusKeyboard)) {
+         (kStatusMouseOpen | kStatusKeyboardOpen)) {
     if (NowUs() >= until) {
       Log("the agent before still holds input; going ahead");
-      SetStatus(kStatusMouse | kStatusKeyboard, false);
+      SetStatus(kStatusMouseOpen | kStatusKeyboardOpen, false);
       break;
     }
     s_alive_us.store(NowUs(), std::memory_order_release);
@@ -621,37 +596,41 @@ void *Reader(void *) {
 
 } // namespace
 
+void LogInit() {
+  if (kernel_dynlib_handle(getpid(), "libkernel.sprx", &s_kernel) != 0)
+    kernel_dynlib_handle(getpid(), "libkernel_sys.sprx", &s_kernel);
+  Bind(s_out, s_kernel, "sceKernelDebugOutText");
+}
+
+void LogLine(const char *prefix, const char *fmt, va_list args) {
+  if (!s_out)
+    return;
+  char line[256];
+  int n = snprintf(line, sizeof(line), "%s", prefix);
+  n += vsnprintf(line + n, sizeof(line) - n - 1, fmt, args);
+  if (n > static_cast<int>(sizeof(line)) - 2)
+    n = sizeof(line) - 2;
+  line[n] = '\n';
+  line[n + 1] = 0;
+  s_out(0, line);
+}
+
 bool InputInit() {
-  uint32_t kernel = 0;
-  if (kernel_dynlib_handle(getpid(), "libkernel.sprx", &kernel) != 0)
-    kernel_dynlib_handle(getpid(), "libkernel_sys.sprx", &kernel);
-  s_out = reinterpret_cast<decltype(s_out)>(Sym(kernel, "sceKernelDebugOutText"));
-  s_sandbox_word = reinterpret_cast<decltype(s_sandbox_word)>(
-      Sym(kernel, "sceKernelGetFsSandboxRandomWord"));
-  s_load_start = reinterpret_cast<decltype(s_load_start)>(
-      Sym(kernel, "sceKernelLoadStartModule"));
-  s_set_priority = reinterpret_cast<decltype(s_set_priority)>(
-      Sym(kernel, "scePthreadSetprio"));
+  Bind(s_sandbox_word, s_kernel, "sceKernelGetFsSandboxRandomWord");
+  Bind(s_load_start, s_kernel, "sceKernelLoadStartModule");
+  Bind(s_set_priority, s_kernel, "scePthreadSetprio");
 
   const uint32_t users = Module("libSceUserService.sprx");
-  s_api.foreground_user = reinterpret_cast<decltype(s_api.foreground_user)>(
-      Sym(users, "sceUserServiceGetForegroundUser"));
+  Bind(s_api.foreground_user, users, "sceUserServiceGetForegroundUser");
   const uint32_t mouse = Module("libSceMouse.sprx");
-  s_api.mouse_init =
-      reinterpret_cast<decltype(s_api.mouse_init)>(Sym(mouse, "sceMouseInit"));
-  s_api.mouse_open =
-      reinterpret_cast<decltype(s_api.mouse_open)>(Sym(mouse, "sceMouseOpen"));
-  s_api.mouse_read =
-      reinterpret_cast<decltype(s_api.mouse_read)>(Sym(mouse, "sceMouseRead"));
-  s_api.mouse_close =
-      reinterpret_cast<decltype(s_api.mouse_close)>(Sym(mouse, "sceMouseClose"));
+  Bind(s_api.mouse_init, mouse, "sceMouseInit");
+  Bind(s_api.mouse_open, mouse, "sceMouseOpen");
+  Bind(s_api.mouse_read, mouse, "sceMouseRead");
+  Bind(s_api.mouse_close, mouse, "sceMouseClose");
   const uint32_t ime = Module("libSceIme.sprx");
-  s_api.ime_open = reinterpret_cast<decltype(s_api.ime_open)>(
-      Sym(ime, "sceImeKeyboardOpen"));
-  s_api.ime_update =
-      reinterpret_cast<decltype(s_api.ime_update)>(Sym(ime, "sceImeUpdate"));
-  s_api.ime_close = reinterpret_cast<decltype(s_api.ime_close)>(
-      Sym(ime, "sceImeKeyboardClose"));
+  Bind(s_api.ime_open, ime, "sceImeKeyboardOpen");
+  Bind(s_api.ime_update, ime, "sceImeUpdate");
+  Bind(s_api.ime_close, ime, "sceImeKeyboardClose");
 
   if (MouseUsable() && s_api.mouse_init)
     Log("mouse init 0x%x", static_cast<unsigned>(s_api.mouse_init()));

@@ -63,16 +63,6 @@ static OnPressResult id_debug_jb(OnPressContext &ctx) {
   return OnPressResult::Handled;
 }
 
-/* Read by util before every send, so no restart is needed. */
-static OnPressResult id_error_reports(OnPressContext &ctx) {
-  const bool enabled = value_as_int(ctx);
-  if (enabled == g_settings.reports_send)
-    return OnPressResult::EarlyReturn;
-  g_settings.reports_send = enabled;
-  LOG_INFO("Error reports %s", enabled ? "enabled" : "disabled");
-  return OnPressResult::Handled;
-}
-
 static OnPressResult id_app_jailbreak_enabled(OnPressContext &ctx) {
   const bool enabled = value_as_int(ctx);
   if (enabled == g_settings.app_jailbreak_enabled) {
@@ -94,24 +84,6 @@ static OnPressResult id_custom_game_opts(OnPressContext &ctx) {
   g_settings.onionhen_game_opts = !g_settings.onionhen_game_opts;
   LOG_DEBUG(ONION_DIST_NAME " Game Options: %s",
               g_settings.onionhen_game_opts ? "Enabled" : "Disabled");
-  return OnPressResult::Handled;
-}
-
-static OnPressResult id_cheats_visual_menu(OnPressContext &ctx) {
-  const bool enabled = ctx.value == "1";
-  if (enabled == g_settings.cheats_visual_menu)
-    return OnPressResult::EarlyReturn;
-  g_settings.cheats_visual_menu = enabled;
-  LOG_INFO("Visual cheats menu: %s", enabled ? "Enabled" : "Disabled");
-  return OnPressResult::Handled;
-}
-
-static OnPressResult id_cheats_visual_render(OnPressContext &ctx) {
-  const int render = atoi(ctx.value.c_str()) == 1 ? 1 : 0;
-  if (render == g_settings.cheats_visual_render)
-    return OnPressResult::EarlyReturn;
-  g_settings.cheats_visual_render = render;
-  LOG_INFO("Visual cheats menu render: %s", render ? "PUI3" : "PUI2");
   return OnPressResult::Handled;
 }
 
@@ -247,10 +219,7 @@ static const OnPressExactEntry kExact[] = {
     {"id_log_level", id_log_level},
     {"id_app_jailbreak_enabled", id_app_jailbreak_enabled},
     {"id_debug_jb", id_debug_jb},
-    {"id_error_reports", id_error_reports},
     {"id_custom_game_opts", id_custom_game_opts},
-    {"id_cheats_visual_menu", id_cheats_visual_menu},
-    {"id_cheats_visual_render", id_cheats_visual_render},
     {"id_ui_lang", id_ui_lang},
     {"id_rest_1", id_rest_1},
     {"id_enable_fan_speed", id_enable_fan_speed},

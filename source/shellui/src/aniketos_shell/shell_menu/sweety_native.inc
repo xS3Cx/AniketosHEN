@@ -36,7 +36,7 @@ void forget_base_scene() {
 }
 
 bool Wanted() {
-  return active_menu_theme() == kThemeSweety && !s_game_host && !s_failed &&
+  return active_menu_theme() == kThemeSweety && !s_failed &&
          SystemDialogs::PopupMenuAvailable();
 }
 
@@ -44,6 +44,22 @@ float slider_number(const Option &option) {
   return option.type == OptionType::SliderInt
              ? static_cast<float>(int_target(option.id))
              : float_target(option.id);
+}
+
+float slider_step(const Option &option) {
+  if (option.type == OptionType::SliderInt)
+    return static_cast<float>(std::max(1, option.step_i));
+  return option.step_f > 0.0f ? option.step_f : 0.1f;
+}
+
+void Hide() {
+  if (!s_active)
+    return;
+  SystemDialogs::CloseNativeMenu();
+  s_active = false;
+  forget_base_scene();
+  s_armed_option = OptionId::None;
+  request_save();
 }
 
 /* The names of everything a choice option can be set to, for a drop-down
@@ -99,14 +115,14 @@ bool open_page(int focus) {
       row.kind = SystemDialogs::NativeMenuItem::Kind::Slider;
       row.minimum = static_cast<float>(option.minimum_i);
       row.maximum = static_cast<float>(option.maximum_i);
-      row.step = static_cast<float>(std::max(1, option.step_i));
+      row.step = slider_step(option);
       row.number = slider_number(option);
       break;
     case OptionType::SliderFloat:
       row.kind = SystemDialogs::NativeMenuItem::Kind::Slider;
       row.minimum = option.minimum_f;
       row.maximum = option.maximum_f;
-      row.step = option.step_f > 0.0f ? option.step_f : 0.1f;
+      row.step = slider_step(option);
       row.number = slider_number(option);
       break;
     case OptionType::Submenu:
@@ -143,9 +159,12 @@ bool open_page(int focus) {
       rows, page_title(page),
       std::clamp(focus, 0, static_cast<int>(rows.size()) - 1), &failure,
       base_scene(), placement);
-  if (!opened)
+  if (!opened) {
     LOG_ERROR("[ANIVSH:SWEETY] page '%s' not opened: %s", page_title(page),
               failure.c_str());
+    s_failed = true;
+    Hide(); /* mid-session: no page will ever report Closed */
+  }
   return opened;
 }
 
@@ -158,22 +177,10 @@ bool Show() {
   if (MonoObject *scene = SystemDialogs::FocusedScene())
     s_base_scene = mono_gchandle_new(scene, 0);
   s_active = open_page(0);
-  if (!s_active) {
+  if (!s_active)
     forget_base_scene();
-    s_failed = true;
-  }
   LOG_INFO("[ANIVSH:SWEETY] native menu opened=%d", s_active ? 1 : 0);
   return s_active;
-}
-
-void Hide() {
-  if (!s_active)
-    return;
-  SystemDialogs::CloseNativeMenu();
-  s_active = false;
-  forget_base_scene();
-  s_armed_option = OptionId::None;
-  request_save();
 }
 
 void pressed(int index) {
@@ -202,10 +209,7 @@ void pressed(int index) {
     int chosen = 0;
     if (SystemDialogs::NativeMenuChoice(index, &chosen))
       return; /* a drop-down: follow_inputs() picks the choice up */
-    activate(option);
-    if (s_active)
-      open_page(index);
-    return;
+    [[fallthrough]];
   }
   default:
     activate(option);
@@ -228,11 +232,8 @@ void follow_inputs() {
       float shown = 0.0f;
       if (!SystemDialogs::NativeMenuSlider(static_cast<int>(index), &shown))
         continue;
-      const float step = option.type == OptionType::SliderInt
-                             ? static_cast<float>(std::max(1, option.step_i))
-                             : (option.step_f > 0.0f ? option.step_f : 0.1f);
-      steps = static_cast<int>(
-          std::lround((shown - slider_number(option)) / step));
+      steps = static_cast<int>(std::lround(
+          (shown - slider_number(option)) / slider_step(option)));
     } else if (option.type == OptionType::Strings) {
       int chosen = 0;
       if (!SystemDialogs::NativeMenuChoice(static_cast<int>(index), &chosen))

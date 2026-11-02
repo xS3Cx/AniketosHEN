@@ -2,12 +2,14 @@
 
 #include "aniketos_shell/home/home_bookmark.hpp"
 #include "aniketos_shell/rn_scripts/script_injector.hpp"
+#include "aniketos_ui/small_file.hpp"
 #include "hooked_funcs.hpp"
 #include "onion_cjson.hpp"
 #include "toolbox_i18n.hpp"
 #include "web_icon.hpp"
 
 #include <onion/distribution.h>
+#include <onion/fs.h>
 #include <onion/ipc_client.hpp>
 #include <onion/log.h>
 
@@ -18,7 +20,6 @@
 #include <mutex>
 #include <pthread.h>
 #include <string>
-#include <sys/stat.h>
 #include <unistd.h>
 #include <vector>
 
@@ -61,25 +62,17 @@ std::vector<Request> s_requests;
 std::vector<Pending> s_pending;
 time_t s_last_look = 0;
 
-std::string picture_path(const std::string &id, const char *extension) {
-  return std::string(kDir) + "/" + id + extension;
-}
-
-bool exists(const std::string &path) {
-  struct stat st {};
-  return stat(path.c_str(), &st) == 0;
+std::string icon_path(const std::string &id) {
+  return std::string(kDir) + "/" + id + ".png";
 }
 
 void load_locked() {
   if (s_loaded)
     return;
   s_loaded = true;
-  FILE *file = std::fopen(kFile, "rb");
-  if (!file)
+  std::string text;
+  if (!AniketosUI::ReadSmallFile(kFile, 128 * 1024, text))
     return;
-  std::string text(128 * 1024, '\0');
-  text.resize(std::fread(text.data(), 1, text.size(), file));
-  std::fclose(file);
   onion_cjson::Root root(text);
   if (!root)
     return;
@@ -91,8 +84,8 @@ void load_locked() {
     tile.name = onion_cjson::string_item(item, "name", "");
     tile.icon = onion_cjson::string_item(item, "icon", "");
     /* the icon arrived while ShellUI restarted */
-    if (tile.icon.empty() && exists(picture_path(tile.id, ".png")))
-      tile.icon = picture_path(tile.id, ".png");
+    if (tile.icon.empty() && if_exists(icon_path(tile.id).c_str()))
+      tile.icon = icon_path(tile.id);
     if (WebIcon::ValidTileId(tile.id) && WebIcon::ValidPageUrl(tile.url) &&
         s_tiles.size() < kMaxTiles)
       s_tiles.push_back(tile);
@@ -112,17 +105,8 @@ void save_locked() {
     cJSON_AddItemToArray(array, item);
   }
   const std::string text = onion_cjson::print_owned(root, true);
-  const std::string temporary = std::string(kFile) + ".tmp";
-  FILE *file = text.empty() ? nullptr : std::fopen(temporary.c_str(), "wb");
-  bool written = false;
-  if (file) {
-    written = std::fwrite(text.data(), 1, text.size(), file) == text.size();
-    written = std::fclose(file) == 0 && written;
-  }
-  if (!written || std::rename(temporary.c_str(), kFile) != 0) {
-    unlink(temporary.c_str());
+  if (text.empty() || !write_file_atomic(kFile, text.data(), text.size()))
     LOG_WARN("[WEBTILES] could not save %s", kFile);
-  }
 }
 
 void changed_locked() {
@@ -155,7 +139,7 @@ void *ask_for_icon(void *raw) {
   return nullptr;
 }
 
-void add(const std::string &url, const std::string &title) {
+void add_tile(const std::string &url, const std::string &title) {
   Tile tile;
   {
     std::lock_guard<std::mutex> lock(s_mutex);
@@ -187,7 +171,7 @@ void add(const std::string &url, const std::string &title) {
   }
 }
 
-void remove(const std::string &url) {
+void remove_tile(const std::string &url) {
   std::string id;
   {
     std::lock_guard<std::mutex> lock(s_mutex);
@@ -205,7 +189,7 @@ void remove(const std::string &url) {
                                    return pending.id == id;
                                  }),
                   s_pending.end());
-  unlink(picture_path(id, ".png").c_str());
+  unlink(icon_path(id).c_str());
   LOG_INFO("[WEBTILES] removed %s", id.c_str());
   notify("%s", tr("web_tiles.removed"));
 }
@@ -218,8 +202,8 @@ void look_for_icons() {
   s_last_look = now;
   for (size_t i = 0; i < s_pending.size();) {
     const std::string id = s_pending[i].id;
-    const std::string found = picture_path(id, ".png");
-    if (exists(found)) {
+    const std::string found = icon_path(id);
+    if (if_exists(found.c_str())) {
       std::lock_guard<std::mutex> lock(s_mutex);
       for (Tile &tile : s_tiles)
         if (tile.id == id)
@@ -294,9 +278,9 @@ void Tick() {
   }
   for (const Request &request : requests) {
     if (request.add)
-      add(request.url, request.title);
+      add_tile(request.url, request.title);
     else
-      remove(request.url);
+      remove_tile(request.url);
   }
   look_for_icons();
 }

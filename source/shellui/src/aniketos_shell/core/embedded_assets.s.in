@@ -1,124 +1,32 @@
-/* The distribution's icon, embedded so ShellUI can hand it to PUI from its
-   own data folder instead of relying on a file in a system directory. */
+/* Everything embedded in ShellUI, so it can hand pictures to PUI from its own
+   data folder instead of relying on a file in a system directory. Each file
+   gets the symbols <name>_start and <name>_end. */
 .intel_syntax noprefix
 .section .rodata
-.p2align 4
-.global aniketos_icon_png_start
-.type aniketos_icon_png_start,@object
-aniketos_icon_png_start:
-.incbin "@ANIKETOS_ICON_PNG@"
-.global aniketos_icon_png_end
-.type aniketos_icon_png_end,@object
-aniketos_icon_png_end:
-.global aniketos_icon_rgba_start
-.type aniketos_icon_rgba_start,@object
-aniketos_icon_rgba_start:
-.incbin "@ANIKETOS_ICON_RGBA@"
-.global aniketos_icon_rgba_end
-.type aniketos_icon_rgba_end,@object
-aniketos_icon_rgba_end:
 
+.macro embed name, file
 .p2align 4
-.global home_menu_internet_on_png_start
-.type home_menu_internet_on_png_start,@object
-home_menu_internet_on_png_start:
-.incbin "@HOME_MENU_ASSETS@/internet_on.png"
-.global home_menu_internet_on_png_end
-.type home_menu_internet_on_png_end,@object
-home_menu_internet_on_png_end:
-.p2align 4
-.global home_menu_internet_off_png_start
-.type home_menu_internet_off_png_start,@object
-home_menu_internet_off_png_start:
-.incbin "@HOME_MENU_ASSETS@/internet_off.png"
-.global home_menu_internet_off_png_end
-.type home_menu_internet_off_png_end,@object
-home_menu_internet_off_png_end:
-.p2align 4
-.global color_track_png_start
-.type color_track_png_start,@object
-color_track_png_start:
-.incbin "@HOME_MENU_ASSETS@/color_track.png"
-.global color_track_png_end
-.type color_track_png_end,@object
-color_track_png_end:
-.p2align 4
-.global color_track_gray_png_start
-.type color_track_gray_png_start,@object
-color_track_gray_png_start:
-.incbin "@HOME_MENU_ASSETS@/color_track_gray.png"
-.global color_track_gray_png_end
-.type color_track_gray_png_end,@object
-color_track_gray_png_end:
-.p2align 4
-.global color_track_solid_png_start
-.type color_track_solid_png_start,@object
-color_track_solid_png_start:
-.incbin "@HOME_MENU_ASSETS@/color_track_solid.png"
-.global color_track_solid_png_end
-.type color_track_solid_png_end,@object
-color_track_solid_png_end:
-.p2align 4
-.global color_track_fade_png_start
-.type color_track_fade_png_start,@object
-color_track_fade_png_start:
-.incbin "@HOME_MENU_ASSETS@/color_track_fade.png"
-.global color_track_fade_png_end
-.type color_track_fade_png_end,@object
-color_track_fade_png_end:
+.global \name\()_start
+.type \name\()_start,@object
+\name\()_start:
+.incbin "\file"
+.global \name\()_end
+.type \name\()_end,@object
+\name\()_end:
+.endm
 
-.global particle_triangle_png_start
-.type particle_triangle_png_start,@object
-particle_triangle_png_start:
-.incbin "@PARTICLE_ASSETS@/triangle.png"
-.global particle_triangle_png_end
-.type particle_triangle_png_end,@object
-particle_triangle_png_end:
-
-.global particle_circle_png_start
-.type particle_circle_png_start,@object
-particle_circle_png_start:
-.incbin "@PARTICLE_ASSETS@/circle.png"
-.global particle_circle_png_end
-.type particle_circle_png_end,@object
-particle_circle_png_end:
-
-.global particle_cross_png_start
-.type particle_cross_png_start,@object
-particle_cross_png_start:
-.incbin "@PARTICLE_ASSETS@/cross.png"
-.global particle_cross_png_end
-.type particle_cross_png_end,@object
-particle_cross_png_end:
-
-.global particle_square_png_start
-.type particle_square_png_start,@object
-particle_square_png_start:
-.incbin "@PARTICLE_ASSETS@/square.png"
-.global particle_square_png_end
-.type particle_square_png_end,@object
-particle_square_png_end:
-
-.global particle_dot_png_start
-.type particle_dot_png_start,@object
-particle_dot_png_start:
-.incbin "@PARTICLE_ASSETS@/dot.png"
-.global particle_dot_png_end
-.type particle_dot_png_end,@object
-particle_dot_png_end:
-.p2align 4
-.global home_background_vignette_png_start
-.type home_background_vignette_png_start,@object
-home_background_vignette_png_start:
-.incbin "@HOME_BACKGROUND_ASSETS@/vignette.png"
-.global home_background_vignette_png_end
-.type home_background_vignette_png_end,@object
-home_background_vignette_png_end:
-.p2align 4
-.global home_background_edges_png_start
-.type home_background_edges_png_start,@object
-home_background_edges_png_start:
-.incbin "@HOME_BACKGROUND_ASSETS@/edges.png"
-.global home_background_edges_png_end
-.type home_background_edges_png_end,@object
-home_background_edges_png_end:
+embed aniketos_icon_png, "@ANIKETOS_ICON_PNG@"
+embed aniketos_icon_rgba, "@ANIKETOS_ICON_RGBA@"
+embed home_menu_internet_on_png, "@HOME_MENU_ASSETS@/internet_on.png"
+embed home_menu_internet_off_png, "@HOME_MENU_ASSETS@/internet_off.png"
+embed color_track_png, "@HOME_MENU_ASSETS@/color_track.png"
+embed color_track_gray_png, "@HOME_MENU_ASSETS@/color_track_gray.png"
+embed color_track_solid_png, "@HOME_MENU_ASSETS@/color_track_solid.png"
+embed color_track_fade_png, "@HOME_MENU_ASSETS@/color_track_fade.png"
+embed particle_triangle_png, "@PARTICLE_ASSETS@/triangle.png"
+embed particle_circle_png, "@PARTICLE_ASSETS@/circle.png"
+embed particle_cross_png, "@PARTICLE_ASSETS@/cross.png"
+embed particle_square_png, "@PARTICLE_ASSETS@/square.png"
+embed particle_dot_png, "@PARTICLE_ASSETS@/dot.png"
+embed home_background_vignette_png, "@HOME_BACKGROUND_ASSETS@/vignette.png"
+embed home_background_edges_png, "@HOME_BACKGROUND_ASSETS@/edges.png"

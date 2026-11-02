@@ -49,36 +49,9 @@ add_custom_command(
 )
 add_custom_target(shellui_i18n_catalog DEPENDS "${I18N_CATALOG}")
 
-# Our code. Any depth below these folders is picked up: a new file needs no edit here.
-file(GLOB_RECURSE AniketosSrc CONFIGURE_DEPENDS
-	${D_SRC}/aniketos_shell/*.c ${D_SRC}/aniketos_shell/*.cpp
-	${D_SRC}/aniketos_theme/*.c ${D_SRC}/aniketos_theme/*.cpp
-	${D_SRC}/aniketos_ui/*.c ${D_SRC}/aniketos_ui/*.cpp)
-
-set(ANIKETOS_ICON_PNG "${D_CWD}/../bootstrapper/assets/aniketoshen_sicon.png")
-set(HOME_MENU_ASSETS "${D_CWD}/assets/home_menu")
-set(PARTICLE_ASSETS "${D_CWD}/assets/particles")
-set(HOME_BACKGROUND_ASSETS "${D_CWD}/assets/home_background")
-set(ANIKETOS_ICON_RGBA "${I18N_GENERATED_DIR}/aniketos_icon.rgba")
-add_custom_command(
-	OUTPUT "${ANIKETOS_ICON_RGBA}"
-	COMMAND "${Python3_EXECUTABLE}" "${D_CWD}/assets/png_to_rgba.py"
-		"${ANIKETOS_ICON_PNG}" "${ANIKETOS_ICON_RGBA}"
-	DEPENDS "${D_CWD}/assets/png_to_rgba.py" "${ANIKETOS_ICON_PNG}"
-	COMMENT "Decoding the logo for its colour setting"
-	VERBATIM
-)
-set(EMBEDDED_ASSETS_ASSEMBLY "${I18N_GENERATED_DIR}/embedded_assets.s")
-configure_file("${D_SRC}/aniketos_shell/core/embedded_assets.s.in" "${EMBEDDED_ASSETS_ASSEMBLY}" @ONLY)
-set_source_files_properties("${EMBEDDED_ASSETS_ASSEMBLY}" PROPERTIES
-	OBJECT_DEPENDS "${ANIKETOS_ICON_RGBA};${ANIKETOS_ICON_PNG};${HOME_MENU_ASSETS}/internet_on.png;${HOME_MENU_ASSETS}/internet_off.png;${HOME_MENU_ASSETS}/color_track.png;${HOME_MENU_ASSETS}/color_track_gray.png;${HOME_MENU_ASSETS}/color_track_solid.png;${HOME_MENU_ASSETS}/color_track_fade.png;${PARTICLE_ASSETS}/triangle.png;${PARTICLE_ASSETS}/circle.png;${PARTICLE_ASSETS}/cross.png;${PARTICLE_ASSETS}/square.png;${PARTICLE_ASSETS}/dot.png;${HOME_BACKGROUND_ASSETS}/vignette.png;${HOME_BACKGROUND_ASSETS}/edges.png")
+include(AniketosShellAssets)
 
 file(GLOB SrcFiles CONFIGURE_DEPENDS ${D_SRC}/*.c ${D_SRC}/*.cpp ${D_SRC}/../include/*.h ${D_SRC}/../include/*.hpp ${D_SRC}/*.s ${ONIONHEN_THIRD_PARTY_DIR}/cjson/*.cpp ${ONIONHEN_THIRD_PARTY_DIR}/cjson/*.hpp)
-
-set_source_files_properties("${D_SRC}/aniketos_shell/system_ui/avatar_codec.c" PROPERTIES
-	COMPILE_OPTIONS "-w;-std=gnu17"
-	C_STANDARD 17
-	C_STANDARD_REQUIRED ON)
 
 set(CMAKE_C_FLAGS "${ONION_PS5_TARGET_FLAGS} ")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-nested-anon-types -Wno-gnu-anonymous-struct -Wno-zero-length-array -Wno-keyword-macro -fPIC -fPIE -march=znver2 -Wall -Werror -fstack-protector-all -ffunction-sections -fdata-sections")
@@ -87,7 +60,7 @@ set(CMAKE_C_FLAGS_RELEASE "-Os -DNDEBUG")
 set(CMAKE_CXX_FLAGS_RELEASE "-Os -DNDEBUG")
 
 target_sources(${PROJECT_NAME} PRIVATE ${SrcFiles} ${AniketosSrc} "${EMBEDDED_ASSETS_ASSEMBLY}")
-add_dependencies(${PROJECT_NAME} shellui_i18n_catalog onion_version onion_ipc onion_settings onion_detour onion_proc onion_platform onion_ready onion_plugin_ui onion_plugin_bridge onion_kbm onion_kbm_profile)
+add_dependencies(${PROJECT_NAME} shellui_i18n_catalog onion_version onion_ipc onion_settings onion_detour onion_proc onion_platform onion_ready onion_plugin_ui onion_plugin_bridge onion_kbm_profile)
 onion_target_debug_define(${PROJECT_NAME})
 target_include_directories(${PROJECT_NAME} PRIVATE
 	"${PROJECT_ROOT}/libonion_kbm/include"
@@ -108,7 +81,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 	"${PROJECT_ROOT}/include"
 )
 target_link_directories	(${PROJECT_NAME} PUBLIC "${ONIONHEN_PS5_STUB_DIR}")
-target_link_libraries	(${PROJECT_NAME} PUBLIC onion_kbm_profile onion_kbm onion_payload onion_detour onion_proc onion_platform onion_ipc onion_settings onion_ready onion_plugin_ui onion_plugin_bridge SceRegMgr SceSystemService SceSysCore SceUserService SceNet SceNetCtl ScePad)
+target_link_libraries	(${PROJECT_NAME} PUBLIC onion_kbm_profile onion_payload onion_detour onion_proc onion_platform onion_ipc onion_settings onion_ready onion_plugin_ui onion_plugin_bridge SceRegMgr SceSystemService SceSysCore SceUserService SceNet SceNetCtl ScePad)
 
 # Add post-build command
 onion_strip_debug(${PROJECT_NAME})

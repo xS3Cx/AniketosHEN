@@ -30,10 +30,10 @@ void Tick();
 /* GamePad.GetData: adds the mouse's presses to what ShellUI reads. */
 void FilterPad(GamePadData &data);
 
-/* While set, the mouse's buttons, notches and motion go to `sink` instead of
-   the screen (the Toolbox's key capture); nullptr gives them back. */
+/* While set, the mouse's buttons and notches go to `sink` instead of the
+   screen (the Toolbox's key capture); nullptr gives them back. */
 using CaptureSink = void (*)(uint32_t buttons, uint32_t went_down, int wheel,
-                             int tilt, int dx, int dy);
+                             int tilt);
 void SetCaptureSink(CaptureSink sink);
 
 } // namespace MouseControl

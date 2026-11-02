@@ -13,6 +13,7 @@ set(D_CWD "${PROJECT_SOURCE_DIR}")
 
 add_library(${PROJECT_NAME} STATIC
   source/ipc_client.cpp
+  source/ipc_client_aniketos.cpp
   source/ipc_server.cpp
 )
 set_target_properties(${PROJECT_NAME} PROPERTIES OUTPUT_NAME "${PROJECT_NAME}")

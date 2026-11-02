@@ -5,7 +5,6 @@
 #include <stddef.h>
 #include <string.h>
 #include <sys/mman.h>
-#include <time.h>
 #include <unistd.h>
 
 #include <sys/sysctl.h>
@@ -54,7 +53,9 @@ constexpr struct {
 constexpr uint64_t kStaleUs = 200000;
 constexpr uint64_t kRescanUs = 3000000;
 constexpr uint64_t kHandleCheckUs = 1000000;
-constexpr size_t kControlSize = (sizeof(ControlPage) + 0x3fff) & ~size_t(0x3fff);
+constexpr size_t kPageSize = 0x4000;
+constexpr size_t kControlSize = (sizeof(ControlPage) + kPageSize - 1) & ~(kPageSize - 1);
+constexpr size_t kMaxModules = 256;
 
 ControlPage *s_ctl;
 uint32_t s_generation;
@@ -102,12 +103,6 @@ std::atomic<bool> s_intercepted{false};
 
 #define LOG(...) (s_log ? s_log(__VA_ARGS__) : (void)0)
 
-uint64_t now_us() {
-  timespec t;
-  clock_gettime(CLOCK_MONOTONIC, &t);
-  return uint64_t(t.tv_sec) * 1000000u + uint64_t(t.tv_nsec) / 1000u;
-}
-
 PadState neutral() {
   PadState s{};
   s.lx = s.ly = s.rx = s.ry = 128;
@@ -134,7 +129,7 @@ bool compute(Result *out) {
   }
   const ProfileBlob *profile = s_published.load(std::memory_order_acquire);
   const uint32_t beat = __atomic_load_n(&s_ctl->heartbeat, __ATOMIC_RELAXED);
-  const uint64_t now = now_us();
+  const uint64_t now = agent::NowUs();
   if (beat != s_beat_seen) {
     s_beat_seen = beat;
     s_beat_at = now;
@@ -149,7 +144,8 @@ bool compute(Result *out) {
     /* "controller works too" off: only while a mouse or keyboard is open */
     const uint32_t status =
         __atomic_load_n(&s_ctl->agent_status, __ATOMIC_RELAXED);
-    r.replace = !profile->merge_real_pad && (status & 0xcu);
+    r.replace = !profile->merge_real_pad &&
+                (status & (kStatusMouseOpen | kStatusKeyboardOpen));
   } else if (!profile || !profile->enabled) {
     s_engine_profile = nullptr; /* hand it over again when we resume */
   }
@@ -161,6 +157,27 @@ bool compute(Result *out) {
   s_busy.store(0, std::memory_order_release);
   *out = r;
   return r.pad.active != 0;
+}
+
+/* Lays `ours` over one ScePadData sample (buttons, sticks, triggers only):
+   buttons ORed, each stick axis the value further from 128, triggers the
+   larger; `replace` takes our sticks and triggers outright while the real
+   pad's buttons still count (its Options and PS stay usable). */
+void merge(uint8_t *p, const PadState &ours, bool replace) {
+  uint32_t buttons;
+  memcpy(&buttons, p, sizeof(buttons));
+  buttons |= ours.buttons; /* the real buttons always count */
+  memcpy(p, &buttons, sizeof(buttons));
+  const uint8_t axes[4] = {ours.lx, ours.ly, ours.rx, ours.ry};
+  for (int i = 0; i < 4; ++i) {
+    const int real = p[4 + i] - 128, mine = axes[i] - 128;
+    if (replace || mine * mine > real * real)
+      p[4 + i] = axes[i];
+  }
+  if (replace || ours.l2 > p[8])
+    p[8] = ours.l2;
+  if (replace || ours.r2 > p[9])
+    p[9] = ours.r2;
 }
 
 /* Our state over `count` samples; computed once, at the first sample the
@@ -183,7 +200,7 @@ void apply(void *data, int count, uint32_t stride) {
       state = compute(&r);
     if (!state)
       return;
-    Merge(p, r.pad, r.replace);
+    merge(p, r.pad, r.replace);
   }
 }
 
@@ -212,18 +229,21 @@ template <Kind K> int hook_read(int32_t handle, void *data, int32_t num) {
   return rc;
 }
 
+template <typename Fn> void bind(Fn &target, uint32_t module, const char *name) {
+  const intptr_t address = kernel_dynlib_dlsym(getpid(), module, name);
+  target = address > 0 ? reinterpret_cast<Fn>(address) : nullptr;
+}
+
 bool resolve() {
   uint32_t pad = 0;
   if (kernel_dynlib_handle(getpid(), "libScePad.sprx", &pad) != 0) {
     LOG("libScePad not loaded in the game");
     return false;
   }
-  s_get_handle = reinterpret_cast<decltype(s_get_handle)>(
-      kernel_dynlib_dlsym(getpid(), pad, "scePadGetHandle"));
+  bind(s_get_handle, pad, "scePadGetHandle");
   uint32_t users = 0;
   if (kernel_dynlib_handle(getpid(), "libSceUserService.sprx", &users) == 0)
-    s_foreground_user = reinterpret_cast<decltype(s_foreground_user)>(
-        kernel_dynlib_dlsym(getpid(), users, "sceUserServiceGetForegroundUser"));
+    bind(s_foreground_user, users, "sceUserServiceGetForegroundUser");
   for (uint32_t k = 0; k < kKindCount; ++k) {
     intptr_t a = kernel_dynlib_dlsym(getpid(), pad, kReads[k].name);
     if (a <= 0)
@@ -239,20 +259,37 @@ bool resolve() {
          s_real[kReadExt];
 }
 
-bool mapped(uint64_t address, uint32_t *prot) {
-  void *start = nullptr, *end = nullptr;
-  return sceKernelQueryMemoryProtection(reinterpret_cast<void *>(address),
-                                        &start, &end, prot) == 0;
+/* The protection of the mapping at `address` now, and where it ends. */
+bool mapped(uint64_t address, uint32_t *prot, uint64_t *end = nullptr) {
+  void *first = nullptr, *last = nullptr;
+  if (sceKernelQueryMemoryProtection(reinterpret_cast<void *>(address), &first,
+                                     &last, prot) != 0)
+    return false;
+  if (end)
+    *end = reinterpret_cast<uint64_t>(last);
+  return true;
 }
 
 /* Readable for `length` bytes from `address`, by the kernel's account. */
-bool readable(uint64_t address, size_t length) {
-  void *start = nullptr, *end = nullptr;
-  uint32_t prot = 0;
-  return sceKernelQueryMemoryProtection(reinterpret_cast<void *>(address),
-                                        &start, &end, &prot) == 0 &&
-         (prot & PROT_READ) &&
-         address + length <= reinterpret_cast<uint64_t>(end);
+bool readable(uint64_t address, size_t length, uint32_t *prot) {
+  uint64_t end = 0;
+  return mapped(address, prot, &end) && (*prot & PROT_READ) &&
+         address + length <= end;
+}
+
+/* Runs `write` on the slot, its page opened just for that when `prot` (the
+   protection now) says read-only. false: the page stayed shut, nothing ran. */
+template <typename Write>
+bool write_slot(uint64_t slot, uint32_t prot, Write write) {
+  const uint64_t page = slot & ~uint64_t(kPageSize - 1);
+  const bool was_writable = prot & PROT_WRITE;
+  if (!was_writable && kernel_mprotect(getpid(), page, kPageSize,
+                                       PROT_READ | PROT_WRITE) != 0)
+    return false;
+  write();
+  if (!was_writable)
+    kernel_mprotect(getpid(), page, kPageSize, prot);
+  return true;
 }
 
 /* An older agent's page in this process: a read-write anonymous mapping
@@ -263,7 +300,8 @@ ControlPage *find_existing() {
   if (sysctl(mib, 4, nullptr, &size, nullptr, 0) != 0 || !size)
     return nullptr;
   size += 16 * 1024;
-  void *buf = mmap(nullptr, size, PROT_READ | PROT_WRITE,
+  const size_t buf_size = size; /* sysctl lowers `size` to what it wrote */
+  void *buf = mmap(nullptr, buf_size, PROT_READ | PROT_WRITE,
                    MAP_ANON | MAP_PRIVATE, -1, 0);
   if (buf == MAP_FAILED)
     return nullptr;
@@ -275,9 +313,10 @@ ControlPage *find_existing() {
         break;
       p += e->kve_structsize;
       const uint64_t start = e->kve_start;
+      uint32_t prot = 0;
       if ((e->kve_protection & 3) != 3 || (e->kve_protection & 4) ||
           e->kve_end - start < sizeof(ControlPage) ||
-          !readable(start, sizeof(ControlPage)))
+          !readable(start, sizeof(ControlPage), &prot))
         continue;
       const auto *page = reinterpret_cast<const ControlPage *>(start);
       if (page->magic == kControlMagic &&
@@ -288,7 +327,7 @@ ControlPage *find_existing() {
       }
     }
   }
-  munmap(buf, size);
+  munmap(buf, buf_size);
   return found;
 }
 
@@ -339,15 +378,11 @@ void take_over() {
     if (current != s_real[kind] &&
         !(mapped(current, &target_prot) && (target_prot & PROT_EXEC)))
       continue;
-    const bool was_writable = prot & PROT_WRITE;
-    if (!was_writable &&
-        kernel_mprotect(getpid(), slot & ~uint64_t(0x3fff), 0x4000,
-                        PROT_READ | PROT_WRITE) != 0)
+    if (!write_slot(slot, prot, [slot, kind] {
+          __atomic_store_n(reinterpret_cast<uint64_t *>(slot), s_hook[kind],
+                           __ATOMIC_RELEASE);
+        }))
       continue;
-    __atomic_store_n(reinterpret_cast<uint64_t *>(slot), s_hook[kind],
-                     __ATOMIC_RELEASE);
-    if (!was_writable)
-      kernel_mprotect(getpid(), slot & ~uint64_t(0x3fff), 0x4000, prot);
     s_ctl->hook_slots[kept] = slot;
     s_ctl->hook_originals[kept] = s_real[kind];
     s_ctl->hook_kinds[kept] = kind;
@@ -364,70 +399,10 @@ bool system_module(const char *name) {
   return n >= 5 && memcmp(name + n - 5, ".sprx", 5) == 0;
 }
 
-/* Points the import slots of one segment that still hold a real read at our
-   hooks; returns how many. */
-int patch_segment(const ModuleSegment &seg, const char *module) {
-  auto *words = reinterpret_cast<uint64_t *>(seg.address);
-  /* the protection now, not the one at load: a page may have changed */
-  if (!readable(seg.address, seg.size))
-    return 0;
-  bool writable = seg.prot & PROT_WRITE;
-  bool made_writable = false;
-  int patched = 0;
-  for (uint32_t w = 0; w < seg.size / 8 && !Superseded(); ++w) {
-    const uint64_t value = words[w];
-    for (uint32_t k = 0; k < kKindCount; ++k) {
-      if (!s_real[k] || value != s_real[k])
-        continue;
-      const uint32_t i = s_ctl->hook_count;
-      if (i >= uint32_t(kMaxHookSlots)) {
-        if (!s_full_logged)
-          LOG("more than %d pad import slots; the rest stay unhooked",
-              kMaxHookSlots);
-        s_full_logged = true;
-        return patched;
-      }
-      if (!writable) {
-        if (kernel_mprotect(getpid(), seg.address, seg.size,
-                            PROT_READ | PROT_WRITE) != 0) {
-          LOG("%s: segment 0x%lx not writable", module,
-              (unsigned long)seg.address);
-          return patched;
-        }
-        writable = made_writable = true;
-      }
-      uint64_t expected = s_real[k];
-      if (!__atomic_compare_exchange_n(&words[w], &expected, s_hook[k], false,
-                                       __ATOMIC_ACQ_REL, __ATOMIC_RELAXED))
-        break;
-      s_ctl->hook_slots[i] = reinterpret_cast<uint64_t>(&words[w]);
-      s_ctl->hook_originals[i] = s_real[k];
-      s_ctl->hook_kinds[i] = k;
-      __atomic_store_n(&s_ctl->hook_count, i + 1, __ATOMIC_RELEASE);
-      LOG("%s: %s slot %p hooked", module, kReads[k].name,
-          static_cast<void *>(&words[w]));
-      ++patched;
-      break;
-    }
-  }
-  if (made_writable) /* read-only again, as the loader left it */
-    kernel_mprotect(getpid(), seg.address, seg.size, seg.prot);
-  return patched;
-}
-
-int scan() {
-  int32_t handles[256];
-  size_t count = 0;
-  if (sceKernelGetModuleList(handles, 256, &count) != 0 || count > 256) {
-    /* shortcut: sweep low handle numbers when the list is refused */
-    count = 256;
-    for (int i = 0; i < 256; ++i)
-      handles[i] = i;
-  }
-  if (count == s_scanned_modules)
-    return 0; /* nothing loaded or unloaded since the last scan */
-  s_scanned_modules = count;
-  int patched = 0;
+/* Calls visit(segment, module name) for the data segments of the game's own
+   modules among `handles`, until it returns false. */
+template <typename Visit>
+void for_each_game_segment(const int32_t *handles, size_t count, Visit visit) {
   for (size_t h = 0; h < count; ++h) {
     ModuleInfo info;
     memset(&info, 0, sizeof(info));
@@ -441,12 +416,83 @@ int scan() {
       /* code is execute-only: reading it faults */
       if ((seg.prot & PROT_EXEC) || !(seg.prot & PROT_READ))
         continue;
-      patched += patch_segment(seg, info.name);
+      if (!visit(seg, info.name))
+        return;
     }
   }
+}
+
+/* Points the import slots of one segment that still hold a real read at our
+   hooks. */
+void patch_segment(const ModuleSegment &seg, const char *module) {
+  auto *words = reinterpret_cast<uint64_t *>(seg.address);
+  /* the protection now, not the one at load: a page may have changed */
+  uint32_t prot = 0;
+  if (!readable(seg.address, seg.size, &prot))
+    return;
+  bool writable = prot & PROT_WRITE;
+  bool made_writable = false;
+  bool full = false;
+  for (uint32_t w = 0; w < seg.size / 8 && !full && !Superseded(); ++w) {
+    const uint64_t value = words[w];
+    for (uint32_t k = 0; k < kKindCount; ++k) {
+      if (!s_real[k] || value != s_real[k])
+        continue;
+      const uint32_t i = s_ctl->hook_count;
+      if (i >= uint32_t(kMaxHookSlots)) {
+        if (!s_full_logged)
+          LOG("more than %d pad import slots; the rest stay unhooked",
+              kMaxHookSlots);
+        s_full_logged = true;
+        full = true;
+        break;
+      }
+      if (!writable) {
+        if (kernel_mprotect(getpid(), seg.address, seg.size,
+                            PROT_READ | PROT_WRITE) != 0) {
+          LOG("%s: segment 0x%lx not writable", module,
+              (unsigned long)seg.address);
+          return;
+        }
+        writable = made_writable = true;
+      }
+      uint64_t expected = s_real[k];
+      if (!__atomic_compare_exchange_n(&words[w], &expected, s_hook[k], false,
+                                       __ATOMIC_ACQ_REL, __ATOMIC_RELAXED))
+        break;
+      s_ctl->hook_slots[i] = reinterpret_cast<uint64_t>(&words[w]);
+      s_ctl->hook_originals[i] = s_real[k];
+      s_ctl->hook_kinds[i] = k;
+      __atomic_store_n(&s_ctl->hook_count, i + 1, __ATOMIC_RELEASE);
+      LOG("%s: %s slot %p hooked", module, kReads[k].name,
+          static_cast<void *>(&words[w]));
+      break;
+    }
+  }
+  if (made_writable) /* read-only again, as we found it */
+    kernel_mprotect(getpid(), seg.address, seg.size, prot);
+}
+
+void scan() {
+  int32_t handles[kMaxModules];
+  size_t count = 0;
+  if (sceKernelGetModuleList(handles, kMaxModules, &count) != 0 ||
+      count > kMaxModules) {
+    /* shortcut: sweep low handle numbers when the list is refused */
+    count = kMaxModules;
+    for (size_t i = 0; i < kMaxModules; ++i)
+      handles[i] = int32_t(i);
+  }
+  if (count == s_scanned_modules)
+    return; /* nothing loaded or unloaded since the last scan */
+  s_scanned_modules = count;
+  for_each_game_segment(handles, count,
+                        [](const ModuleSegment &seg, const char *module) {
+                          patch_segment(seg, module);
+                          return true;
+                        });
   if (__atomic_load_n(&s_ctl->hook_count, __ATOMIC_ACQUIRE))
-    __atomic_or_fetch(&s_ctl->agent_status, 2u, __ATOMIC_RELEASE);
-  return patched;
+    __atomic_or_fetch(&s_ctl->agent_status, kStatusHooked, __ATOMIC_RELEASE);
 }
 
 /* Copies a newly written profile once the hook has let go of the spare
@@ -475,23 +521,6 @@ void copy_profile() {
 
 } // namespace
 
-void Merge(uint8_t *p, const PadState &ours, bool replace) {
-  uint32_t buttons;
-  memcpy(&buttons, p, sizeof(buttons));
-  buttons |= ours.buttons; /* the real buttons always count */
-  memcpy(p, &buttons, sizeof(buttons));
-  const uint8_t axes[4] = {ours.lx, ours.ly, ours.rx, ours.ry};
-  for (int i = 0; i < 4; ++i) {
-    const int real = p[4 + i] - 128, mine = axes[i] - 128;
-    if (replace || mine * mine > real * real)
-      p[4 + i] = axes[i];
-  }
-  if (replace || ours.l2 > p[8])
-    p[8] = ours.l2;
-  if (replace || ours.r2 > p[9])
-    p[9] = ours.r2;
-}
-
 bool Init(TickFn tick, LogFn log) {
   s_log = log;
   s_tick = tick;
@@ -502,20 +531,15 @@ bool Init(TickFn tick, LogFn log) {
   LOG("agent generation %u", s_generation);
   take_over();
   scan();
-  s_scan_at = now_us();
+  s_scan_at = agent::NowUs();
   return true;
-}
-
-void Beat() {
-  if (s_ctl)
-    __atomic_add_fetch(&s_ctl->heartbeat, 1u, __ATOMIC_RELEASE);
 }
 
 void Service() {
   if (!s_ctl || Superseded())
     return;
   copy_profile();
-  const uint64_t now = now_us();
+  const uint64_t now = agent::NowUs();
   if (now - s_handle_at >= kHandleCheckUs && s_get_handle && s_foreground_user) {
     s_handle_at = now;
     int32_t user = -1;
@@ -541,15 +565,20 @@ void Unhook() {
   const uint32_t count = __atomic_load_n(&s_ctl->hook_count, __ATOMIC_ACQUIRE);
   for (uint32_t i = 0; i < count; ++i) {
     const uint32_t kind = s_ctl->hook_kinds[i];
-    if (kind >= kKindCount)
+    const uint64_t slot = s_ctl->hook_slots[i];
+    uint32_t prot = 0;
+    if (kind >= kKindCount || !mapped(slot, &prot))
       continue;
-    uint64_t expected = s_hook[kind];
-    __atomic_compare_exchange_n(reinterpret_cast<uint64_t *>(s_ctl->hook_slots[i]),
-                                &expected, s_ctl->hook_originals[i], false,
-                                __ATOMIC_ACQ_REL, __ATOMIC_RELAXED);
+    /* a failed swap writes too, and scan left this page read-only */
+    write_slot(slot, prot, [slot, kind, i] {
+      uint64_t expected = s_hook[kind];
+      __atomic_compare_exchange_n(reinterpret_cast<uint64_t *>(slot), &expected,
+                                  s_ctl->hook_originals[i], false,
+                                  __ATOMIC_ACQ_REL, __ATOMIC_RELAXED);
+    });
   }
   __atomic_store_n(&s_ctl->hook_count, 0u, __ATOMIC_RELEASE);
-  __atomic_and_fetch(&s_ctl->agent_status, ~2u, __ATOMIC_RELEASE);
+  __atomic_and_fetch(&s_ctl->agent_status, ~kStatusHooked, __ATOMIC_RELEASE);
   LOG("%u slot(s) restored", count);
 }
 
@@ -558,39 +587,31 @@ ControlPage *Control() { return s_ctl; }
 int FindImportSlots(const void *fn, uint64_t **out, int max) {
   if (!fn || !out || max <= 0)
     return 0;
-  int32_t handles[256];
+  int32_t handles[kMaxModules];
   size_t count = 0;
-  if (sceKernelGetModuleList(handles, 256, &count) != 0 || count > 256)
+  if (sceKernelGetModuleList(handles, kMaxModules, &count) != 0 ||
+      count > kMaxModules)
     return 0;
   int found = 0;
-  for (size_t h = 0; h < count && found < max; ++h) {
-    ModuleInfo info;
-    memset(&info, 0, sizeof(info));
-    info.size = sizeof(info);
-    if (sceKernelGetModuleInfo(handles[h], &info) != 0 ||
-        system_module(info.name))
-      continue;
-    const uint32_t segments = info.segment_count < 4 ? info.segment_count : 4;
-    for (uint32_t s = 0; s < segments && found < max; ++s) {
-      const ModuleSegment &seg = info.segments[s];
-      if ((seg.prot & PROT_EXEC) || !(seg.prot & PROT_READ) ||
-          !readable(seg.address, seg.size))
+  for_each_game_segment(handles, count, [&](const ModuleSegment &seg, const char *) {
+    uint32_t prot = 0;
+    if (!readable(seg.address, seg.size, &prot))
+      return true;
+    auto *words = reinterpret_cast<uint64_t *>(seg.address);
+    bool writable = prot & PROT_WRITE;
+    for (uint32_t w = 0; w < seg.size / 8 && found < max; ++w) {
+      if (words[w] != reinterpret_cast<uint64_t>(fn))
         continue;
-      auto *words = reinterpret_cast<uint64_t *>(seg.address);
-      bool writable = seg.prot & PROT_WRITE;
-      for (uint32_t w = 0; w < seg.size / 8 && found < max; ++w) {
-        if (words[w] != reinterpret_cast<uint64_t>(fn))
-          continue;
-        if (!writable) {
-          if (kernel_mprotect(getpid(), seg.address, seg.size,
-                              PROT_READ | PROT_WRITE) != 0)
-            break;
-          writable = true;
-        }
-        out[found++] = &words[w];
+      if (!writable) {
+        if (kernel_mprotect(getpid(), seg.address, seg.size,
+                            PROT_READ | PROT_WRITE) != 0)
+          break;
+        writable = true;
       }
+      out[found++] = &words[w];
     }
-  }
+    return found < max;
+  });
   return found;
 }
 

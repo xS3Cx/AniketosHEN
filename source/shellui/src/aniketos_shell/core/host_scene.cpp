@@ -1,5 +1,6 @@
 #include "aniketos_shell/core/host_scene.hpp"
 
+#include "aniketos_ui/mono_reflect.hpp"
 #include "hooked_funcs.hpp"
 
 #include <onion/platform.h>
@@ -27,9 +28,37 @@ MonoDomain *calling_domain() {
   return domain ? domain : Root_Domain;
 }
 
+MonoClassField *s_focus_field = nullptr;
+MonoVTable *s_focus_vtable = nullptr; /* null: not readable on this firmware */
+int32_t s_focus_game = -1;
+int32_t s_focus_top_menu = -1;
+int32_t s_focus_shell_app = -1;
+
+void resolve_focus_layer() {
+  using AniketosUI::Reflect::EnumValue;
+  MonoImage *app_system = getDLLimage("Sce.Vsh.ShellUI.AppSystem.dll");
+  MonoClass *manager =
+      app_system ? mono_class_from_name(app_system, "Sce.Vsh.ShellUI.AppSystem",
+                                        "LayerManager")
+                 : nullptr;
+  MonoClass *layers = AniketosUI::Reflect::NestedClass(manager, "FocusLayer");
+  s_focus_field =
+      manager ? mono_class_get_field_from_name(manager, "s_curFocusLayer")
+              : nullptr;
+  MonoVTable *vtable =
+      s_focus_field ? mono_class_vtable(mono_domain_get(), manager) : nullptr;
+  const bool values = vtable && EnumValue(layers, "Game", &s_focus_game) &&
+                      EnumValue(layers, "TopMenu", &s_focus_top_menu) &&
+                      EnumValue(layers, "ShellApp", &s_focus_shell_app);
+  LOG_INFO("[ANIVSH:HOST] focus layer field=%d values=%d",
+           s_focus_field ? 1 : 0, values ? 1 : 0);
+  if (values)
+    s_focus_vtable = vtable;
+}
+
 } // namespace
 
-bool ShellContext::Initialize(MonoImage *app_system, MonoImage *pui) {
+bool HostScene::Initialize(MonoImage *app_system, MonoImage *pui) {
   app_system_ = app_system;
   pui_ = pui;
   if (!app_system_ || !pui_ || !Root_Domain) {
@@ -59,7 +88,7 @@ bool ShellContext::Initialize(MonoImage *app_system, MonoImage *pui) {
   return true;
 }
 
-MonoObject *ShellContext::FindScene(const char *path, MonoObject **exception) {
+MonoObject *HostScene::FindScene(const char *path, MonoObject **exception) {
   if (!path || !find_scene_ || !mono_runtime_invoke || !mono_string_new)
     return nullptr;
   MonoDomain *domain = calling_domain();
@@ -75,13 +104,13 @@ MonoObject *ShellContext::FindScene(const char *path, MonoObject **exception) {
   return local_exception ? nullptr : scene;
 }
 
-MonoObject *ShellContext::GetRoot(MonoObject *scene) {
+MonoObject *HostScene::GetRoot(MonoObject *scene) {
   return scene && scene_class_
              ? Get_Property<MonoObject *>(scene_class_, scene, "RootWidget")
              : nullptr;
 }
 
-bool ShellContext::ResolvePath(const char *path, HostSnapshot &out,
+bool HostScene::ResolvePath(const char *path, HostSnapshot &out,
                                bool log_result) {
   MonoObject *exception = nullptr;
   MonoObject *scene = FindScene(path, &exception);
@@ -112,7 +141,7 @@ bool ShellContext::ResolvePath(const char *path, HostSnapshot &out,
   return true;
 }
 
-void ShellContext::ProbeCandidates() {
+void HostScene::ProbeCandidates() {
   if (probed_)
     return;
   probed_ = true;
@@ -124,7 +153,7 @@ void ShellContext::ProbeCandidates() {
   LOG_INFO("[ANIVSH:HOST] candidate probe end");
 }
 
-bool ShellContext::Resolve(HostSnapshot &out) {
+bool HostScene::Resolve(HostSnapshot &out) {
   ProbeCandidates();
   for (const Candidate &candidate : kCandidates) {
     if (candidate.selectable && ResolvePath(candidate.path, out, false))
@@ -132,6 +161,25 @@ bool ShellContext::Resolve(HostSnapshot &out) {
   }
   out = {};
   return false;
+}
+
+FocusLayer CurrentFocusLayer() {
+  static bool resolved = false;
+  if (!resolved) {
+    resolved = true;
+    resolve_focus_layer();
+  }
+  if (!s_focus_vtable)
+    return FocusLayer::Unknown;
+  int32_t value = -1;
+  mono_field_static_get_value(s_focus_vtable, s_focus_field, &value);
+  if (value == s_focus_top_menu)
+    return FocusLayer::TopMenu;
+  if (value == s_focus_shell_app)
+    return FocusLayer::ShellApp;
+  if (value == s_focus_game)
+    return FocusLayer::Game;
+  return FocusLayer::Other;
 }
 
 } // namespace AniketosShell

@@ -1,12 +1,10 @@
 #pragma once
 
-#include <onion/kbm_engine.hpp>
 #include <onion/kbm_types.hpp>
 
 #include <cstdint>
 
-/* Keyboard & mouse for games: "press a key" in the Toolbox's mapping editor,
- * and a live tester that shows what is held.
+/* Keyboard & mouse for games: "press a key" in the Toolbox's mapping editor.
  *
  * ShellUI never sees keys as key events. Its own keyboard reader is PUI's
  * ImeKbController (the web view's): ScePsmUtil's internal calls open one
@@ -16,8 +14,8 @@
  * process: while a web view holds it, the keyboard is busy and capture is
  * mouse only; we never close a client that is not ours.
  *
- * The mouse comes from MouseControl, which hands its buttons, wheel and
- * motion to us while a session runs (nothing on screen is clicked then).
+ * The mouse comes from MouseControl, which hands its buttons and wheel to
+ * us while a session runs (nothing on screen is clicked then).
  *
  * Everything here runs on ShellUI's UI thread.
  */
@@ -49,14 +47,6 @@ bool BeginCapture(uint32_t timeout_ms);
    given back already. */
 Result PollCapture();
 void EndCapture();
-
-/* The live tester: what is held now. Returns whether the keyboard is
-   listened to. */
-bool BeginLive();
-/* Held inputs, and wheel notches and mouse motion since the last call: the
-   frame to hand to Engine::Tick. False when no live session runs. */
-bool LiveFrame(onion::kbm::InputFrame &frame);
-void EndLive();
 
 /* Once a frame (OnRender): reads the keyboard, ends timed-out sessions. */
 void Tick();

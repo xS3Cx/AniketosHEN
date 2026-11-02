@@ -1,7 +1,8 @@
 ###################################################################################################
 # AniketosHEN keyboard & mouse for games
-#   onion_kbm          engine: runs inside the game (kbm_agent); no heap, no JSON
 #   onion_kbm_profile  editable profile, names, JSON store, compiler (shellui, daemon)
+# The engine (kbm_engine, kbm_analog) runs inside the game, no heap, no JSON: kbm_agent
+# compiles those two sources itself.
 ###################################################################################################
 
 cmake_minimum_required(VERSION 3.20)
@@ -17,13 +18,6 @@ set(CMAKE_C_FLAGS "${ONION_PS5_TARGET_FLAGS_MARCH} ")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC -fstack-protector-all")
 set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -O2 -Wall -Wextra -Werror -fno-exceptions")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g0 -O2")
-
-add_library(onion_kbm STATIC
-  source/kbm_engine.cpp
-  source/kbm_analog.cpp
-)
-set_target_properties(onion_kbm PROPERTIES OUTPUT_NAME "onion_kbm")
-target_include_directories(onion_kbm PUBLIC "${D_CWD}/include")
 
 add_library(onion_kbm_profile STATIC
   source/kbm_profile.cpp

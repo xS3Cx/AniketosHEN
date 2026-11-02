@@ -8,8 +8,6 @@
 #include <algorithm>
 #include <cmath>
 
-extern onion::Settings g_settings;
-
 namespace AniketosTheme::GlobalTheme {
 namespace {
 
@@ -27,7 +25,7 @@ float phase(uint64_t monotonic_ms) {
 
 } // namespace
 
-bool Active() { return (AniketosTheme::CustomizationOn() && g_settings.vsh_global_theme_enabled); }
+bool Active() { return CustomizationOn() && g_settings.vsh_global_theme_enabled; }
 
 bool Animated() {
   return Active() && std::clamp(g_settings.vsh_color_animation, 0, 4) != 0;

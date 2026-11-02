@@ -2,12 +2,15 @@
    (no network, no PS5). */
 #include "test_harness.h"
 
+#include "png_encode.hpp"
+#include "tile_picture.hpp"
 #include "web_icon.hpp"
 
 #include <cstdint>
 #include <string>
 #include <vector>
 
+using namespace TilePicture;
 using namespace WebIcon;
 
 namespace {
@@ -140,18 +143,18 @@ int test_sniffs_formats() {
 
 int test_encodes_png() {
   const Bytes rgba(8 * 8 * 4, 0x7f);
-  const Bytes png = EncodePng(8, 8, rgba);
+  const Bytes png = Png::Encode(8, 8, rgba);
   TEST_ASSERT_TRUE(Sniff(png.data(), png.size()) == Format::Png);
   TEST_ASSERT_EQ_U64(8u, be32(png, 16));
   TEST_ASSERT_EQ_U64(8u, be32(png, 20));
   TEST_ASSERT_TRUE(png_pixels(png, 8) == rgba);
-  TEST_ASSERT_TRUE(EncodePng(8, 8, Bytes(3)).empty());
+  TEST_ASSERT_TRUE(Png::Encode(8, 8, Bytes(3)).empty());
   return 0;
 }
 
 int test_an_ico_with_a_png_gives_it_back() {
-  const Bytes small = EncodePng(1, 1, Bytes(4, 1));
-  const Bytes big = EncodePng(2, 2, Bytes(16, 2));
+  const Bytes small = Png::Encode(1, 1, Bytes(4, 1));
+  const Bytes big = Png::Encode(2, 2, Bytes(16, 2));
   Bytes ico = {0, 0, 1, 0, 2, 0};
   const size_t data = 6 + 2 * 16;
   ico.insert(ico.end(), {16, 16, 0, 0, 1, 0, 32, 0});
@@ -188,6 +191,17 @@ int test_an_indexed_ico_takes_its_mask() {
   const Bytes png = IcoToPng(ico.data(), ico.size());
   const Bytes expected = {255, 255, 255, 255, 0, 0, 0, 255,
                           0, 0, 0, 0,         255, 255, 255, 255};
+  TEST_ASSERT_TRUE(png_pixels(png, 2) == expected);
+  return 0;
+}
+
+int test_a_32bit_ico_with_no_alpha_takes_its_mask() {
+  const Bytes colours = {1, 2, 3, 0, 4, 5, 6, 0, 7, 8, 9, 0, 10, 11, 12, 0};
+  const Bytes mask = {0x80, 0, 0, 0, 0, 0, 0, 0};
+  const Bytes ico = bmp_ico(2, 32, {}, colours, mask);
+  const Bytes png = IcoToPng(ico.data(), ico.size());
+  const Bytes expected = {9, 8, 7, 255, 12, 11, 10, 255,
+                          3, 2, 1, 0,   6, 5, 4, 255};
   TEST_ASSERT_TRUE(png_pixels(png, 2) == expected);
   return 0;
 }
@@ -279,6 +293,8 @@ extern "C" int test_web_icon_suite(void) {
                              test_a_bitmap_ico_turns_into_png);
   failures += onion_test_run("web_icon.an_indexed_ico_takes_its_mask",
                              test_an_indexed_ico_takes_its_mask);
+  failures += onion_test_run("web_icon.a_32bit_ico_with_no_alpha_takes_its_mask",
+                             test_a_32bit_ico_with_no_alpha_takes_its_mask);
   failures += onion_test_run("web_icon.wild_icos_stay_in_bounds",
                              test_wild_icos_stay_in_bounds);
   failures += onion_test_run("web_icon.only_icon_sized_pictures_fit",

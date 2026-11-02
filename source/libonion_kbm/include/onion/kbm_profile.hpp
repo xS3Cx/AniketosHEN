@@ -22,6 +22,10 @@ constexpr Input kDefaultSuspendKey = 0x48; /* Pause */
 
 using Warnings = std::vector<std::string>;
 
+inline void Warn(Warnings *warnings, const std::string &message) {
+  if (warnings) warnings->push_back(message);
+}
+
 /* Byte caps (cut at a UTF-8 character boundary). They keep a full-size
  * profile well under kMaxProfileFileSize. */
 constexpr size_t kMaxProfileNameBytes = 48;
@@ -65,14 +69,14 @@ struct BindingDef {
   std::string raw;
 };
 
-MouseParams DefaultMouseParams();
-
 struct LayerDef {
+  LayerDef();
+
   std::string name;
   bool mouse_inherit = false;
   /* Absolute, not relative to the layer below: the blob has no relative
    * sensitivity, so changing the base layer does not change "aim". */
-  MouseParams mouse = DefaultMouseParams();
+  MouseParams mouse;
   Opposing opposing = Opposing::LastWins;
   uint16_t mouse_digital_threshold = 2000;
   std::vector<BindingDef> bindings;

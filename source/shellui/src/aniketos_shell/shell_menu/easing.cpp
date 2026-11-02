@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 
 namespace AniketosShell::Easing {
 namespace {
@@ -85,29 +86,13 @@ constexpr Fn kFunctions[] = {
     in_out_circ,  in_back,       out_back,    in_out_back,
 };
 
-constexpr const char *kNames[] = {
-    "Linear",       "In (Sine)",     "Out (Sine)",    "In-out (Sine)",
-    "In (Quad)",    "Out (Quad)",    "In-out (Quad)", "In (Cubic)",
-    "Out (Cubic)",  "In-out (Cubic)", "In (Quart)",   "Out (Quart)",
-    "In-out (Quart)", "In (Quint)",  "Out (Quint)",   "In-out (Quint)",
-    "In (Expo)",    "Out (Expo)",    "In-out (Expo)", "In (Circ)",
-    "Out (Circ)",   "In-out (Circ)", "In (Back)",    "Out (Back)",
-    "In-out (Back)",
-};
-
 } // namespace
 
 float Apply(int type, float t) {
   t = std::clamp(t, 0.0f, 1.0f);
-  if (type <= 0 || type > static_cast<int>(sizeof(kFunctions) / sizeof(kFunctions[0])))
+  if (type <= 0 || type > static_cast<int>(std::size(kFunctions)))
     return t;
   return kFunctions[type - 1](t);
-}
-
-const char *Name(int type) {
-  if (type < 0 || type >= static_cast<int>(sizeof(kNames) / sizeof(kNames[0])))
-    return kNames[0];
-  return kNames[type];
 }
 
 } // namespace AniketosShell::Easing

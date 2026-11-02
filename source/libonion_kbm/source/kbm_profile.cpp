@@ -15,10 +15,6 @@ constexpr uint32_t kAllButtons =
     kPadL2 | kPadR2 | kPadL1 | kPadR1 | kPadTriangle | kPadCircle | kPadCross |
     kPadSquare | kPadTouchpad;
 
-void warn(Warnings *w, const std::string &msg) {
-  if (w) w->push_back(msg);
-}
-
 /* Clamp in place; one warning when the value had to move. */
 template <typename T>
 void fix(T &v, long lo, long hi, const std::string &where, const char *field,
@@ -26,7 +22,7 @@ void fix(T &v, long lo, long hi, const std::string &where, const char *field,
   const long x = static_cast<long>(v);
   if (x >= lo && x <= hi) return;
   v = static_cast<T>(x < lo ? lo : hi);
-  warn(w, where + ": " + field + " out of range, set to " +
+  Warn(w, where + ": " + field + " out of range, set to " +
               std::to_string(static_cast<long>(v)));
 }
 
@@ -43,7 +39,7 @@ std::string cut_utf8(const std::string &s, size_t max) {
 void cut_field(std::string &s, size_t max, const std::string &what, Warnings *w) {
   const std::string cut = cut_utf8(s, max);
   if (cut == s) return;
-  warn(w, what + " too long, cut to '" + cut + "'");
+  Warn(w, what + " too long, cut to '" + cut + "'");
   s = cut;
 }
 
@@ -72,7 +68,7 @@ void name_items(V &items, const char *kind, size_t max, Warnings *w) {
       }
     }
     if (!old.empty())
-      warn(w, std::string(kind) + " '" + old + "' repeated, renamed '" + n + "'");
+      Warn(w, std::string(kind) + " '" + old + "' repeated, renamed '" + n + "'");
   }
 }
 
@@ -188,22 +184,20 @@ bool IsValidSuspendKey(Input key) {
          (key >= kMouseMiddle && key <= kMouseButtonLast);
 }
 
-MouseParams DefaultMouseParams() {
-  MouseParams m{};
-  m.mode = MouseMode::Velocity;
-  m.stick = 1;
-  m.deadzone_shape = DeadzoneShape::Circular;
-  m.invert = 0;
-  m.sensitivity_x100 = 100;
-  m.yx_ratio_x100 = 100;
-  m.exponent_x100 = 100;
-  m.deadzone_x1000 = 100;
-  m.outer_x1000 = 1000;
-  m.smoothing_ms = 12;
-  m.boost_x100 = 100;
-  m.position_range = 400;
-  m.spring_per_s_x10 = 30;
-  return m;
+LayerDef::LayerDef() : mouse{} {
+  mouse.mode = MouseMode::Velocity;
+  mouse.stick = 1;
+  mouse.deadzone_shape = DeadzoneShape::Circular;
+  mouse.invert = 0;
+  mouse.sensitivity_x100 = 100;
+  mouse.yx_ratio_x100 = 100;
+  mouse.exponent_x100 = 100;
+  mouse.deadzone_x1000 = 100;
+  mouse.outer_x1000 = 1000;
+  mouse.smoothing_ms = 12;
+  mouse.boost_x100 = 100;
+  mouse.position_range = 400;
+  mouse.spring_per_s_x10 = 30;
 }
 
 Profile DefaultProfile() {
@@ -254,7 +248,7 @@ void Validate(Profile &p, Warnings *w) {
   if (p.layers.empty()) {
     p.layers.emplace_back();
     p.layers.back().name = "base";
-    warn(w, "profile had no layers, added 'base'");
+    Warn(w, "profile had no layers, added 'base'");
   }
   name_items(p.layers, "layer", kMaxLayerNameBytes, w);
   name_items(p.macros, "macro", kMaxMacroNameBytes, w);
@@ -271,7 +265,7 @@ void Validate(Profile &p, Warnings *w) {
     const std::string lwhere = "layer '" + l.name + "'";
     if (li == 0 && l.mouse_inherit) {
       l.mouse_inherit = false; /* nothing below the base layer */
-      warn(w, lwhere + ": base layer cannot inherit the mouse");
+      Warn(w, lwhere + ": base layer cannot inherit the mouse");
     }
     fix_mouse(l.mouse, lwhere, w);
     fix(l.opposing, 0, static_cast<long>(Opposing::FirstWins), lwhere, "opposing keys", w);
@@ -285,7 +279,7 @@ void Validate(Profile &p, Warnings *w) {
       const std::string where = binding_where(l, b);
       std::string why;
       if (!fix_modifiers(b, &why)) {
-        warn(w, where + ": " + why + ", binding dropped");
+        Warn(w, where + ": " + why + ", binding dropped");
         l.bindings.erase(l.bindings.begin() + static_cast<long>(bi));
         continue;
       }
@@ -319,7 +313,7 @@ bool Compile(const Profile &in, ProfileBlob *out, Input suspend_key, Warnings *w
   out->merge_real_pad = p.merge_real_pad;
 
   if (p.layers.size() > static_cast<size_t>(kMaxLayers))
-    warn(w, std::to_string(p.layers.size() - kMaxLayers) + " layers over the limit of " +
+    Warn(w, std::to_string(p.layers.size() - kMaxLayers) + " layers over the limit of " +
                 std::to_string(kMaxLayers) + " skipped");
   const int layer_count =
       static_cast<int>(p.layers.size() < kMaxLayers ? p.layers.size() : kMaxLayers);
@@ -340,12 +334,12 @@ bool Compile(const Profile &in, ProfileBlob *out, Input suspend_key, Warnings *w
     const MacroDef &m = p.macros[mi];
     const std::string where = "macro '" + m.name + "'";
     if (m.steps.empty()) {
-      warn(w, where + ": no steps, skipped");
+      Warn(w, where + ": no steps, skipped");
       continue;
     }
     if (out->macro_count == kMaxMacros ||
         out->macro_step_count + m.steps.size() > static_cast<size_t>(kMaxMacroSteps)) {
-      warn(w, where + ": over the limit of " + std::to_string(kMaxMacros) + " macros / " +
+      Warn(w, where + ": over the limit of " + std::to_string(kMaxMacros) + " macros / " +
                   std::to_string(kMaxMacroSteps) + " steps, skipped");
       continue;
     }
@@ -365,24 +359,24 @@ bool Compile(const Profile &in, ProfileBlob *out, Input suspend_key, Warnings *w
       const BindingDef &b = l.bindings[bi];
       const std::string where = binding_where(l, b);
       if (!b.raw.empty()) {
-        warn(w, where + ": unknown to this HEN, skipped");
+        Warn(w, where + ": unknown to this HEN, skipped");
         continue;
       }
       if (!valid_input(b.input)) {
-        warn(w, where + ": no input yet, skipped");
+        Warn(w, where + ": no input yet, skipped");
         continue;
       }
       if (suspend_key != kInputNone &&
           (b.input == suspend_key || b.modifiers[0] == suspend_key ||
            b.modifiers[1] == suspend_key)) {
-        warn(w, where + ": uses the suspend key, skipped");
+        Warn(w, where + ": uses the suspend key, skipped");
         continue;
       }
       bool shadowed = false; /* the later of two identical bindings wins */
       for (size_t j = bi + 1; j < l.bindings.size() && !shadowed; ++j)
         shadowed = l.bindings[j].raw.empty() && same_trigger(b, l.bindings[j]);
       if (shadowed) {
-        warn(w, where + ": bound twice, first skipped");
+        Warn(w, where + ": bound twice, first skipped");
         continue;
       }
 
@@ -400,7 +394,7 @@ bool Compile(const Profile &in, ProfileBlob *out, Input suspend_key, Warnings *w
       dst.pulse_ms = b.pulse_ms;
       for (const OutputDef &o : b.outputs) {
         if (dst.output_count == kMaxOutputsPerBinding) {
-          warn(w, where + ": more than " + std::to_string(kMaxOutputsPerBinding) +
+          Warn(w, where + ": more than " + std::to_string(kMaxOutputsPerBinding) +
                       " outputs, rest skipped");
           break;
         }
@@ -409,14 +403,14 @@ bool Compile(const Profile &in, ProfileBlob *out, Input suspend_key, Warnings *w
                         &dst.outputs[dst.output_count], &why))
           ++dst.output_count;
         else
-          warn(w, where + ": output " + OutputName(o) + " " + why + ", skipped");
+          Warn(w, where + ": output " + OutputName(o) + " " + why + ", skipped");
       }
       if (dst.output_count == 0) {
-        warn(w, where + ": no outputs, skipped");
+        Warn(w, where + ": no outputs, skipped");
         continue;
       }
       if (out->binding_count == kMaxBindings) {
-        warn(w, where + ": over the limit of " + std::to_string(kMaxBindings) +
+        Warn(w, where + ": over the limit of " + std::to_string(kMaxBindings) +
                     " bindings, skipped");
         continue;
       }

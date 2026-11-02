@@ -2,20 +2,18 @@
 #include "aniketos_theme/customization.hpp"
 
 #include "external_symbols.hpp"
-#include "ipc.hpp"
 #include "aniketos_theme/animation.hpp"
 #include "aniketos_theme/global_theme.hpp"
 #include "aniketos_theme/shell_background.hpp"
 #include "aniketos_theme/theme_config.hpp"
 #include "aniketos_theme/clock/shell_clock.hpp"
+#include "aniketos_ui/monotonic_clock.hpp"
 
+#include <onion/log.h>
 #include <onion/settings.hpp>
 
 #include <cstdint>
 #include <string>
-#include <time.h>
-
-extern onion::Settings g_settings;
 
 namespace AniketosTheme {
 namespace {
@@ -45,33 +43,33 @@ bool s_home_was_visible = false;
 uint64_t s_force_home_until_ms = 0;
 uint64_t s_last_home_clear_ms = 0;
 constexpr uint64_t kHomeReturnClearMs = 2000;
-uint64_t s_wave_started_ms = 0;
 
-uint64_t monotonic_millis() {
-  timespec now{};
-  clock_gettime(CLOCK_MONOTONIC, &now);
-  return static_cast<uint64_t>(now.tv_sec) * 1000ULL +
-         static_cast<uint64_t>(now.tv_nsec) / 1000000ULL;
+bool wave_setting() {
+  return CustomizationOn() && g_settings.shell_background_wave_enabled;
 }
 
-bool apply_requested_state(const ThemeConfig &config, uint64_t now_ms,
+bool force_home_setting() {
+  return CustomizationOn() && g_settings.shell_background_force_home;
+}
+
+void forget_applied_image() {
+  s_image_was_applied = false;
+  s_applied_image_path.clear();
+  s_applied_image_transition = -1;
+}
+
+void apply_requested_state(const ThemeConfig &config, uint64_t now_ms,
                            bool animation_frame) {
-  const bool restoring = s_restore_requested;
   if (!animation_frame)
     LOG_INFO("[ANITHEME:APPLY] enabled=%d image=%d path='%s' force_home=%d "
              "particles=%d wave=%d",
              config.enabled ? 1 : 0, config.image_enabled ? 1 : 0,
-             config.image_path.c_str(),
-             (AniketosTheme::CustomizationOn() && g_settings.shell_background_force_home) ? 1 : 0,
-             static_cast<int>(config.particles),
-             (AniketosTheme::CustomizationOn() && g_settings.shell_background_wave_enabled) ? 1 : 0);
-  bool color_ok = true;
+             config.image_path.c_str(), force_home_setting() ? 1 : 0,
+             static_cast<int>(config.particles), wave_setting() ? 1 : 0);
   if (!config.enabled) {
-    if (s_restore_requested || s_custom_was_applied) {
-      color_ok = NativeShellBackground::RestoreOriginal();
-      if (color_ok)
-        s_custom_was_applied = false;
-    }
+    if ((s_restore_requested || s_custom_was_applied) &&
+        NativeShellBackground::RestoreOriginal())
+      s_custom_was_applied = false;
   } else {
     RGB base = config.base;
     RGB glow = config.glow;
@@ -89,55 +87,50 @@ bool apply_requested_state(const ThemeConfig &config, uint64_t now_ms,
       base = frame.base;
       glow = frame.glow;
     }
-    color_ok = NativeShellBackground::Apply(
-        base, glow, config.glow_intensity, !animation_frame);
-    if (!color_ok)
-      return false;
+    if (!NativeShellBackground::Apply(base, glow, config.glow_intensity,
+                                      !animation_frame))
+      return;
     s_custom_was_applied = true;
   }
+  if (animation_frame)
+    return;
 
-  if (!animation_frame) {
-    const auto requested_particles =
-        (AniketosTheme::CustomizationOn() && g_settings.shell_background_wave_enabled)
-            ? NativeShellBackground::ParticleMode::Off
-            : config.particles;
-    const int particle_mode = static_cast<int>(requested_particles);
-    if (particle_mode != s_applied_particle_mode) {
-      if (!NativeShellBackground::SetParticles(requested_particles))
-        return false;
-      s_applied_particle_mode = particle_mode;
+  const auto requested_particles = wave_setting()
+                                       ? NativeShellBackground::ParticleMode::Off
+                                       : config.particles;
+  const int particle_mode = static_cast<int>(requested_particles);
+  if (particle_mode != s_applied_particle_mode) {
+    if (!NativeShellBackground::SetParticles(requested_particles))
+      return;
+    s_applied_particle_mode = particle_mode;
+  }
+
+  const int transition = static_cast<int>(config.image_transition);
+  if (config.image_enabled) {
+    if (!s_image_was_applied || config.image_path != s_applied_image_path ||
+        transition != s_applied_image_transition) {
+      if (!NativeShellBackground::ApplyImage(config.image_path.c_str(),
+                                             config.image_transition))
+        return;
+      s_image_was_applied = true;
+      s_applied_image_path = config.image_path;
+      s_applied_image_transition = transition;
     }
-
-    const int transition = static_cast<int>(config.image_transition);
-    if (config.image_enabled) {
-      if (!s_image_was_applied || config.image_path != s_applied_image_path ||
-          transition != s_applied_image_transition) {
-        if (!NativeShellBackground::ApplyImage(config.image_path.c_str(),
-                                               config.image_transition))
-          return false;
-        s_image_was_applied = true;
-        s_applied_image_path = config.image_path;
-        s_applied_image_transition = transition;
-      }
-    } else if (!(AniketosTheme::CustomizationOn() && g_settings.shell_background_wave_enabled)) {
-      NativeShellBackground::DisableImageOverride();
-      /* A ShellUI layer replacement can invalidate our bookkeeping while the
-       * native mapper still displays the old texture.  A requested restore
-       * therefore always emits Sony's empty fade transition. */
-      if (s_image_was_applied || restoring) {
-        if (!NativeShellBackground::ClearImage())
-          return false;
-        s_image_was_applied = false;
-        s_applied_image_path.clear();
-        s_applied_image_transition = -1;
-      }
+  } else if (!wave_setting()) {
+    NativeShellBackground::DisableImageOverride();
+    /* A ShellUI layer replacement can invalidate our bookkeeping while the
+     * native mapper still displays the old texture.  A requested restore
+     * therefore always emits Sony's empty fade transition. */
+    if (s_image_was_applied || s_restore_requested) {
+      if (!NativeShellBackground::ClearImage())
+        return;
+      forget_applied_image();
     }
   }
 
   s_restore_requested = false;
   s_apply_requested = false;
   s_applied_layer = NativeShellBackground::LayerIdentity();
-  return color_ok;
 }
 
 } // namespace
@@ -145,7 +138,7 @@ bool apply_requested_state(const ThemeConfig &config, uint64_t now_ms,
 void Tick() {
   if (!Root_Domain)
     return;
-  const uint64_t now_ms = monotonic_millis();
+  const uint64_t now_ms = AniketosUI::MonotonicMs();
   const ThemeConfig config = ConfigFromSettings(g_settings);
   if (config.animation != s_animation_mode) {
     s_animation_mode = config.animation;
@@ -161,11 +154,8 @@ void Tick() {
   const bool animation_due = animation_active &&
       (!s_last_animation_frame_ms ||
        now_ms - s_last_animation_frame_ms >= kAnimationFrameMs);
-  const bool wave_active =
-      CustomizationOn() && g_settings.shell_background_wave_enabled;
-  const bool force_home =
-      (CustomizationOn() && g_settings.shell_background_force_home) ||
-      wave_active;
+  const bool wave_active = wave_setting();
+  const bool force_home = force_home_setting() || wave_active;
   /* Home coming back into view (from Settings, a game, the Control Center)
      puts the focused title's picture up again without the transition the
      hook holds back, so with Home's background forced it is cleared again. */
@@ -212,41 +202,35 @@ void Tick() {
     s_force_home_initialized = true;
   }
   if (!wave_active && s_wave_was_applied) {
-    NativeShellBackground::DisableProceduralWave();
+    NativeShellBackground::RestoreStockWave();
     s_wave_was_applied = false;
-    s_wave_started_ms = 0;
     s_applied_particle_mode = -1;
     s_apply_requested = true;
   }
   if (wave_active &&
-      (!s_wave_was_applied || context_changed || s_apply_requested)) {
-    if (!s_wave_started_ms)
-      s_wave_started_ms = now_ms;
-    const float elapsed =
-        static_cast<float>(now_ms - s_wave_started_ms) / 1000.0f;
+      (!s_wave_was_applied || context_changed || s_apply_requested))
     s_wave_was_applied =
-        NativeShellBackground::ApplyProceduralWave(elapsed) ||
-        s_wave_was_applied;
-  }
+        NativeShellBackground::ShowStockWave() || s_wave_was_applied;
   const bool custom_background_requested =
       config.enabled || config.image_enabled ||
       config.particles != NativeShellBackground::ParticleMode::Default ||
       force_home || wave_active;
-  if (animation_due) {
+  if (animation_due)
     s_last_animation_frame_ms = now_ms;
-    (void)apply_requested_state(config, now_ms, true);
-  } else if (s_apply_requested || s_restore_requested ||
-             (context_changed && custom_background_requested)) {
+  /* First: an animation frame skips the particles and the image, and a full
+     apply draws that frame as well. */
+  if (s_apply_requested || s_restore_requested ||
+      (context_changed && custom_background_requested)) {
     if (context_changed) {
       s_applied_particle_mode = config.particles ==
               NativeShellBackground::ParticleMode::Default
           ? static_cast<int>(NativeShellBackground::ParticleMode::Default)
           : -1;
-      s_image_was_applied = false;
-      s_applied_image_path.clear();
-      s_applied_image_transition = -1;
+      forget_applied_image();
     }
-    (void)apply_requested_state(config, now_ms, false);
+    apply_requested_state(config, now_ms, false);
+  } else if (animation_due) {
+    apply_requested_state(config, now_ms, true);
   } else if (context_changed) {
     s_applied_layer = layer;
   }
@@ -255,9 +239,7 @@ void Tick() {
 void RequestApply() { s_apply_requested = true; }
 
 void RequestImageReload() {
-  s_image_was_applied = false;
-  s_applied_image_path.clear();
-  s_applied_image_transition = -1;
+  forget_applied_image();
   s_apply_requested = true;
 }
 
@@ -265,7 +247,5 @@ void RequestRestore() {
   s_restore_requested = true;
   s_apply_requested = true;
 }
-
-bool IsReady() { return NativeShellBackground::IsResolved(); }
 
 } // namespace AniketosTheme

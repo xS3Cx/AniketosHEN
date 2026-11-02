@@ -30,11 +30,13 @@
 
 namespace onion::kbm {
 
+constexpr int kInputBytes = (kInputCount + 7) / 8; /* one bit per input */
+
 /* One snapshot of the devices. Motion and notches are since the previous
    frame: hand each frame to Tick once. */
 struct InputFrame {
   uint64_t now_us; /* monotonic; a step back counts as no time passing */
-  uint8_t down[(kInputCount + 7) / 8]; /* bit i: input i held (wheel and
+  uint8_t down[kInputBytes]; /* bit i: input i held (wheel and
                                           kMouseMove* bits are ignored) */
   int16_t wheel_v, wheel_h; /* notches: v > 0 up, h > 0 right */
   int32_t mouse_dx, mouse_dy; /* counts: x right, y down */
@@ -53,9 +55,6 @@ public:
      suspended state is the user's and stays. */
   void Reset();
   void Tick(const InputFrame &in, PadState *out);
-
-  bool Suspended() const { return suspended_; }
-  uint8_t ActiveLayers() const { return layer_mask_; }
 
 private:
   struct InputState {
@@ -89,9 +88,10 @@ private:
   void StartMacro(int b, int output, uint64_t now);
   uint8_t TopLayer(uint8_t mask) const;
   int MouseLayer(uint8_t mask) const;
-  bool Down(int i) const { return down_[i >> 3] & (1u << (i & 7)); }
-  bool Pressed(int i) const { return pressed_[i >> 3] & (1u << (i & 7)); }
-  bool Released(int i) const { return released_[i >> 3] & (1u << (i & 7)); }
+  static bool Bit(const uint8_t *bits, int i) { return bits[i >> 3] & (1u << (i & 7)); }
+  bool Down(int i) const { return Bit(down_, i); }
+  bool Pressed(int i) const { return Bit(pressed_, i); }
+  bool Released(int i) const { return Bit(released_, i); }
 
   const ProfileBlob *p_ = nullptr;
   uint16_t binding_count_ = 0;
@@ -105,8 +105,8 @@ private:
   uint8_t mod_count_[kMaxBindings];
   uint8_t has_layer_out_[kMaxBindings];
   uint8_t has_mtoggle_[kMaxBindings];
-  uint8_t input_layer_[(kInputCount + 7) / 8];  /* input drives a layer */
-  uint8_t input_mtoggle_[(kInputCount + 7) / 8]; /* input has MappingToggle */
+  uint8_t input_layer_[kInputBytes];  /* input drives a layer */
+  uint8_t input_mtoggle_[kInputBytes]; /* input has MappingToggle */
   uint16_t wheel_pulse_ms_[kWheelInputs];
 
   /* runtime */
@@ -114,10 +114,10 @@ private:
   bool have_time_ = false;
   bool resync_ = true;
   bool suspended_ = false;
-  uint8_t down_[(kInputCount + 7) / 8];
-  uint8_t prev_[(kInputCount + 7) / 8];
-  uint8_t pressed_[(kInputCount + 7) / 8];
-  uint8_t released_[(kInputCount + 7) / 8];
+  uint8_t down_[kInputBytes];
+  uint8_t prev_[kInputBytes];
+  uint8_t pressed_[kInputBytes];
+  uint8_t released_[kInputBytes];
   InputState in_[kInputCount];
   BindState bs_[kMaxBindings];
   float level_[kMaxBindings][kMaxOutputsPerBinding];

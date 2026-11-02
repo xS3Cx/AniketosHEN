@@ -374,7 +374,6 @@ static int test_names_outputs(void) {
       return onion_test_fail(__FILE__, __LINE__, "\"%s\" stick %d", c.name, o.axis);
     if (!o.layer.empty()) return onion_test_fail(__FILE__, __LINE__, "\"%s\" kept old layer", c.name);
     KSTREQ(c.name, OutputName(o).c_str());
-    TEST_ASSERT_TRUE(!OutputDisplayName(o).empty());
   }
   OutputDef o;
   TEST_ASSERT_TRUE(ParseOutput("PAD:Cross", &o));
@@ -385,12 +384,6 @@ static int test_names_outputs(void) {
   for (const char *b : bad) {
     if (ParseOutput(b, &o)) return onion_test_fail(__FILE__, __LINE__, "\"%s\" accepted", b);
   }
-  /* The picker lists only names that parse. */
-  const auto all = AllOutputNames();
-  TEST_ASSERT_TRUE(all.size() >= 16 + 8 + 2);
-  for (const std::string &n : all)
-    if (!ParseOutput(n.c_str(), &o))
-      return onion_test_fail(__FILE__, __LINE__, "picker name \"%s\" does not parse", n.c_str());
   return 0;
 }
 

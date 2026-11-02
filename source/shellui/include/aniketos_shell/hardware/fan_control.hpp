@@ -1,23 +1,16 @@
 /* Copyright (C) 2026 AniketosHEN contributors
  *
- * Aniketos ShellUI fan control. This is deliberately a capability-based
- * wrapper around the PS5 ICC fan device: if the device or ioctl interface is
- * unavailable on a firmware/model, no write is attempted.
+ * Shell Menu fan options, forwarded to the daemon over IPC. False when the
+ * daemon is not reachable.
  */
 #pragma once
 
 namespace AniketosFan {
 
-/** Start the local adaptive fan worker once. */
-bool Start();
-
-/** Apply or restore the fan policy without going through an Aniketos daemon. */
+/** Turn the daemon's fan threshold on or off. */
 bool SetEnabled(bool enabled, int target_celsius);
 
-/** Change the local autoservo target when dynamic control is enabled. */
+/** Turn the threshold on at this temperature. */
 bool SetTarget(int target_celsius);
-
-/** Return control to the system-owned autoservo profile. */
-bool RestoreAutomatic();
 
 } // namespace AniketosFan

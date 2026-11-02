@@ -1,19 +1,19 @@
 #include "aniketos_shell/system_ui/devkit_overlay.hpp"
 
-#include "aniketos_ui/pui_primitives.hpp"
-#include "hooked_funcs.hpp"
 #include "aniketos_theme/clock/shell_clock.hpp"
+#include "aniketos_ui/mono_reflect.hpp"
+#include "aniketos_ui/pui_primitives.hpp"
+#include "aniketos_ui/ui_color.hpp"
+#include "hooked_funcs.hpp"
 
 #include <onion/log.h>
-#include <onion/settings.hpp>
 
-#include <cstring>
 #include <string>
-
-extern onion::Settings g_settings;
 
 namespace DevkitOverlay {
 namespace {
+
+namespace Reflect = AniketosUI::Reflect;
 
 constexpr const char *kName = "id_anivsh_devkit_overlay";
 /* The banner's text and colour, as the widget's own update sets them when
@@ -26,13 +26,8 @@ constexpr float kExpiredInset = 24.0f;
    the values again this often. */
 constexpr int kUpdateFrames = 60 * 30;
 
-struct UIColor {
-  float r, g, b, a;
-  int32_t color_space;
-};
-static_assert(sizeof(UIColor) == 20);
-
 MonoClass *s_view_class = nullptr;
+MonoMethod *s_view_ctor = nullptr;
 MonoMethod *s_create_devkit = nullptr;
 MonoMethod *s_create_expired = nullptr;
 MonoMethod *s_update = nullptr;
@@ -47,38 +42,6 @@ int s_frame = 0;
 int s_next_update = 0;
 int s_retry_at = 0;
 bool s_refresh = true;
-
-MonoObject *target(uint32_t handle) {
-  return handle ? mono_gchandle_get_target(handle) : nullptr;
-}
-
-void release(uint32_t &handle) {
-  if (handle)
-    mono_gchandle_free(handle);
-  handle = 0;
-}
-
-MonoMethod *method_of(MonoClass *klass, const char *name, int parameters) {
-  for (; klass; klass = mono_class_get_parent(klass))
-    if (MonoMethod *method =
-            mono_class_get_method_from_name(klass, name, parameters))
-      return method;
-  return nullptr;
-}
-
-bool call(MonoObject *object, const char *name, int parameters,
-          void **arguments = nullptr, MonoObject **result = nullptr) {
-  MonoMethod *method =
-      object ? method_of(mono_object_get_class(object), name, parameters)
-             : nullptr;
-  if (!method)
-    return false;
-  MonoObject *exception = nullptr;
-  MonoObject *value = mono_runtime_invoke(method, object, arguments, &exception);
-  if (result)
-    *result = value;
-  return !exception;
-}
 
 bool invoke(MonoObject *object, MonoMethod *method, const char *what) {
   MonoObject *exception = nullptr;
@@ -97,32 +60,19 @@ MonoObject *field(MonoObject *object, MonoClassField *which) {
 
 void set_visible(MonoObject *widget, bool visible) {
   void *arguments[1] = {&visible};
-  call(widget, "set_Visible", 1, arguments);
+  Reflect::Call(widget, "set_Visible", 1, arguments);
 }
 
 void set_opacity(MonoObject *widget, float opacity) {
   void *arguments[1] = {&opacity};
-  call(widget, "set_Opacity", 1, arguments);
+  Reflect::Call(widget, "set_Opacity", 1, arguments);
 }
 
-bool float_of(MonoObject *object, const char *getter, float *out) {
+std::string label_text(MonoObject *label) {
   MonoObject *value = nullptr;
-  if (!call(object, getter, 0, nullptr, &value) || !value)
-    return false;
-  *out = *static_cast<float *>(mono_object_unbox(value));
-  return true;
-}
-
-std::string text_of(MonoObject *label) {
-  MonoObject *value = nullptr;
-  if (!call(label, "get_Text", 0, nullptr, &value) || !value)
+  if (!Reflect::Call(label, "get_Text", 0, nullptr, &value))
     return {};
-  const char *utf8 =
-      mono_string_to_utf8(reinterpret_cast<MonoString *>(value));
-  std::string text = utf8 ? utf8 : "";
-  if (utf8 && mono_free)
-    mono_free(const_cast<char *>(utf8));
-  return text;
+  return Mono_to_String(reinterpret_cast<MonoString *>(value));
 }
 
 bool wanted() {
@@ -130,47 +80,45 @@ bool wanted() {
 }
 
 void drop() {
-  if (MonoObject *view = target(s_view)) {
+  if (MonoObject *view = Reflect::Target(s_view)) {
     for (MonoClassField *which :
          {s_panel_info, s_panel_expired, s_panel_trial})
       if (MonoObject *panel = field(view, which))
         AniketosUI::Pui::Disown(panel);
     if (!ShellClock::IsWidgetDisposed(view)) {
-      call(view, "RemoveFromParent", 0);
-      call(view, "Dispose", 0);
+      Reflect::Call(view, "RemoveFromParent", 0);
+      Reflect::Call(view, "Dispose", 0);
     }
     LOG_INFO("[DEVKIT] overlay removed");
   }
-  release(s_view);
-  release(s_root);
+  Reflect::Release(s_view);
+  Reflect::Release(s_root);
 }
 
 /* Our widget under Home's root (beside React, never inside it), with the
    panels a DevKit builds. */
 MonoObject *view() {
   MonoObject *root = ShellClock::GetHomeRoot();
-  MonoObject *view = target(s_view);
-  if (view && (ShellClock::IsWidgetDisposed(view) || target(s_root) != root))
-    drop(), view = nullptr;
+  MonoObject *view = Reflect::Target(s_view);
+  if (view &&
+      (ShellClock::IsWidgetDisposed(view) || Reflect::Target(s_root) != root)) {
+    drop();
+    view = nullptr;
+  }
   if (view || !root || s_frame < s_retry_at)
     return view;
   s_retry_at = s_frame + 600;
   view = mono_object_new(mono_domain_get(), s_view_class);
   if (!view)
     return nullptr;
-  MonoObject *exception = nullptr;
-  MonoMethod *ctor = mono_class_get_method_from_name(s_view_class, ".ctor", 0);
-  mono_runtime_invoke(ctor, view, nullptr, &exception);
-  if (exception) {
-    LOG_ERROR("[DEVKIT] DebugInfoView() threw");
+  if (!invoke(view, s_view_ctor, "DebugInfoView()"))
     return nullptr;
-  }
   MonoString *name = mono_string_new(mono_domain_get(), kName);
-  call(view, "set_Name", 1, reinterpret_cast<void **>(&name));
+  Reflect::Call(view, "set_Name", 1, reinterpret_cast<void **>(&name));
   if (!invoke(view, s_create_devkit, "createDevKitPanel") ||
       !invoke(view, s_create_expired, "createExpiredPanel") ||
-      !call(root, "AppendChild", 1, reinterpret_cast<void **>(&view))) {
-    call(view, "Dispose", 0);
+      !Reflect::Call(root, "AppendChild", 1, reinterpret_cast<void **>(&view))) {
+    Reflect::Call(view, "Dispose", 0);
     return nullptr;
   }
   /* the system's look, not the theme's */
@@ -194,26 +142,27 @@ void show_expired(MonoObject *panel, MonoObject *label) {
   set_opacity(panel, 1.0f);
   if (!label)
     return;
-  if (text_of(label) != kExpiredText) {
-    UIColor red{kExpiredRed, 0.0f, 0.0f, kExpiredRed, 0};
+  if (label_text(label) != kExpiredText) {
+    AniketosUI::UIColor red{kExpiredRed, 0.0f, 0.0f, kExpiredRed, 0};
     void *color[1] = {&red};
-    call(panel, "set_BackgroundColor", 1, color);
+    Reflect::Call(panel, "set_BackgroundColor", 1, color);
     MonoString *text = mono_string_new(mono_domain_get(), kExpiredText);
-    call(label, "set_Text", 1, reinterpret_cast<void **>(&text));
+    Reflect::Call(label, "set_Text", 1, reinterpret_cast<void **>(&text));
   }
   /* centred at the top: the text and 24 px each side */
   float text_width = 0.0f, width = 0.0f, screen = 1920.0f;
-  if (!float_of(label, "get_Width", &text_width) || text_width <= 0.0f)
+  if (!Reflect::FloatProperty(label, "get_Width", &text_width) ||
+      text_width <= 0.0f)
     return;
-  float_of(panel, "get_Width", &width);
-  float_of(ShellClock::GetHomeRoot(), "get_Width", &screen);
+  Reflect::FloatProperty(panel, "get_Width", &width);
+  Reflect::FloatProperty(ShellClock::GetHomeRoot(), "get_Width", &screen);
   float wanted_width = text_width + 2.0f * kExpiredInset;
   if (width != wanted_width) {
     float x = (screen - wanted_width) * 0.5f;
     void *width_argument[1] = {&wanted_width};
     void *x_argument[1] = {&x};
-    call(panel, "set_Width", 1, width_argument);
-    call(panel, "set_X", 1, x_argument);
+    Reflect::Call(panel, "set_Width", 1, width_argument);
+    Reflect::Call(panel, "set_X", 1, x_argument);
   }
 }
 
@@ -226,6 +175,7 @@ void Install() {
                              "DebugInfoView")
                        : nullptr;
   if (s_view_class) {
+    s_view_ctor = mono_class_get_method_from_name(s_view_class, ".ctor", 0);
     s_create_devkit =
         mono_class_get_method_from_name(s_view_class, "createDevKitPanel", 0);
     s_create_expired =
@@ -240,8 +190,9 @@ void Install() {
     s_label_expired =
         mono_class_get_field_from_name(s_view_class, "m_label_expiredtext");
   }
-  const bool ready = s_create_devkit && s_create_expired && s_update &&
-                     s_panel_info && s_panel_expired && s_label_expired;
+  const bool ready = s_view_ctor && s_create_devkit && s_create_expired &&
+                     s_update && s_panel_info && s_panel_expired &&
+                     s_label_expired;
   LOG_INFO("[DEVKIT] DebugInfoView=%p ready=%d",
            static_cast<void *>(s_view_class), ready ? 1 : 0);
   if (!ready)

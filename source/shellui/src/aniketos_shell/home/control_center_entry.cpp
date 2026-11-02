@@ -1,55 +1,21 @@
-#include "aniketos_shell/home/hen_menu.hpp"
-#include "aniketos_shell/home/home_tabs.hpp"
+#include "aniketos_shell/home/control_center_entry.hpp"
 
+#include "aniketos_shell/core/embedded_assets.hpp"
+#include "aniketos_shell/home/hen_menu.hpp"
+#include "aniketos_ui/home_scene.hpp"
+#include "aniketos_ui/mono_reflect.hpp"
 #include "hooked_funcs.hpp"
-#include "aniketos_theme/clock/shell_clock.hpp"
 
 #include <onion/detour.h>
-#include <onion/distribution.h>
-#include <onion/fs.h>
 #include <onion/log.h>
-#include <onion/notify.h>
-#include <onion/settings.hpp>
 
-#include <algorithm>
 #include <atomic>
-#include <cstdio>
+#include <cstdint>
 #include <cstring>
-#include <dirent.h>
-#include <fcntl.h>
-#include <mutex>
 #include <string>
-#include <sys/stat.h>
-#include <unistd.h>
-#include <vector>
 
-#include "aniketos_theme/logo_tint.hpp"
-#include "web_icon.hpp"
-
-extern "C" {
-extern const unsigned char aniketos_icon_png_start[];
-extern const unsigned char aniketos_icon_png_end[];
-extern const unsigned char aniketos_icon_rgba_start[];
-extern const unsigned char aniketos_icon_rgba_end[];
-extern const unsigned char color_track_png_start[];
-extern const unsigned char color_track_png_end[];
-extern const unsigned char color_track_gray_png_start[];
-extern const unsigned char color_track_gray_png_end[];
-extern const unsigned char color_track_solid_png_start[];
-extern const unsigned char color_track_solid_png_end[];
-extern const unsigned char color_track_fade_png_start[];
-extern const unsigned char color_track_fade_png_end[];
-extern const unsigned char home_menu_internet_on_png_start[];
-extern const unsigned char home_menu_internet_on_png_end[];
-extern const unsigned char home_menu_internet_off_png_start[];
-extern const unsigned char home_menu_internet_off_png_end[];
-extern const unsigned char home_background_vignette_png_start[];
-extern const unsigned char home_background_vignette_png_end[];
-extern const unsigned char home_background_edges_png_start[];
-extern const unsigned char home_background_edges_png_end[];
-}
-
-extern onion::Settings g_settings;
+namespace HomeScene = AniketosUI::HomeScene;
+namespace Reflect = AniketosUI::Reflect;
 
 namespace ControlCenterEntry {
 namespace {
@@ -74,59 +40,25 @@ uint32_t s_label_holder_handle = 0;
 uint32_t s_scene_handle = 0;
 int s_search_countdown = 0;
 
-MonoObject *target(uint32_t handle) {
-  return handle ? mono_gchandle_get_target(handle) : nullptr;
-}
-
-void keep(uint32_t &handle, MonoObject *object) {
-  if (handle)
-    mono_gchandle_free(handle);
-  handle = object ? mono_gchandle_new_weakref(object, 0) : 0;
-}
-
 MonoObject *get(MonoObject *object, const char *getter) {
-  if (!object)
-    return nullptr;
-  MonoMethod *method = nullptr;
-  for (MonoClass *k = mono_object_get_class(object); k && !method;
-       k = mono_class_get_parent(k))
-    method = mono_class_get_method_from_name(k, getter, 0);
-  if (!method)
-    return nullptr;
-  MonoObject *exception = nullptr;
-  MonoObject *value = mono_runtime_invoke(method, object, nullptr, &exception);
-  return exception ? nullptr : value;
+  MonoObject *value = nullptr;
+  return Reflect::Call(object, getter, 0, nullptr, &value) ? value : nullptr;
 }
 
-std::string text_of(MonoObject *managed_string) {
-  if (!managed_string)
-    return {};
-  const char *utf =
-      mono_string_to_utf8(reinterpret_cast<MonoString *>(managed_string));
-  std::string text = utf ? utf : "";
-  if (utf && mono_free)
-    mono_free(const_cast<char *>(utf));
-  return text;
+bool flag(MonoObject *object, const char *getter) {
+  MonoObject *boxed = get(object, getter);
+  return boxed && *static_cast<bool *>(mono_object_unbox(boxed));
 }
 
-MonoObject *field(MonoObject *object, const char *name) {
-  if (!object)
-    return nullptr;
-  for (MonoClass *k = mono_object_get_class(object); k;
-       k = mono_class_get_parent(k))
-    if (MonoClassField *f = mono_class_get_field_from_name(k, name)) {
-      MonoObject *value = nullptr;
-      mono_field_get_value(object, f, &value);
-      return value;
-    }
-  return nullptr;
+std::string text(MonoObject *object, const char *getter) {
+  return Mono_to_String(reinterpret_cast<MonoString *>(get(object, getter)));
 }
 
 std::string describe(MonoObject *object) {
   MonoObject *exception = nullptr;
   MonoString *managed = object ? mono_object_to_string(object, &exception)
                                : nullptr;
-  return exception ? std::string() : text_of(reinterpret_cast<MonoObject *>(managed));
+  return exception ? std::string() : Mono_to_String(managed);
 }
 
 int count_of(MonoObject *list) {
@@ -134,18 +66,10 @@ int count_of(MonoObject *list) {
   return boxed ? *static_cast<int32_t *>(mono_object_unbox(boxed)) : 0;
 }
 
-MonoObject *item_of(MonoObject *list, int index) {
-  MonoMethod *method = nullptr;
-  for (MonoClass *k = mono_object_get_class(list); k && !method;
-       k = mono_class_get_parent(k))
-    method = mono_class_get_method_from_name(k, "get_Item", 1);
-  if (!method)
-    return nullptr;
-  int32_t value = index;
-  void *args[1] = {&value};
-  MonoObject *exception = nullptr;
-  MonoObject *item = mono_runtime_invoke(method, list, args, &exception);
-  return exception ? nullptr : item;
+MonoObject *item_of(MonoObject *list, int32_t index) {
+  void *args[1] = {&index};
+  MonoObject *item = nullptr;
+  return Reflect::Call(list, "get_Item", 1, args, &item) ? item : nullptr;
 }
 
 /* The first scene below `scene` that satisfies `wanted`. */
@@ -155,7 +79,7 @@ MonoObject *find_scene(MonoObject *scene, int depth, const Wanted &wanted) {
     return nullptr;
   if (wanted(scene))
     return scene;
-  MonoObject *list = field(scene, "subSceneList");
+  MonoObject *list = Reflect::FieldValue(scene, "subSceneList");
   const int count = list ? count_of(list) : 0;
   for (int i = 0; i < count && i < 40; ++i)
     if (MonoObject *found = find_scene(item_of(list, i), depth + 1, wanted))
@@ -166,9 +90,9 @@ MonoObject *find_scene(MonoObject *scene, int depth, const Wanted &wanted) {
 /* The Control Center's React scene: the app scene under the layer called
    "PControlCenter" at the top of ShellUI's scene tree. */
 MonoObject *control_center_scene() {
-  MonoObject *scene = get(ShellClock::GetHomeRoot(), "get_ParentScene");
+  MonoObject *scene = get(HomeScene::Root(), "get_ParentScene");
   for (int guard = 0; scene && guard < 16; ++guard) {
-    MonoObject *up = field(scene, "superScene");
+    MonoObject *up = Reflect::FieldValue(scene, "superScene");
     if (!up)
       break;
     scene = up;
@@ -185,29 +109,16 @@ MonoObject *control_center_scene() {
 void find_widgets(MonoObject *widget, int depth, int &budget) {
   if (!widget || depth > 40 || budget-- <= 0)
     return;
-  const std::string test_id = text_of(get(widget, "get_TestId"));
+  const std::string test_id = text(widget, "get_TestId");
   if (test_id == kButtonTestId)
-    keep(s_button_handle, widget);
+    Reflect::Hold(s_button_handle, widget);
   else if (test_id == kLabelHolderTestId)
-    keep(s_label_holder_handle, widget);
+    Reflect::Hold(s_label_holder_handle, widget);
   MonoObject *child = get(widget, "get_FirstChild");
   for (int guard = 0; child && guard < 64; ++guard) {
     find_widgets(child, depth + 1, budget);
     child = get(child, "get_NextSibling");
   }
-}
-
-bool call_string(MonoObject *object, const char *setter, const char *value) {
-  MonoMethod *method = nullptr;
-  for (MonoClass *k = mono_object_get_class(object); k && !method;
-       k = mono_class_get_parent(k))
-    method = mono_class_get_method_from_name(k, setter, 1);
-  if (!method)
-    return false;
-  void *args[1] = {mono_string_new(mono_domain_get(), value)};
-  MonoObject *exception = nullptr;
-  mono_runtime_invoke(method, object, args, &exception);
-  return exception == nullptr;
 }
 
 /* PressEvent.Dispatch(RCTEventEmitter): how a press reaches the Control
@@ -216,7 +127,7 @@ bool call_string(MonoObject *object, const char *setter, const char *value) {
    is dropped here and answered by our menu instead. */
 void dispatch_press_hook(MonoObject *event, MonoObject *emitter) {
   if (s_button_focused.load(std::memory_order_relaxed) &&
-      HomeMenu::Available()) {
+      HenMenu::Available()) {
     s_pressed.store(true, std::memory_order_relaxed);
     return;
   }
@@ -224,28 +135,7 @@ void dispatch_press_hook(MonoObject *event, MonoObject *emitter) {
     s_dispatch_press_original(event, emitter);
 }
 
-bool is_focused(MonoObject *widget) {
-  MonoObject *boxed = get(widget, "get_Focused");
-  return boxed && *static_cast<bool *>(mono_object_unbox(boxed));
-}
-
-/* An ImageAsset of our icon, made once. */
-MonoObject *icon_asset() {
-  const char *path = AniketosIconPath();
-  if (s_icon_for != path && s_icon_handle) {
-    mono_gchandle_free(s_icon_handle);
-    s_icon_handle = 0;
-  }
-  s_icon_for = path;
-  if (MonoObject *asset = target(s_icon_handle))
-    return asset;
-  MonoImage *pui = getDLLimage("Sce.PlayStation.PUI.dll");
-  MonoClass *klass =
-      pui && *path ? mono_class_from_name(pui, "Sce.PlayStation.PUI", "ImageAsset")
-                   : nullptr;
-  if (!klass)
-    return nullptr;
-  MonoMethod *constructor = nullptr;
+MonoMethod *string_constructor(MonoClass *klass) {
   void *iter = nullptr;
   while (MonoMethod *method = mono_class_get_methods(klass, &iter)) {
     if (std::strcmp(mono_method_get_name(method), ".ctor") != 0)
@@ -259,11 +149,25 @@ MonoObject *icon_asset() {
     const bool takes_string = type && !std::strcmp(type, "System.String");
     if (type && mono_free)
       mono_free(type);
-    if (takes_string) {
-      constructor = method;
-      break;
-    }
+    if (takes_string)
+      return method;
   }
+  return nullptr;
+}
+
+/* An ImageAsset of our icon, made once. */
+MonoObject *icon_asset() {
+  const char *path = AniketosIconPath();
+  if (s_icon_for != path)
+    Reflect::Release(s_icon_handle);
+  s_icon_for = path;
+  if (MonoObject *asset = Reflect::Target(s_icon_handle))
+    return asset;
+  MonoImage *pui = getDLLimage("Sce.PlayStation.PUI.dll");
+  MonoClass *klass =
+      pui && *path ? mono_class_from_name(pui, "Sce.PlayStation.PUI", "ImageAsset")
+                   : nullptr;
+  MonoMethod *constructor = klass ? string_constructor(klass) : nullptr;
   if (!constructor)
     return nullptr;
   MonoObject *asset = mono_object_new(mono_domain_get(), klass);
@@ -272,20 +176,74 @@ MonoObject *icon_asset() {
   mono_runtime_invoke(constructor, asset, args, &exception);
   if (exception)
     return nullptr;
-  s_icon_handle = mono_gchandle_new(asset, 0);
+  Reflect::Hold(s_icon_handle, asset, /*strong=*/true);
   return asset;
 }
 
 void set_object(MonoObject *object, const char *setter, MonoObject *value) {
-  MonoMethod *method = nullptr;
-  for (MonoClass *k = mono_object_get_class(object); k && !method;
-       k = mono_class_get_parent(k))
-    method = mono_class_get_method_from_name(k, setter, 1);
-  if (!method)
-    return;
   void *args[1] = {value};
-  MonoObject *exception = nullptr;
-  mono_runtime_invoke(method, object, args, &exception);
+  Reflect::Call(object, setter, 1, args);
+}
+
+/* The button we hold, dropped once React has disposed of it. */
+MonoObject *current_button() {
+  MonoObject *button = Reflect::Target(s_button_handle);
+  if (button && HomeScene::IsDisposed(button)) {
+    Reflect::Hold(s_button_handle, nullptr);
+    Reflect::Hold(s_label_holder_handle, nullptr);
+    button = nullptr;
+  }
+  return button;
+}
+
+/* React builds the Control Center lazily and rebuilds it now and then; look
+   for the button once a second until it is there. */
+MonoObject *search_button() {
+  if (--s_search_countdown > 0)
+    return nullptr;
+  s_search_countdown = 60;
+  MonoObject *scene = control_center_scene();
+  Reflect::Hold(s_scene_handle, scene);
+  int budget = 600;
+  find_widgets(Reflect::FieldValue(scene, "rootWidget"), 0, budget);
+  MonoObject *button = Reflect::Target(s_button_handle);
+  if (button)
+    LOG_INFO("[CCENTRY] button found %p", static_cast<void *>(button));
+  return button;
+}
+
+bool button_has_focus(MonoObject *button) {
+  /* The button itself, or the focus layer React wraps it in, has focus. */
+  bool focused = false;
+  MonoObject *node_up = button;
+  for (int depth = 0; node_up && depth < 4 && !focused; ++depth) {
+    focused = flag(node_up, "get_Focused");
+    node_up = get(node_up, "get_Parent");
+  }
+  /* Focus stays where it was when the Control Center closes, so it only
+     counts while the button is really on screen. Otherwise presses made in
+     Home or anywhere else would be taken for presses on our button. */
+  return focused && flag(button, "get_IsFinallyShown") &&
+         Reflect::FloatProperty(button, "get_FinalOpacity") > 0.5f;
+}
+
+/* The caption is a label React creates while the button has focus. */
+void show_label() {
+  MonoObject *holder = Reflect::Target(s_label_holder_handle);
+  if (!holder || HomeScene::IsDisposed(holder))
+    return;
+  MonoObject *node = get(holder, "get_FirstChild");
+  for (int depth = 0; node && depth < 4; ++depth) {
+    if (!std::strcmp(mono_class_get_name(mono_object_get_class(node)),
+                     "Label")) {
+      if (text(node, "get_Text") != kLabel) {
+        void *args[1] = {mono_string_new(mono_domain_get(), kLabel)};
+        Reflect::Call(node, "set_Text", 1, args);
+      }
+      break;
+    }
+    node = get(node, "get_FirstChild");
+  }
 }
 
 } // namespace
@@ -314,49 +272,16 @@ void Tick() {
     return;
   if (s_pressed.exchange(false, std::memory_order_relaxed)) {
     LOG_INFO("[CCENTRY] button pressed");
-    HomeMenu::Request(target(s_scene_handle));
+    HenMenu::Request(Reflect::Target(s_scene_handle));
   }
-  MonoObject *button = target(s_button_handle);
-  if (button && ShellClock::IsWidgetDisposed(button)) {
-    keep(s_button_handle, nullptr);
-    keep(s_label_holder_handle, nullptr);
-    button = nullptr;
-  }
-  if (!button)
-    s_button_focused.store(false, std::memory_order_relaxed);
+  MonoObject *button = current_button();
   if (!button) {
-    /* React builds the Control Center lazily and rebuilds it now and then;
-       look for the button once a second until it is there. */
-    if (--s_search_countdown > 0)
-      return;
-    s_search_countdown = 60;
-    MonoObject *scene = control_center_scene();
-    keep(s_scene_handle, scene);
-    int budget = 600;
-    find_widgets(field(scene, "rootWidget"), 0, budget);
-    button = target(s_button_handle);
+    s_button_focused.store(false, std::memory_order_relaxed);
+    button = search_button();
     if (!button)
       return;
-    LOG_INFO("[CCENTRY] button found %p", static_cast<void *>(button));
   }
-
-  /* The button itself, or the focus layer React wraps it in, has focus. */
-  bool focused = false;
-  MonoObject *node_up = button;
-  for (int depth = 0; node_up && depth < 4 && !focused; ++depth) {
-    focused = is_focused(node_up);
-    node_up = get(node_up, "get_Parent");
-  }
-  /* Focus stays where it was when the Control Center closes, so it only
-     counts while the button is really on screen. Otherwise presses made in
-     Home or anywhere else would be taken for presses on our button. */
-  if (focused) {
-    MonoObject *shown = get(button, "get_IsFinallyShown");
-    MonoObject *opacity = get(button, "get_FinalOpacity");
-    focused = shown && *static_cast<bool *>(mono_object_unbox(shown)) &&
-              opacity && *static_cast<float *>(mono_object_unbox(opacity)) > 0.5f;
-  }
-  s_button_focused.store(focused, std::memory_order_relaxed);
+  s_button_focused.store(button_has_focus(button), std::memory_order_relaxed);
 
   /* React puts its own image back whenever it re-renders the button. */
   if (MonoObject *asset = icon_asset()) {
@@ -366,182 +291,7 @@ void Tick() {
       set_object(button, "set_InvertedIconImage", asset);
   }
 
-  /* The caption is a label React creates while the button has focus. */
-  MonoObject *holder = target(s_label_holder_handle);
-  if (!holder || ShellClock::IsWidgetDisposed(holder))
-    return;
-  MonoObject *node = get(holder, "get_FirstChild");
-  for (int depth = 0; node && depth < 4; ++depth) {
-    if (!std::strcmp(mono_class_get_name(mono_object_get_class(node)),
-                     "Label")) {
-      if (text_of(get(node, "get_Text")) != kLabel)
-        call_string(node, "set_Text", kLabel);
-      break;
-    }
-    node = get(node, "get_FirstChild");
-  }
+  show_label();
 }
 
 } // namespace ControlCenterEntry
-
-namespace {
-/* Writes an image embedded in this module into our own data folder, once,
-   and gives its path (empty if it could not be written). */
-const char *embedded_image(const char *file, const unsigned char *start,
-                           const unsigned char *end, char (&path)[160],
-                           bool &tried) {
-  if (tried)
-    return path;
-  tried = true;
-  const size_t size = static_cast<size_t>(end - start);
-  char candidate[160];
-  std::snprintf(candidate, sizeof(candidate), "%s/%s",
-                ONION_DIST_USER_DATA_ROOT, file);
-  struct stat st {};
-  if (stat(candidate, &st) != 0 || static_cast<size_t>(st.st_size) != size) {
-    const int fd = open(candidate, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    if (fd < 0)
-      return path;
-    const ssize_t written = write(fd, start, size);
-    close(fd);
-    if (written != static_cast<ssize_t>(size)) {
-      unlink(candidate);
-      return path;
-    }
-  }
-  std::snprintf(path, sizeof(path), "%s", candidate);
-  return path;
-}
-} // namespace
-
-namespace {
-constexpr int kLogoSide = 128;
-
-/* Back to no coloured logo; false when there was none. */
-bool clear_logo_folder() {
-  DIR *folder = opendir(ONION_LOGO_DIR);
-  if (!folder)
-    return false;
-  bool any = false;
-  while (const dirent *entry = readdir(folder))
-    if (entry->d_name[0] != '.') {
-      unlink((std::string(ONION_LOGO_DIR) + "/" + entry->d_name).c_str());
-      any = true;
-    }
-  closedir(folder);
-  return any;
-}
-
-void write_notification_logo(const void *data, size_t size) {
-  if (!write_file_atomic_if_changed(ONION_NOTIFY_ICON_PATH, data, size))
-    LOG_WARN("logo: the notifications' picture stays as it was");
-}
-
-/* The logo in the chosen colour, under a name of its own: the system keeps
-   pictures by their path. Empty when it cannot be made. */
-const char *coloured_logo() {
-  static std::mutex mutex;
-  static char path[160];
-  static int made_for = -1;
-  const auto channel = [](int value) { return std::clamp(value, 0, 255); };
-  const int red = channel(g_settings.logo_color_r);
-  const int green = channel(g_settings.logo_color_g);
-  const int blue = channel(g_settings.logo_color_b);
-  const int colour = red << 16 | green << 8 | blue;
-  std::lock_guard<std::mutex> lock(mutex);
-  if (colour == made_for)
-    return path;
-  made_for = colour;
-  path[0] = '\0';
-  std::vector<uint8_t> pixels(aniketos_icon_rgba_start, aniketos_icon_rgba_end);
-  if (pixels.size() != kLogoSide * kLogoSide * 4)
-    return path;
-  LogoTint::Apply(pixels.data(), pixels.size() / 4, red, green, blue);
-  const std::vector<uint8_t> png =
-      WebIcon::EncodePng(kLogoSide, kLogoSide, pixels);
-  (void)mkdir(ONION_LOGO_DIR, 0777);
-  clear_logo_folder();
-  char candidate[160];
-  std::snprintf(candidate, sizeof(candidate), "%s/%06x.png", ONION_LOGO_DIR,
-                colour);
-  const int fd = open(candidate, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-  if (fd < 0)
-    return path;
-  const bool written =
-      write(fd, png.data(), png.size()) == static_cast<ssize_t>(png.size());
-  close(fd);
-  if (written) {
-    std::snprintf(path, sizeof(path), "%s", candidate);
-    write_notification_logo(png.data(), png.size());
-  } else {
-    unlink(candidate);
-  }
-  return path;
-}
-} // namespace
-
-const char *AniketosIconPath() {
-  static char path[160];
-  static bool tried = false;
-  static std::atomic<bool> stock_checked{false};
-  if (g_settings.logo_color_enabled) {
-    stock_checked.store(false, std::memory_order_relaxed);
-    const char *coloured = coloured_logo();
-    if (*coloured)
-      return coloured;
-  } else if (!stock_checked.exchange(true, std::memory_order_relaxed) &&
-             clear_logo_folder()) {
-    write_notification_logo(
-        aniketos_icon_png_start,
-        static_cast<size_t>(aniketos_icon_png_end - aniketos_icon_png_start));
-  }
-  return embedded_image("aniketos_icon.png", aniketos_icon_png_start,
-                        aniketos_icon_png_end, path, tried);
-}
-
-const char *ColorTrackPath(ColorTrack track) {
-  static char paths[4][160];
-  static bool tried[4] = {};
-  switch (track) {
-  case ColorTrack::Gray:
-    return embedded_image("color_track_gray.png", color_track_gray_png_start,
-                          color_track_gray_png_end, paths[1], tried[1]);
-  case ColorTrack::Solid:
-    return embedded_image("color_track_solid.png",
-                          color_track_solid_png_start,
-                          color_track_solid_png_end, paths[2], tried[2]);
-  case ColorTrack::Fade:
-    return embedded_image("color_track_fade.png", color_track_fade_png_start,
-                          color_track_fade_png_end, paths[3], tried[3]);
-  case ColorTrack::Hues:
-  default:
-    return embedded_image("color_track.png", color_track_png_start,
-                          color_track_png_end, paths[0], tried[0]);
-  }
-}
-
-const char *HomeEffectImagePath(HomeEffectImage image) {
-  static char paths[2][160];
-  static bool tried[2] = {};
-  return image == HomeEffectImage::Vignette
-             ? embedded_image("home_vignette.png",
-                              home_background_vignette_png_start,
-                              home_background_vignette_png_end, paths[0],
-                              tried[0])
-             : embedded_image("home_edges.png", home_background_edges_png_start,
-                              home_background_edges_png_end, paths[1],
-                              tried[1]);
-}
-
-const char *InternetIconPath(bool enabled) {
-  static char on_path[160], off_path[160];
-  static bool on_tried = false, off_tried = false;
-  return enabled ? embedded_image("internet_on.png",
-                                  home_menu_internet_on_png_start,
-                                  home_menu_internet_on_png_end, on_path,
-                                  on_tried)
-                 : embedded_image("internet_off.png",
-                                  home_menu_internet_off_png_start,
-                                  home_menu_internet_off_png_end, off_path,
-                                  off_tried);
-}

@@ -1,14 +1,16 @@
 #include "aniketos_shell/system_ui/account_avatar.hpp"
 
-#include "aniketos_shell/system_ui/avatar_image.hpp"
 #include "aniketos_shell/system_ui/avatar_codec.h"
-#include "hooked_funcs.hpp"
+#include "aniketos_shell/system_ui/avatar_image.hpp"
 #include "aniketos_theme/clock/shell_clock.hpp"
+#include "aniketos_ui/mono_reflect.hpp"
+#include "aniketos_ui/small_file.hpp"
+#include "hooked_funcs.hpp"
 
 #include <onion/detour.h>
 #include <onion/distribution.h>
+#include <onion/fs.h>
 #include <onion/log.h>
-#include <onion/settings.hpp>
 
 #include <algorithm>
 #include <atomic>
@@ -19,16 +21,16 @@
 #include <cstring>
 #include <dirent.h>
 #include <initializer_list>
+#include <iterator>
 #include <pthread.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <utility>
-
-extern onion::Settings g_settings;
-extern "C" int sceUserServiceGetForegroundUser(int *user_id);
 
 namespace AccountAvatar {
 namespace {
+
+namespace Reflect = AniketosUI::Reflect;
+using AniketosUI::FileName;
 
 constexpr const char *kDirectory = ONION_DIST_USER_DATA_ROOT "/ShellUI/avatars";
 constexpr const char *kCacheDirectory =
@@ -52,14 +54,17 @@ BoxLoadFn s_box_original = nullptr;
 MonoClass *s_box_class = nullptr;
 MonoClass *s_options_class = nullptr;
 
+/* What a box was last asked to load: when that has not shown after
+   kVerifyFrames, the next one down is tried. */
+enum Stage { kTryAnimated, kTryStill, kTrySystem, kLoaded };
+
 struct TrackedBox {
   uint32_t box = 0;
   uint32_t action = 0;
   std::string uri;
   std::string path;
   bool set_image = false;
-  bool animated = false;
-  int stage = 0;
+  Stage stage = kTryAnimated;
   int frames = 0;
 };
 
@@ -89,6 +94,7 @@ FitJob s_fit_job;
 std::string s_fit_desired_source;
 std::string s_fit_desired_cache;
 unsigned long s_fit_generation = 0;
+unsigned long s_fit_failed_generation = 0; /* not tried again */
 std::atomic<bool> s_fit_running{false};
 std::atomic<bool> s_fit_done{false};
 std::atomic<bool> s_fit_ok{false};
@@ -100,9 +106,8 @@ std::string lower(std::string text) {
 }
 
 bool first_time(std::vector<std::string> &seen, const std::string &key) {
-  for (const std::string &known : seen)
-    if (known == key)
-      return false;
+  if (std::find(seen.begin(), seen.end(), key) != seen.end())
+    return false;
   if (seen.size() >= kMaxLogged)
     seen.erase(seen.begin());
   seen.push_back(key);
@@ -121,23 +126,10 @@ bool has_extension(const std::string &name,
   return false;
 }
 
-bool exists(const std::string &path) {
+bool is_nonempty_file(const std::string &path) {
   struct stat info {};
   return stat(path.c_str(), &info) == 0 && S_ISREG(info.st_mode) &&
          info.st_size > 0;
-}
-
-std::string to_string(MonoString *text) {
-  std::string out;
-  if (!text || !mono_string_to_utf8)
-    return out;
-  const char *utf8 = mono_string_to_utf8(text);
-  if (utf8) {
-    out = utf8;
-    if (mono_free)
-      mono_free(const_cast<char *>(utf8));
-  }
-  return out;
 }
 
 uint32_t foreground_user() {
@@ -202,7 +194,7 @@ bool is_own_face(const std::string &uri) {
   return match;
 }
 
-std::string chosen() {
+std::string chosen_path() {
   const std::string &path = g_settings.account_avatar_path;
   if (!g_settings.account_avatar_enabled) {
     log_skip(path, "disabled");
@@ -214,7 +206,7 @@ std::string chosen() {
     log_skip(path, "extension");
     return {};
   }
-  if (!exists(path)) {
+  if (!is_nonempty_file(path)) {
     log_skip(path, "missing");
     return {};
   }
@@ -226,6 +218,45 @@ std::string chosen() {
     return {};
   }
   return path;
+}
+
+/* Tells the user at once why the chosen picture will not show. A GIF over the
+   limits is fitted instead (avatar_codec), so only other formats are warned
+   about those. */
+void report_chosen() {
+  const std::string path = chosen_path();
+  if (path.empty())
+    return;
+  struct stat file_info {};
+  std::string bytes;
+  if (stat(path.c_str(), &file_info) != 0 ||
+      !AniketosUI::ReadSmallFile(
+          path, std::min(static_cast<size_t>(file_info.st_size), kMaxInspected),
+          bytes))
+    return;
+  const AvatarImage::Info info = AvatarImage::Inspect(
+      reinterpret_cast<const uint8_t *>(bytes.data()), bytes.size());
+  const std::string name = FileName(path);
+  LOG_INFO("[AVATAR] '%s' format=%d %dx%d frames=%d", name.c_str(),
+           static_cast<int>(info.format), info.width, info.height, info.frames);
+  const AvatarImage::Problem problem = AvatarImage::Check(info);
+  if (problem != AvatarImage::Problem::NotPicture && has_extension(path, kFitted))
+    return;
+  switch (problem) {
+  case AvatarImage::Problem::NotPicture:
+    notify("notify.vsh.account_avatar.not_picture", name.c_str());
+    break;
+  case AvatarImage::Problem::TooLarge:
+    notify("notify.vsh.account_avatar.too_large", name.c_str(), info.width,
+           info.height);
+    break;
+  case AvatarImage::Problem::TooManyFrames:
+    notify("notify.vsh.account_avatar.too_many_frames", name.c_str(),
+           info.frames);
+    break;
+  case AvatarImage::Problem::None:
+    break;
+  }
 }
 
 std::string cache_path_for(const std::string &source) {
@@ -280,22 +311,17 @@ void request_fit(const std::string &source, const std::string &cache) {
     s_fit_desired_cache = cache;
     ++s_fit_generation;
   }
-  if (s_fit_running.load())
+  if (s_fit_running.load() || s_fit_failed_generation == s_fit_generation)
     return;
   start_fit();
 }
 
 std::string effective_path() {
-  const std::string source = chosen();
-  std::string cache;
-  if (source.empty())
+  const std::string source = chosen_path();
+  if (source.empty() || !avatar_codec_should_fit(source.c_str()))
     return source;
-  if (!avatar_codec_should_fit(source.c_str()))
-    return source;
-  (void)mkdir(ONION_DIST_USER_DATA_ROOT "/ShellUI", 0777);
-  (void)mkdir(kDirectory, 0777);
-  (void)mkdir(kCacheDirectory, 0777);
-  cache = cache_path_for(source);
+  (void)mkdir_tree(kCacheDirectory);
+  const std::string cache = cache_path_for(source);
   if (avatar_codec_cache_valid(source.c_str(), cache.c_str()))
     return cache;
   request_fit(source, cache);
@@ -303,39 +329,31 @@ std::string effective_path() {
 }
 
 void consume_fit() {
-  unsigned long generation = 0;
-  bool ok = false;
-  std::string source;
-  std::string cache;
   if (!s_fit_done.load())
     return;
-  ok = s_fit_ok.load();
-  generation = s_fit_job.generation;
-  source = s_fit_job.source;
-  cache = s_fit_job.cache;
+  const bool ok = s_fit_ok.load();
   s_fit_done.store(false);
   s_fit_running.store(false);
-  if (generation != s_fit_generation) {
+  if (s_fit_job.generation != s_fit_generation) {
     if (!s_fit_desired_source.empty())
       start_fit();
     return;
   }
-  if (ok && avatar_codec_cache_valid(source.c_str(), cache.c_str()))
+  if (!ok)
+    s_fit_failed_generation = s_fit_generation;
+  else if (avatar_codec_cache_valid(s_fit_job.source.c_str(),
+                                    s_fit_job.cache.c_str()))
     Refresh();
 }
 
 void free_box(TrackedBox &entry) {
-  if (entry.action)
-    mono_gchandle_free(entry.action);
-  if (entry.box)
-    mono_gchandle_free(entry.box);
-  entry.action = 0;
-  entry.box = 0;
+  Reflect::Release(entry.action);
+  Reflect::Release(entry.box);
 }
 
 TrackedBox *find_box(MonoObject *box) {
   for (auto it = s_boxes.begin(); it != s_boxes.end();) {
-    MonoObject *known = mono_gchandle_get_target(it->box);
+    MonoObject *known = Reflect::Target(it->box);
     if (!known) {
       free_box(*it);
       it = s_boxes.erase(it);
@@ -348,58 +366,63 @@ TrackedBox *find_box(MonoObject *box) {
   return nullptr;
 }
 
-TrackedBox *remember(MonoObject *box) {
+/* Drops the boxes Mono has collected and visits the others. */
+template <typename Visit> void for_each_live_box(Visit visit) {
+  for (auto it = s_boxes.begin(); it != s_boxes.end();) {
+    MonoObject *box = Reflect::Target(it->box);
+    if (!box) {
+      free_box(*it);
+      it = s_boxes.erase(it);
+      continue;
+    }
+    visit(*it, box);
+    ++it;
+  }
+}
+
+TrackedBox &remember(MonoObject *box) {
   if (TrackedBox *found = find_box(box))
-    return found;
+    return *found;
   if (s_boxes.size() >= kMaxBoxes) {
     free_box(s_boxes.front());
     s_boxes.erase(s_boxes.begin());
   }
   s_boxes.push_back({});
   TrackedBox &entry = s_boxes.back();
-  entry.box = mono_gchandle_new_weakref(box, 0);
-  return &entry;
+  Reflect::Hold(entry.box, box);
+  return entry;
+}
+
+void configure_options(MonoObject *option, bool animated) {
+  Set_Property(s_options_class, option, "IsAnimatedImage", animated);
+  Set_Property(s_options_class, option, "AnimationDecodeMode",
+               animated ? 1 : 0);
 }
 
 MonoObject *make_options(bool animated) {
-  if (!s_options_class)
-    return nullptr;
   MonoObject *option = New_Object(s_options_class);
   if (!option)
     return nullptr;
   mono_runtime_object_init(option);
-  Set_Property(s_options_class, option, "IsAnimatedImage", animated);
-  Set_Property(s_options_class, option, "AnimationDecodeMode",
-               animated ? 1 : 0);
+  configure_options(option, animated);
   return option;
 }
 
-void configure_options(MonoObject *option, bool animated) {
-  if (!option || !s_options_class)
-    return;
-  Set_Property(s_options_class, option, "IsAnimatedImage", animated);
-  Set_Property(s_options_class, option, "AnimationDecodeMode",
-               animated ? 1 : 0);
+void keep_playing(MonoObject *box) {
+  Set_Property(s_box_class, box, "Loop", true);
+  Set_Property(s_box_class, box, "Autoplay", true);
 }
 
 void call_original(MonoObject *box, const std::string &uri, MonoObject *action,
                    MonoObject *option, bool set_image, bool play) {
   if (!box || !s_box_original)
     return;
-  if (play && s_box_class) {
-    Set_Property(s_box_class, box, "Loop", true);
-    Set_Property(s_box_class, box, "Autoplay", true);
-  }
+  if (play)
+    keep_playing(box);
   MonoString *managed = mono_string_new(mono_domain_get(), uri.c_str());
   s_box_original(box, managed, action, option, set_image);
-  if (play && s_box_class) {
-    Set_Property(s_box_class, box, "Loop", true);
-    Set_Property(s_box_class, box, "Autoplay", true);
-  }
-}
-
-MonoObject *action_of(const TrackedBox &entry) {
-  return entry.action ? mono_gchandle_get_target(entry.action) : nullptr;
+  if (play)
+    keep_playing(box);
 }
 
 MonoClass *property_class(const char *name) {
@@ -427,82 +450,60 @@ bool image_loaded(MonoObject *box) {
 }
 
 void verify_box(TrackedBox &entry, MonoObject *box) {
-  if (ShellClock::IsWidgetDisposed(box)) {
-    entry.frames = 0;
+  entry.frames = 0;
+  if (ShellClock::IsWidgetDisposed(box))
     return;
-  }
   if (image_loaded(box)) {
-    entry.stage = 3;
-    entry.frames = 0;
+    entry.stage = kLoaded;
     if (!entry.uri.empty() && first_time(s_logged_loads, entry.uri))
       LOG_INFO("[AVATAR] loaded ok box=%p stage=%d", static_cast<void *>(box),
                entry.stage);
     return;
   }
-  if (entry.stage == 0) {
-    entry.animated = false;
-    entry.stage = 1;
+  MonoObject *action = Reflect::Target(entry.action);
+  if (entry.stage == kTryAnimated) {
+    entry.stage = kTryStill;
     entry.frames = kVerifyFrames;
-    call_original(box, entry.path, action_of(entry), make_options(false),
-                  entry.set_image, false);
+    call_original(box, entry.path, action, make_options(false), entry.set_image,
+                  false);
     if (first_time(s_logged_fallbacks, entry.uri))
       LOG_INFO("[AVATAR] animated fallback path=%s", entry.path.c_str());
-    return;
-  }
-  if (entry.stage == 1) {
-    entry.animated = false;
-    entry.stage = 2;
+  } else if (entry.stage == kTryStill) {
+    entry.stage = kTrySystem;
     entry.frames = kVerifyFrames;
-    call_original(box, entry.uri, action_of(entry), nullptr, entry.set_image,
-                  false);
+    call_original(box, entry.uri, action, nullptr, entry.set_image, false);
     if (first_time(s_logged_fallbacks, entry.uri + "|system"))
       LOG_INFO("[AVATAR] system fallback uri=%s", entry.uri.c_str());
-    return;
+  } else if (entry.stage == kTrySystem &&
+             first_time(s_logged_failures, entry.uri)) {
+    LOG_INFO("[AVATAR] load failed uri=%s", entry.uri.c_str());
+    notify("notify.vsh.account_avatar.load_failed",
+           FileName(entry.path).c_str());
   }
-  if (entry.stage == 2) {
-    entry.frames = 0;
-    if (first_time(s_logged_failures, entry.uri)) {
-      LOG_INFO("[AVATAR] load failed uri=%s", entry.uri.c_str());
-      notify("notify.vsh.account_avatar.load_failed",
-             FileName(entry.path).c_str());
-    }
-    return;
-  }
-  entry.frames = 0;
 }
 
 void box_hook(MonoObject *box, MonoString *uri, MonoObject *action,
               MonoObject *option, bool set_image) {
-  const std::string text = to_string(uri);
-  if (!box || !is_own_face(text)) {
-    s_box_original(box, uri, action, option, set_image);
-    return;
-  }
-  const std::string path = effective_path();
+  const std::string text = Mono_to_String(uri);
+  const std::string path =
+      box && is_own_face(text) ? effective_path() : std::string();
   if (path.empty()) {
     s_box_original(box, uri, action, option, set_image);
     return;
   }
   const bool animated = has_extension(path, kAnimated);
-  if (TrackedBox *entry = remember(box)) {
-    if (action) {
-      if (entry->action)
-        mono_gchandle_free(entry->action);
-      entry->action = mono_gchandle_new_weakref(action, 0);
-    }
-    entry->uri = text;
-    entry->path = path;
-    entry->set_image = set_image;
-    entry->animated = animated;
-    entry->stage = animated ? 0 : 1;
-    entry->frames = kVerifyFrames;
-  }
-  if (!option && s_options_class) {
-    option = New_Object(s_options_class);
-    if (option)
-      mono_runtime_object_init(option);
-  }
-  configure_options(option, animated);
+  TrackedBox &entry = remember(box);
+  if (action)
+    Reflect::Hold(entry.action, action);
+  entry.uri = text;
+  entry.path = path;
+  entry.set_image = set_image;
+  entry.stage = animated ? kTryAnimated : kTryStill;
+  entry.frames = kVerifyFrames;
+  if (option)
+    configure_options(option, animated);
+  else
+    option = make_options(animated);
   if (path != s_logged_path) {
     s_logged_path = path;
     LOG_INFO("[AVATAR] %s -> %s animated=%d", text.c_str(), path.c_str(),
@@ -511,7 +512,8 @@ void box_hook(MonoObject *box, MonoString *uri, MonoObject *action,
   call_original(box, path, action, option, set_image, true);
 }
 
-bool refresh_cache(int user) {
+bool refresh_cache() {
+  int user = static_cast<int>(owner_id());
   static MonoMethod *method = nullptr;
   static bool resolved = false;
   if (!resolved) {
@@ -537,9 +539,7 @@ bool refresh_cache(int user) {
   return exception == nullptr;
 }
 
-int owner() { return static_cast<int>(owner_id()); }
-
-}
+} // namespace
 
 void Install(MonoImage *pui) {
   if (!pui || s_box_original)
@@ -562,14 +562,13 @@ void Install(MonoImage *pui) {
 const std::vector<std::string> &Files(bool rescan) {
   if (s_scanned && !rescan)
     return s_files;
-  (void)mkdir(ONION_DIST_USER_DATA_ROOT "/ShellUI", 0777);
-  (void)mkdir(kDirectory, 0777);
+  (void)mkdir_tree(kDirectory);
   s_files.clear();
   s_unsupported = 0;
   if (DIR *handle = opendir(kDirectory)) {
     while (dirent *entry = readdir(handle)) {
       const std::string path = std::string(kDirectory) + "/" + entry->d_name;
-      if (entry->d_name[0] == '.' || !exists(path))
+      if (entry->d_name[0] == '.' || !is_nonempty_file(path))
         continue;
       if (has_extension(entry->d_name, kPictures))
         s_files.push_back(path);
@@ -587,58 +586,7 @@ const std::vector<std::string> &Files(bool rescan) {
   return s_files;
 }
 
-std::string FileName(const std::string &path) {
-  const size_t slash = path.rfind('/');
-  return slash == std::string::npos ? path : path.substr(slash + 1);
-}
-
 size_t Unsupported() { return s_unsupported; }
-
-const char *Directory() { return kDirectory; }
-
-namespace {
-
-/* Tells the user at once why the chosen picture will not show. A GIF over the
-   limits is fitted instead (avatar_codec), so only other formats are warned
-   about those. */
-void report_chosen() {
-  const std::string path = chosen();
-  if (path.empty())
-    return;
-  struct stat file_info {};
-  FILE *file = std::fopen(path.c_str(), "rb");
-  if (!file)
-    return;
-  std::vector<uint8_t> bytes;
-  if (fstat(fileno(file), &file_info) == 0)
-    bytes.resize(std::min(static_cast<size_t>(file_info.st_size), kMaxInspected));
-  bytes.resize(std::fread(bytes.data(), 1, bytes.size(), file));
-  std::fclose(file);
-  const AvatarImage::Info info = AvatarImage::Inspect(bytes.data(), bytes.size());
-  const std::string name = FileName(path);
-  LOG_INFO("[AVATAR] '%s' format=%d %dx%d frames=%d", name.c_str(),
-           static_cast<int>(info.format), info.width, info.height, info.frames);
-  const AvatarImage::Problem problem = AvatarImage::Check(info);
-  if (problem != AvatarImage::Problem::NotPicture && has_extension(path, kFitted))
-    return;
-  switch (problem) {
-  case AvatarImage::Problem::NotPicture:
-    notify("notify.vsh.account_avatar.not_picture", name.c_str());
-    break;
-  case AvatarImage::Problem::TooLarge:
-    notify("notify.vsh.account_avatar.too_large", name.c_str(), info.width,
-           info.height);
-    break;
-  case AvatarImage::Problem::TooManyFrames:
-    notify("notify.vsh.account_avatar.too_many_frames", name.c_str(),
-           info.frames);
-    break;
-  case AvatarImage::Problem::None:
-    break;
-  }
-}
-
-} // namespace
 
 void Tick() {
   consume_fit();
@@ -646,35 +594,25 @@ void Tick() {
     ++s_frames;
   static constexpr int kCacheFrames[] = {300, 900, 1800, 3600};
   if (!s_cache_done &&
-      s_cache_attempt < sizeof(kCacheFrames) / sizeof(kCacheFrames[0]) &&
+      s_cache_attempt < std::size(kCacheFrames) &&
       s_frames >= kCacheFrames[s_cache_attempt]) {
     LOG_INFO("[AVATAR] refresh attempt=%zu frame=%d", s_cache_attempt + 1,
              s_frames);
     ++s_cache_attempt;
-    if (s_box_original && !chosen().empty() && refresh_cache(owner())) {
+    if (s_box_original && !chosen_path().empty() && refresh_cache()) {
       s_cache_done = true;
       LOG_INFO("[AVATAR] refresh cache ok frame=%d", s_frames);
     }
   }
-  for (auto it = s_boxes.begin(); it != s_boxes.end();) {
-    MonoObject *box = mono_gchandle_get_target(it->box);
-    if (!box) {
-      free_box(*it);
-      it = s_boxes.erase(it);
-      continue;
-    }
-    if (it->frames > 0) {
-      --it->frames;
-      if (it->frames <= 0)
-        verify_box(*it, box);
-    }
-    ++it;
-  }
+  for_each_live_box([](TrackedBox &entry, MonoObject *box) {
+    if (entry.frames > 0 && --entry.frames == 0)
+      verify_box(entry, box);
+  });
 }
 
 std::string SignedInUser() {
-  int user = -1;
-  if (sceUserServiceGetForegroundUser(&user) != 0 || user <= 0)
+  const uint32_t user = foreground_user();
+  if (!user)
     return {};
   char text[16];
   std::snprintf(text, sizeof(text), "0x%08X", static_cast<unsigned>(user));
@@ -688,45 +626,33 @@ void Refresh() {
   const std::string path = effective_path();
   const bool animated = !path.empty() && has_extension(path, kAnimated);
   int reloaded = 0;
-  for (auto it = s_boxes.begin(); it != s_boxes.end();) {
-    MonoObject *box = mono_gchandle_get_target(it->box);
-    if (!box) {
-      free_box(*it);
-      it = s_boxes.erase(it);
-      continue;
+  for_each_live_box([&](TrackedBox &entry, MonoObject *box) {
+    if (ShellClock::IsWidgetDisposed(box))
+      return;
+    MonoObject *action = Reflect::Target(entry.action);
+    if (entry.action && !action) {
+      log_skip(entry.path, "action");
+      return;
     }
-    if (ShellClock::IsWidgetDisposed(box)) {
-      ++it;
-      continue;
-    }
-    MonoObject *action = nullptr;
-    if (it->action) {
-      action = mono_gchandle_get_target(it->action);
-      if (!action) {
-        log_skip(it->path, "action");
-        ++it;
-        continue;
-      }
-    }
+    entry.frames = kVerifyFrames;
     if (path.empty()) {
-      it->animated = false;
-      it->stage = 2;
-      it->frames = kVerifyFrames;
-      call_original(box, it->uri, action, nullptr, it->set_image, false);
+      entry.stage = kTrySystem;
+      call_original(box, entry.uri, action, nullptr, entry.set_image, false);
     } else {
-      it->path = path;
-      it->animated = animated;
-      it->stage = animated ? 0 : 1;
-      it->frames = kVerifyFrames;
-      call_original(box, path, action, make_options(animated), it->set_image,
+      entry.path = path;
+      entry.stage = animated ? kTryAnimated : kTryStill;
+      call_original(box, path, action, make_options(animated), entry.set_image,
                     animated);
     }
     ++reloaded;
-    ++it;
-  }
+  });
   LOG_INFO("[AVATAR] refreshed %d avatar(s) path='%s' enabled=%d", reloaded,
            path.c_str(), g_settings.account_avatar_enabled ? 1 : 0);
-  refresh_cache(owner());
+  refresh_cache();
 }
 
+} // namespace AccountAvatar
+
+extern "C" int avatar_codec_decode_fits(const unsigned char *data, size_t size) {
+  return AvatarImage::DecodeFits(AvatarImage::Inspect(data, size));
 }

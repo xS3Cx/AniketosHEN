@@ -36,10 +36,6 @@ using LogFn = void (*)(const char *fmt, ...);
    False: no libScePad or no control page; nothing was changed. */
 bool Init(TickFn tick, LogFn log);
 
-/* The reader loop is alive: call once per loop. The hooks pass the real pad
-   through when this has not been called for 200 ms. */
-void Beat();
-
 /* Call from the reader loop: copies a new profile out of the control page and
    re-scans for modules loaded later (every few seconds). */
 void Service();
@@ -55,12 +51,5 @@ ControlPage *Control();
 /* The import slots of the game's own modules (not system .sprx) holding
    `fn`, made writable; at most `max`. For the IME forwarding in kbm_input. */
 int FindImportSlots(const void *fn, uint64_t **out, int max);
-
-/* Lays `ours` over one ScePadData sample (buttons, sticks, triggers only):
-   buttons ORed, each stick axis the value further from 128, triggers the
-   larger; `replace` takes our sticks and triggers outright while the real
-   pad's buttons still count (its Options and PS stay usable). Exposed for
-   host tests. */
-void Merge(uint8_t *sample, const PadState &ours, bool replace);
 
 } // namespace onion::kbm::hooks

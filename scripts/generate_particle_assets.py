@@ -6,7 +6,10 @@ no imaging library: each pixel's distance to the shape gives its brightness.
 
   python3 scripts/generate_particle_assets.py
 """
-import math, os, struct, zlib
+import math
+import os
+import struct
+import zlib
 
 SIZE = 96
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "source",
@@ -72,8 +75,13 @@ def dot():
     return rows
 
 
-os.makedirs(OUT, exist_ok=True)
-for name, (distance, colour) in SHAPES.items():
-    png(os.path.join(OUT, name + ".png"), outlined(distance, colour))
-png(os.path.join(OUT, "dot.png"), dot())
-print("written to", os.path.normpath(OUT))
+def main():
+    os.makedirs(OUT, exist_ok=True)
+    for name, (distance, colour) in SHAPES.items():
+        png(os.path.join(OUT, name + ".png"), outlined(distance, colour))
+    png(os.path.join(OUT, "dot.png"), dot())
+    print("written to", os.path.normpath(OUT))
+
+
+if __name__ == "__main__":
+    main()

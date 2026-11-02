@@ -1,29 +1,28 @@
 #include "aniketos_shell/input/osk_glyphs.hpp"
 
+#include "aniketos_ui/mono_reflect.hpp"
 #include "hooked_funcs.hpp"
-#include "ps5/kernel.h"
 
 #include <onion/detour.h>
 #include <onion/distribution.h>
+#include <onion/fs.h>
 #include <onion/log.h>
-#include <onion/settings.hpp>
 
 #include <cstdint>
-#include <cstring>
-#include <fcntl.h>
 #include <string>
-#include <sys/stat.h>
 #include <unistd.h>
 #include <vector>
-
-extern int g_libmono_handle;
-extern onion::Settings g_settings;
 
 namespace OskGlyphs {
 namespace {
 
+namespace Reflect = AniketosUI::Reflect;
+using Reflect::FieldValue;
+using Reflect::Target;
+
 constexpr const char *kImage = "Sce.Vsh.ShellUI.Ime";
 constexpr const char *kSpace = "Sce.Vsh.ShellUI.Ime";
+constexpr const char *kPuiSpace = "Sce.PlayStation.PUI.UI3";
 constexpr int kMaxTries = 600; /* Tick calls, ~every 2 s: 20 minutes */
 /* With this file the keyboard stays as the system has it. */
 constexpr const char *kOff = ONION_DIST_USER_DATA_ROOT "/no_osk_glyphs";
@@ -56,41 +55,18 @@ constexpr uint16_t kGlyphs[] = {
 };
 constexpr int kGlyphCount = sizeof(kGlyphs) / sizeof(kGlyphs[0]);
 
-/* ---- reflection helpers ------------------------------------------------- */
-
-std::string text_of(MonoObject *managed) {
-  if (!managed)
-    return {};
-  const char *utf =
-      mono_string_to_utf8(reinterpret_cast<MonoString *>(managed));
-  std::string text = utf ? utf : "";
-  if (utf && mono_free)
-    mono_free(const_cast<char *>(utf));
-  return text;
-}
-
 std::string exception_text(MonoObject *exception) {
   MonoObject *nested = nullptr;
   MonoString *shown = exception ? mono_object_to_string(exception, &nested)
                                 : nullptr;
-  std::string text = shown && !nested
-                         ? text_of(reinterpret_cast<MonoObject *>(shown))
-                         : std::string("managed exception");
+  std::string text = shown && !nested ? Mono_to_String(shown)
+                                      : std::string("managed exception");
   return text.substr(0, 300);
-}
-
-MonoMethod *method_of(MonoObject *object, const char *name, int parameters) {
-  for (MonoClass *k = object ? mono_object_get_class(object) : nullptr; k;
-       k = mono_class_get_parent(k))
-    if (MonoMethod *method =
-            mono_class_get_method_from_name(k, name, parameters))
-      return method;
-  return nullptr;
 }
 
 MonoObject *call(MonoObject *object, const char *name, void **args = nullptr,
                  int count = 0) {
-  MonoMethod *method = method_of(object, name, count);
+  MonoMethod *method = Reflect::MethodOf(object, name, count);
   if (!method)
     return nullptr;
   MonoObject *exception = nullptr;
@@ -102,40 +78,20 @@ MonoObject *call(MonoObject *object, const char *name, void **args = nullptr,
   return value;
 }
 
-MonoClassField *find_field(MonoObject *object, const char *name) {
-  for (MonoClass *k = object ? mono_object_get_class(object) : nullptr; k;
-       k = mono_class_get_parent(k))
-    if (MonoClassField *f = mono_class_get_field_from_name(k, name))
-      return f;
-  return nullptr;
-}
-
-MonoObject *field(MonoObject *object, const char *name) {
-  static MonoObject *(*value_object)(MonoDomain *, MonoClassField *,
-                                     MonoObject *) = nullptr;
-  if (!value_object)
-    value_object = reinterpret_cast<decltype(value_object)>(
-        kernel_dynlib_dlsym(-1, g_libmono_handle,
-                            "mono_field_get_value_object"));
-  MonoClassField *f = find_field(object, name);
-  return f && value_object ? value_object(mono_domain_get(), f, object)
-                           : nullptr;
-}
-
 template <typename T> T unboxed(MonoObject *boxed, T fallback) {
   return boxed ? *static_cast<T *>(mono_object_unbox(boxed)) : fallback;
 }
 
 template <typename T>
 T value_field(MonoObject *object, const char *name, T fallback) {
-  return unboxed<T>(field(object, name), fallback);
+  return unboxed<T>(FieldValue(object, name), fallback);
 }
 
 /* A field set to `value`: the object itself for a reference, a pointer to
    the value for a value type (mono_field_set_value's rule). */
 void set_field(MonoObject *object, const char *name, void *value) {
-  if (MonoClassField *f = find_field(object, name))
-    mono_field_set_value(object, f, value);
+  if (MonoClassField *field = Reflect::FindField(object, name))
+    mono_field_set_value(object, field, value);
 }
 
 int count_of(MonoObject *collection) {
@@ -185,15 +141,6 @@ MonoObject *empty_like(MonoObject *list) {
               : nullptr;
 }
 
-MonoObject *target(uint32_t handle) {
-  return handle ? mono_gchandle_get_target(handle) : nullptr;
-}
-void keep(uint32_t &handle, MonoObject *object) {
-  if (handle)
-    mono_gchandle_free(handle);
-  handle = object ? mono_gchandle_new_weakref(object, 0) : 0;
-}
-
 MonoString *managed(const std::string &text) {
   return mono_string_new(mono_domain_get(), text.c_str());
 }
@@ -205,12 +152,11 @@ std::string utf8_of(uint16_t unit) {
   return std::string(text, 3);
 }
 
-bool exists(const char *path) {
-  struct stat st;
-  return stat(path, &st) == 0;
+/* What a key shows; the system's blank keys show nothing. */
+std::string label_of(MonoObject *key) {
+  return Mono_to_String(
+      reinterpret_cast<MonoString *>(FieldValue(key, "LabelText")));
 }
-
-/* ---- state -------------------------------------------------------------- */
 
 MonoImage *s_image = nullptr;
 MonoClass *s_function_keytop = nullptr; /* FunctionKeytopModel */
@@ -225,16 +171,14 @@ int s_pending_frames = -1;     /* frames until kPending is removed */
 
 bool active() { return s_enabled && g_settings.osk_glyph_key; }
 
-/* ---- the glyph pages ---------------------------------------------------- */
-
 /* A key of a glyph page: a copy of the language's key at that place whose
    label and text are the glyph, with the key's code cleared (a glyph has
    none). */
 MonoObject *glyph_key(MonoObject *letter, uint16_t glyph) {
-  MonoObject *letter_events = field(letter, "KeyEvents");
+  MonoObject *letter_events = FieldValue(letter, "KeyEvents");
   MonoObject *event =
       count_of(letter_events) ? item_at(letter_events, 0) : nullptr;
-  MonoObject *letter_codes = field(event, "KeycodeInfo");
+  MonoObject *letter_codes = FieldValue(event, "KeycodeInfo");
   MonoObject *code =
       count_of(letter_codes) ? item_at(letter_codes, 0) : nullptr;
   MonoObject *key = mono_object_clone(letter);
@@ -276,7 +220,7 @@ MonoObject *blank_key(MonoObject *keymap) {
     return nullptr;
   for (uintptr_t i = array_length(list); i-- > 0;) {
     MonoObject *key = array_item(list, i);
-    if (key && text_of(field(key, "LabelText")).empty())
+    if (key && label_of(key).empty())
       return key;
   }
   return nullptr;
@@ -300,8 +244,8 @@ void show_page(MonoObject *model) {
   for (int i = 0; i < count; ++i) {
     MonoObject *keytop = item_at(keytops, i);
     MonoObject *info = keytop ? key_info(keytop) : nullptr;
-    if (info && !text_of(field(info, "LabelText")).empty() &&
-        count_of(field(info, "KeyEvents")) > 0) {
+    if (info && !label_of(info).empty() &&
+        count_of(FieldValue(info, "KeyEvents")) > 0) {
       slots.push_back(keytop);
       letters.push_back(info);
     }
@@ -327,7 +271,7 @@ void show_page(MonoObject *model) {
 }
 
 void show_label() {
-  MonoObject *key = target(s_key);
+  MonoObject *key = Target(s_key);
   if (!key)
     return;
   const std::string label =
@@ -340,8 +284,8 @@ void show_label() {
 /* The main area shown again through its own ChangePanel, whose
    UpdateKeycodeInfo puts the language's keys (or the page) on it. */
 void refresh_keys() {
-  MonoObject *presenter = target(s_main_presenter);
-  MonoObject *model = presenter ? field(presenter, "_model") : nullptr;
+  MonoObject *presenter = Target(s_main_presenter);
+  MonoObject *model = FieldValue(presenter, "_model");
   if (!model)
     return;
   int32_t type = unboxed<int32_t>(call(model, "get_CurrentListType"), 0);
@@ -367,14 +311,12 @@ void leave_pages(bool refresh) {
 
 /* Our key: the next glyph page; after the last, the language's keys. */
 void next_page() {
-  if (!target(s_main_presenter))
+  if (!Target(s_main_presenter))
     return;
   s_page = s_page < 0 ? 0 : s_page + 1;
   refresh_keys();
   show_label();
 }
-
-/* ---- the glyphs through the confirm ------------------------------------- */
 
 /* The keyboard's engine keeps a glyph only in the text being typed (the
    preedit). At the confirm it sends that text once more without the
@@ -424,7 +366,7 @@ int64_t s_bare_frame = -1;    /* frame of a preedit that was s_preedit
 int s_confirm_logs = 0;
 
 void forget_preedit() {
-  keep(s_preedit_field, nullptr);
+  Reflect::Release(s_preedit_field);
   s_preedit.clear();
   s_preedit_glyphs = 0;
   s_preedit_caret = 0;
@@ -443,12 +385,12 @@ void update_preedit_hook(MonoObject *text_field, MonoString *text,
     forget_preedit(); /* the key turned off mid-edit */
   if (!text_field || !active())
     return;
-  const std::string typed = text_of(reinterpret_cast<MonoObject *>(text));
+  const std::string typed = Mono_to_String(text);
   int glyphs = 0;
   const std::string plain = without_glyphs(typed, &glyphs);
-  const bool ours = target(s_preedit_field) == text_field;
+  const bool ours = Target(s_preedit_field) == text_field;
   if (glyphs) {
-    keep(s_preedit_field, text_field);
+    Reflect::Hold(s_preedit_field, text_field);
     s_preedit = typed;
     s_preedit_glyphs = glyphs;
     s_preedit_caret = caret;
@@ -470,8 +412,8 @@ ConfirmPreedit s_confirm_preedit = nullptr;
 void confirm_preedit_hook(MonoObject *text_field, MonoString *text,
                           bool by_ime) {
   MonoString *confirmed = text;
-  if (text_field && active() && target(s_preedit_field) == text_field) {
-    const std::string got = text_of(reinterpret_cast<MonoObject *>(text));
+  if (text_field && active() && Target(s_preedit_field) == text_field) {
+    const std::string got = Mono_to_String(text);
     int glyphs = 0;
     without_glyphs(got, &glyphs);
     if (s_preedit_glyphs && !glyphs &&
@@ -491,8 +433,6 @@ void confirm_preedit_hook(MonoObject *text_field, MonoString *text,
   if (s_confirm_preedit)
     s_confirm_preedit(text_field, confirmed, by_ime);
 }
-
-/* ---- the keyboard's own emoji ------------------------------------------- */
 
 /* TextFieldEditIme.CreateImeOptions (PUI UI3): the options a field opens
    the keyboard with. With EnableUnicodeEmoji the keyboard lays out its own
@@ -515,8 +455,6 @@ int32_t create_ime_options_hook(MonoObject *text_field) {
   return options;
 }
 
-/* ---- the hooks ---------------------------------------------------------- */
-
 /* FunctionAreaPanel.AddBasedOnLanguageArea: the language's own function
    keys (Shift first) are listed as (type, flex share, area), each time the
    keyboard is laid out. Shift gives one share of its width to our key,
@@ -530,7 +468,7 @@ void add_area_hook(MonoObject *panel, uint64_t type, uint64_t option,
   s_page = -1;
   if (!panel || !active())
     return;
-  MonoObject *layouts = field(panel, "_layoutInfoList");
+  MonoObject *layouts = FieldValue(panel, "_layoutInfoList");
   const int count = count_of(layouts);
   int shift = -1;
   for (int i = 0; i < count; ++i) {
@@ -554,9 +492,7 @@ void add_area_hook(MonoObject *panel, uint64_t type, uint64_t option,
     return;
   if (s_pending_frames < 0) {
     /* the first time in this run: marked until it has been shown */
-    const int fd = open(kPending, O_WRONLY | O_CREAT | O_TRUNC, 0666);
-    if (fd >= 0)
-      close(fd);
+    touch_file(kPending);
     s_pending_frames = 300;
   }
   grow -= 1.0f;
@@ -575,7 +511,7 @@ MonoObject *make_key_model(MonoObject *map) {
   MonoObject *shift_model = call(map, "get_Item", shift_args, 1);
   /* a List<ImeKeyEvent> like Shift's */
   MonoObject *events =
-      empty_like(field(shift_model ? key_info(shift_model) : nullptr,
+      empty_like(FieldValue(shift_model ? key_info(shift_model) : nullptr,
                        "KeyEvents"));
   if (!info_class || !events)
     return nullptr;
@@ -594,8 +530,8 @@ MonoObject *make_key_model(MonoObject *map) {
 using SetBindings = void (*)(MonoObject *);
 SetBindings s_set_bindings = nullptr;
 void set_bindings_hook(MonoObject *presenter) {
-  MonoObject *view = presenter ? field(presenter, "_view") : nullptr;
-  MonoObject *buttons = field(view, "<ButtonList>k__BackingField");
+  MonoObject *buttons =
+      FieldValue(FieldValue(presenter, "_view"), "<ButtonList>k__BackingField");
   MonoObject *button = nullptr;
   for (uintptr_t i = 0, n = array_length(buttons); i < n && !button; ++i) {
     MonoObject *candidate = array_item(buttons, i);
@@ -604,20 +540,20 @@ void set_bindings_hook(MonoObject *presenter) {
       button = candidate;
   }
   MonoObject *map =
-      button ? call(field(presenter, "_model"), "get_ButtonMap") : nullptr;
+      button ? call(FieldValue(presenter, "_model"), "get_ButtonMap") : nullptr;
   int32_t our_type = kGlyphKeyType;
   void *has_args[1] = {&our_type};
   if (map && !unboxed<bool>(call(map, "ContainsKey", has_args, 1), true)) {
     if (MonoObject *model = make_key_model(map)) {
       void *set_args[2] = {&our_type, model};
       call(map, "set_Item", set_args, 2);
-      keep(s_key_model, model);
+      Reflect::Hold(s_key_model, model);
     }
   }
   if (s_set_bindings)
     s_set_bindings(presenter);
   if (button) {
-    keep(s_key, button);
+    Reflect::Hold(s_key, button);
     show_label();
   }
 }
@@ -630,7 +566,7 @@ OnPressKey s_on_press = nullptr;
 void on_press_hook(MonoObject *model, uint64_t event, uint64_t shortcut,
                    MonoObject *option) {
   const bool down = static_cast<uint32_t>(event) == kKeyDown;
-  if (model && s_key_model && model == target(s_key_model))
+  if (model && s_key_model && model == Target(s_key_model))
     return; /* ours sends nothing */
   if (s_page >= 0 && down && model &&
       mono_object_get_class(model) == s_function_keytop) {
@@ -654,7 +590,7 @@ OnKeyEvent s_on_key_event = nullptr;
 void on_key_event_hook(MonoObject *widget, MonoObject *args) {
   if (s_on_key_event)
     s_on_key_event(widget, args);
-  if (!widget || !s_key || widget != target(s_key) || !args)
+  if (!widget || !s_key || widget != Target(s_key) || !args)
     return;
   if (unboxed<int32_t>(call(args, "get_KeyType"), -1) == kConfirm &&
       unboxed<uint32_t>(call(args, "get_KeyEventType"), 0) == kKeyDown)
@@ -677,34 +613,45 @@ void update_keycode_hook(MonoObject *model, uint64_t type) {
 using ChangePanel = void (*)(MonoObject *, uint64_t, uint64_t);
 ChangePanel s_change_panel = nullptr;
 void change_panel_hook(MonoObject *presenter, uint64_t type, uint64_t only) {
-  if (presenter && target(s_main_presenter) != presenter)
-    keep(s_main_presenter, presenter);
+  if (presenter && Target(s_main_presenter) != presenter)
+    Reflect::Hold(s_main_presenter, presenter);
   if (s_change_panel)
     s_change_panel(presenter, type, only);
 }
 
-bool hook(MonoImage *image, const char *klass, const char *method, int params,
-          void *destination, void **original) {
-  MonoClass *k = image ? mono_class_from_name(image, kSpace, klass) : nullptr;
+/* On failure the original stays null: the hooks check it before calling. */
+template <typename Function>
+bool install(MonoImage *image, const char *space, const char *klass,
+             const char *method, int params, Function *detour,
+             Function *&original) {
+  MonoClass *k = image ? mono_class_from_name(image, space, klass) : nullptr;
   const uint64_t address =
       k ? Get_Address_of_Method(image, k, method, params) : 0;
-  const bool ok = address && InstallDetour(address, destination, original);
-  if (!ok) {
-    *original = nullptr;
-    LOG_WARN("[OSK] %s.%s not hooked", klass, method);
-  }
+  const bool ok = address && InstallDetour(address,
+                                           reinterpret_cast<void *>(detour),
+                                           reinterpret_cast<void **>(&original));
+  if (!ok)
+    original = nullptr;
   return ok;
 }
 
-/* The keyboard's assembly is ShellUI's own (its application folder, not the
-   shared library folder): the image already loaded is taken by its name, so
-   the hooks go on the code ShellUI runs. Not loaded yet: tried again later. */
-MonoImage *loaded_image() {
-  static MonoImage *(*image_loaded)(const char *) = nullptr;
-  if (!image_loaded)
-    image_loaded = reinterpret_cast<decltype(image_loaded)>(
-        kernel_dynlib_dlsym(-1, g_libmono_handle, "mono_image_loaded"));
-  return image_loaded ? image_loaded(kImage) : nullptr;
+template <typename Function>
+bool hook(MonoImage *image, const char *space, const char *klass,
+          const char *method, int params, Function *detour,
+          Function *&original) {
+  const bool ok = install(image, space, klass, method, params, detour, original);
+  if (!ok)
+    LOG_WARN("[OSK] %s.%s not hooked", klass, method);
+  return ok;
+}
+
+/* One the keyboard's key can do without. */
+template <typename Function>
+void hook_optional(MonoImage *image, const char *klass, const char *method,
+                   int params, Function *detour, Function *&original) {
+  const bool ok =
+      install(image, kPuiSpace, klass, method, params, detour, original);
+  LOG_INFO("[OSK] %s.%s hooked=%d", klass, method, ok ? 1 : 0);
 }
 
 bool s_installed = false;
@@ -715,18 +662,21 @@ int s_tries = 0;
 void Install() {
   if (s_installed)
     return;
-  if (exists(kOff)) {
+  if (if_exists(kOff)) {
     s_installed = true;
     LOG_INFO("[OSK] %s present: keyboard left as it is", kOff);
     return;
   }
-  MonoImage *image = loaded_image();
+  /* The keyboard's assembly is ShellUI's own (its application folder, not the
+     shared library folder): the image already loaded is taken by its name, so
+     the hooks go on the code ShellUI runs. Not loaded yet: tried again later. */
+  MonoImage *image = Reflect::LoadedImage(kImage);
   if (!image) {
     ++s_tries;
     return;
   }
   s_installed = true;
-  if (exists(kPending)) {
+  if (if_exists(kPending)) {
     /* the last run ended while our key was being laid out */
     unlink(kPending);
     s_enabled = false;
@@ -740,80 +690,30 @@ void Install() {
   /* Pressing and paging first: without them the key would be there for
      nothing. */
   if (!s_function_keytop ||
-      !hook(image, "KeytopModel", "OnPressKey", 3,
-            reinterpret_cast<void *>(&on_press_hook),
-            reinterpret_cast<void **>(&s_on_press)) ||
-      !hook(image, "MainKeyAreaPresenter", "ChangePanel", 2,
-            reinterpret_cast<void *>(&change_panel_hook),
-            reinterpret_cast<void **>(&s_change_panel)) ||
-      !hook(image, "MainKeyAreaModel", "UpdateKeycodeInfo", 1,
-            reinterpret_cast<void *>(&update_keycode_hook),
-            reinterpret_cast<void **>(&s_update_keycode)) ||
-      !hook(image, "FunctionKeyAreaPresenter", "SetBindings", 0,
-            reinterpret_cast<void *>(&set_bindings_hook),
-            reinterpret_cast<void **>(&s_set_bindings)))
+      !hook(image, kSpace, "KeytopModel", "OnPressKey", 3, on_press_hook,
+            s_on_press) ||
+      !hook(image, kSpace, "MainKeyAreaPresenter", "ChangePanel", 2,
+            change_panel_hook, s_change_panel) ||
+      !hook(image, kSpace, "MainKeyAreaModel", "UpdateKeycodeInfo", 1,
+            update_keycode_hook, s_update_keycode) ||
+      !hook(image, kSpace, "FunctionKeyAreaPresenter", "SetBindings", 0,
+            set_bindings_hook, s_set_bindings))
     return;
   /* the press of our key, on the widget itself */
   MonoImage *pui = getDLLimage("Sce.PlayStation.PUI.dll");
-  MonoClass *widget =
-      pui ? mono_class_from_name(pui, "Sce.PlayStation.PUI.UI3", "Widget")
-          : nullptr;
-  const uint64_t on_key_event =
-      widget ? Get_Address_of_Method(pui, widget, "OnKeyEvent", 1) : 0;
-  if (!on_key_event ||
-      !InstallDetour(on_key_event, reinterpret_cast<void *>(&on_key_event_hook),
-                     reinterpret_cast<void **>(&s_on_key_event))) {
-    s_on_key_event = nullptr;
-    LOG_WARN("[OSK] Widget.OnKeyEvent not hooked");
+  if (!hook(pui, kPuiSpace, "Widget", "OnKeyEvent", 1, on_key_event_hook,
+            s_on_key_event))
     return;
-  }
   /* the text a field gets from the keyboard's engine */
-  MonoClass *text_field =
-      pui ? mono_class_from_name(pui, "Sce.PlayStation.PUI.UI3", "TextField")
-          : nullptr;
-  struct TextHook {
-    const char *method;
-    int params;
-    void *destination;
-    void **original;
-  };
-  const TextHook text_hooks[] = {
-      {"UpdatePreedit", 4, reinterpret_cast<void *>(&update_preedit_hook),
-       reinterpret_cast<void **>(&s_update_preedit)},
-      {"ConfirmPreedit", 2, reinterpret_cast<void *>(&confirm_preedit_hook),
-       reinterpret_cast<void **>(&s_confirm_preedit)},
-  };
-  for (const TextHook &text_hook : text_hooks) {
-    const uint64_t address =
-        text_field ? Get_Address_of_Method(pui, text_field, text_hook.method,
-                                           text_hook.params)
-                   : 0;
-    const bool ok = address && InstallDetour(address, text_hook.destination,
-                                             text_hook.original);
-    if (!ok)
-      *text_hook.original = nullptr;
-    LOG_INFO("[OSK] TextField.%s hooked=%d", text_hook.method, ok ? 1 : 0);
-  }
+  hook_optional(pui, "TextField", "UpdatePreedit", 4, update_preedit_hook,
+                s_update_preedit);
+  hook_optional(pui, "TextField", "ConfirmPreedit", 2, confirm_preedit_hook,
+                s_confirm_preedit);
   /* the keyboard's own emoji, for every field that opens it */
-  MonoClass *edit_ime =
-      pui ? mono_class_from_name(pui, "Sce.PlayStation.PUI.UI3",
-                                 "TextFieldEditIme")
-          : nullptr;
-  const uint64_t create_options =
-      edit_ime ? Get_Address_of_Method(pui, edit_ime, "CreateImeOptions", 1)
-               : 0;
-  const bool options_hooked =
-      create_options &&
-      InstallDetour(create_options,
-                    reinterpret_cast<void *>(&create_ime_options_hook),
-                    reinterpret_cast<void **>(&s_create_ime_options));
-  if (!options_hooked)
-    s_create_ime_options = nullptr;
-  LOG_INFO("[OSK] TextFieldEditIme.CreateImeOptions hooked=%d",
-           options_hooked ? 1 : 0);
-  if (hook(image, "FunctionAreaPanel", "AddBasedOnLanguageArea", 3,
-           reinterpret_cast<void *>(&add_area_hook),
-           reinterpret_cast<void **>(&s_add_area)))
+  hook_optional(pui, "TextFieldEditIme", "CreateImeOptions", 1,
+                create_ime_options_hook, s_create_ime_options);
+  if (hook(image, kSpace, "FunctionAreaPanel", "AddBasedOnLanguageArea", 3,
+           add_area_hook, s_add_area))
     LOG_INFO("[OSK] glyph key ready (%d glyphs)", kGlyphCount);
 }
 

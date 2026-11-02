@@ -7,8 +7,8 @@
 #include "external_symbols.hpp"
 #include "defs.h"
 #include "ipc.hpp" // shellui_log
+#include "aniketos_shell/rn_scripts/rn_reload.hpp"
 #include "aniketos_shell/rn_scripts/script_injector.hpp"
-#include <chrono>
 #include <atomic>
 #include <string>
 #include <cstring>
@@ -389,17 +389,11 @@ void ReloadRNPSApp(const char* title_id){
     void (*ReloadApp)(MonoString* tid) = (void(*)(MonoString*))Get_Address_of_Method(react_common_img, "ReactNative.Vsh.Common", "ReactApplicationSceneManager", "ReloadApp", 1);
     if (ReloadApp) {
         LOG_DEBUG("Reloading %s scenes", title_id);
-        HomeJs::NoteRequestedReload(title_id);
+        ScriptInjector::NoteRequestedReload(title_id);
         ReloadApp(mono_string_new(Root_Domain, title_id));
     } else {
         LOG_ERROR("Failed to find reload method, not reloading scene");
     }
-}
-
-static int64_t steady_ms() {
-  return std::chrono::duration_cast<std::chrono::milliseconds>(
-             std::chrono::steady_clock::now().time_since_epoch())
-      .count();
 }
 
 void shellui_request_home_reload(void) {
@@ -409,92 +403,12 @@ void shellui_request_home_reload(void) {
   LOG_DEBUG("queued NPXS40002 home reload for next UI tick");
 }
 
-/* Milliseconds on the steady clock at which a delayed Home reload is due;
-   0 when none is. */
-static std::atomic<int64_t> g_home_reload_due{0};
-
-void shellui_request_home_reload_after(int delay_ms) {
-  g_home_reload_due.store(steady_ms() + delay_ms, std::memory_order_release);
-}
-
-/* When Home's bundle last started to run; 0 before the first time. A
-   reload asked for while Home is still starting waits until it has been up
-   kHomeSettleMs: three switches flipped in a row once reloaded Home a second
-   into its start, and ShellUI hung (2026-10-17, slim 11.40). */
-static std::atomic<int64_t> g_home_started{0};
-static constexpr int64_t kHomeSettleMs = 4000;
-
-void shellui_note_home_start(void) {
-  g_home_started.store(steady_ms(), std::memory_order_release);
-}
-
 void shellui_poll_home_reload(void) {
-  int64_t due = g_home_reload_due.load(std::memory_order_acquire);
-  if (due != 0 && steady_ms() >= due &&
-      g_home_reload_due.compare_exchange_strong(due, 0,
-                                                std::memory_order_acq_rel))
-    g_home_reload_pending.store(true, std::memory_order_release);
-  if (!g_home_reload_pending.load(std::memory_order_acquire))
+  if (shellui_home_reload_held(g_home_reload_pending))
     return;
-  const int64_t started = g_home_started.load(std::memory_order_acquire);
-  if (started != 0 && steady_ms() - started < kHomeSettleMs)
-    return; /* still pending: Home is starting */
   if (!g_home_reload_pending.exchange(false, std::memory_order_acq_rel)) {
     return;
   }
   LOG_DEBUG("applying NPXS40002 home reload on UI thread");
   ReloadRNPSApp("NPXS40002");
-}
-
-/* Milliseconds on the steady clock at which the presence-dot reload is due;
-   0 when none is. */
-static std::atomic<int64_t> g_presence_reload_due{0};
-
-static std::atomic<bool> g_presence_reload_home{false};
-
-void shellui_request_presence_reload(int delay_ms, bool home_too) {
-  if (home_too)
-    g_presence_reload_home.store(true, std::memory_order_release);
-  g_presence_reload_due.store(steady_ms() + delay_ms,
-                              std::memory_order_release);
-}
-
-void shellui_poll_presence_reload(void) {
-  const int64_t due = g_presence_reload_due.load(std::memory_order_acquire);
-  if (due == 0 || steady_ms() < due)
-    return;
-  g_presence_reload_due.store(0, std::memory_order_release);
-  const bool home =
-      g_presence_reload_home.exchange(false, std::memory_order_acq_rel);
-  LOG_INFO("reloading %sControl Center for its script (presence dot, clock)",
-           home ? "Home and " : "");
-  if (home)
-    ReloadRNPSApp("NPXS40002");
-  ReloadRNPSApp("NPXS40003");
-}
-
-MonoObject* CreateUIColorBoxed(float r, float g, float b, float a)
-{
-    MonoClass* uIColor = mono_class_from_name(pui_img, "Sce.PlayStation.PUI", "UIColor");
-    if (uIColor == nullptr)
-    {
-        return nullptr;
-    }
-
-    // Keep the boxed value available to callers that need a GC handle. A
-    // pointer returned by mono_object_unbox() is only the value payload, not
-    // a MonoObject and must never be passed to mono_gchandle_new().
-    MonoObject* boxed = New_Object(uIColor);
-    if (boxed == nullptr)
-    {
-        return nullptr;
-    }
-    MonoObject* value = (MonoObject*)mono_object_unbox(boxed);
-    if (value == nullptr)
-    {
-        return nullptr;
-    }
-
-    Invoke<void>(pui_img, uIColor, value, ".ctor", r, g, b, a);
-    return boxed;
 }

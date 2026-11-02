@@ -1,29 +1,24 @@
 #include "aniketos_theme/toggle_styles.hpp"
 #include "aniketos_theme/customization.hpp"
+#include "aniketos_ui/mono_reflect.hpp"
+#include "aniketos_ui/monotonic_clock.hpp"
+#include "aniketos_ui/ui_color.hpp"
 
 #include "external_symbols.hpp"
 #include "hooked_funcs.hpp"
 
 #include <onion/log.h>
-#include <onion/settings.hpp>
 
 #include <algorithm>
-#include <cmath>
 #include <cstring>
 #include <string>
-#include <time.h>
 #include <vector>
-
-extern onion::Settings g_settings;
 
 namespace AniketosTheme::ToggleStyles {
 namespace {
 
-struct UIColor {
-  float r, g, b, a;
-  int32_t color_space;
-};
-static_assert(sizeof(UIColor) == 20);
+using AniketosUI::UIColor;
+namespace Reflect = AniketosUI::Reflect;
 
 /* One drawn piece of a switch: a native panel with fully rounded ends,
    described at rest in both positions. Lengths are in the CSS pixels of
@@ -73,7 +68,6 @@ constexpr float kEase[4] = {0.25f, 0.1f, 0.25f, 1.0f};
 constexpr float kEaseIn[4] = {0.42f, 0.0f, 1.0f, 1.0f};
 constexpr float kEaseOut[4] = {0.0f, 0.0f, 0.58f, 1.0f};
 constexpr float kEaseInOut[4] = {0.42f, 0.0f, 0.58f, 1.0f};
-
 
 Piece piece(Look off, Look on, float seconds, const float curve[4],
             float border_width = 0.0f) {
@@ -223,8 +217,12 @@ const std::vector<Style> &styles() {
   return all;
 }
 
+int wanted_style() {
+  return CustomizationOn() ? g_settings.shell_toggle_style : 0;
+}
+
 const Style *chosen() {
-  const int index = (AniketosTheme::CustomizationOn() ? g_settings.shell_toggle_style : 0) - 1;
+  const int index = wanted_style() - 1;
   const std::vector<Style> &all = styles();
   return index >= 0 && index < static_cast<int>(all.size())
              ? &all[static_cast<size_t>(index)]
@@ -252,24 +250,9 @@ int s_own_calls = 0;
    handed over in the same one. */
 int32_t s_color_space = 0;
 
-uint64_t now_ms() {
-  timespec time{};
-  clock_gettime(CLOCK_MONOTONIC, &time);
-  return static_cast<uint64_t>(time.tv_sec) * 1000u +
-         static_cast<uint64_t>(time.tv_nsec) / 1000000u;
-}
-
-MonoMethod *method(MonoObject *object, const char *name, int argc) {
-  for (MonoClass *k = object ? mono_object_get_class(object) : nullptr; k;
-       k = mono_class_get_parent(k))
-    if (MonoMethod *found = mono_class_get_method_from_name(k, name, argc))
-      return found;
-  return nullptr;
-}
-
 MonoObject *call(MonoObject *object, const char *name, void **args = nullptr,
                  int argc = 0) {
-  MonoMethod *found = method(object, name, argc);
+  MonoMethod *found = Reflect::MethodOf(object, name, argc);
   if (!found)
     return nullptr;
   MonoObject *exception = nullptr;
@@ -277,24 +260,10 @@ MonoObject *call(MonoObject *object, const char *name, void **args = nullptr,
   return exception ? nullptr : result;
 }
 
-void set_float(MonoObject *object, const char *setter, float value) {
+template <typename Value>
+void set_property(MonoObject *object, const char *setter, Value value) {
   void *args[1] = {&value};
   call(object, setter, args, 1);
-}
-
-void set_color(MonoObject *object, const char *setter, UIColor value) {
-  void *args[1] = {&value};
-  call(object, setter, args, 1);
-}
-
-std::string text(MonoObject *string) {
-  if (!string)
-    return {};
-  const char *utf = mono_string_to_utf8(reinterpret_cast<MonoString *>(string));
-  std::string out = utf ? utf : "";
-  if (utf && mono_free)
-    mono_free(const_cast<char *>(utf));
-  return out;
 }
 
 bool boolean(MonoObject *object, const char *getter, bool fallback) {
@@ -307,34 +276,23 @@ int integer(MonoObject *object, const char *getter, int fallback) {
   return boxed ? *static_cast<int *>(mono_object_unbox(boxed)) : fallback;
 }
 
-MonoObject *target(uint32_t handle) {
-  return handle && mono_gchandle_get_target ? mono_gchandle_get_target(handle)
-                                            : nullptr;
-}
-
-void free_handle(uint32_t &handle) {
-  if (handle && mono_gchandle_free)
-    mono_gchandle_free(handle);
-  handle = 0;
-}
-
 /* Takes the style's panels off the switch again. */
 void remove_pieces(Tracked &entry) {
-  MonoObject *frame = target(entry.frame);
+  MonoObject *frame = Reflect::Target(entry.frame);
   for (uint32_t &handle : entry.pieces) {
-    MonoObject *panel = target(handle);
+    MonoObject *panel = Reflect::Target(handle);
     if (frame && panel) {
       void *args[1] = {panel};
       call(frame, "RemoveChild", args, 1);
     }
-    free_handle(handle);
+    Reflect::Release(handle);
   }
   entry.pieces.clear();
 }
 
 Tracked *find(MonoObject *frame) {
   for (Tracked &entry : s_tracked)
-    if (target(entry.frame) == frame)
+    if (Reflect::Target(entry.frame) == frame)
       return &entry;
   return nullptr;
 }
@@ -437,18 +395,18 @@ void place(MonoObject *panel, const Style &style, const Piece &part, bool on,
   const float top = (kSwitchHeight - style.height * scale) * 0.5f;
   const float width = std::max(0.0f, lerp(from.w, to.w)) * scale;
   const float height = std::max(0.0f, lerp(from.h, to.h)) * scale;
-  set_float(panel, "set_X", left + (lerp(from.x, to.x) + shift) * scale);
-  set_float(panel, "set_Y", top + lerp(from.y, to.y) * scale);
-  set_float(panel, "set_Width", width);
-  set_float(panel, "set_Height", height);
-  set_float(panel, "set_BorderRadius", std::min(width, height) * 0.5f);
-  set_color(panel, "set_BackgroundColor", mix(from.fill, to.fill, tint));
+  set_property(panel, "set_X", left + (lerp(from.x, to.x) + shift) * scale);
+  set_property(panel, "set_Y", top + lerp(from.y, to.y) * scale);
+  set_property(panel, "set_Width", width);
+  set_property(panel, "set_Height", height);
+  set_property(panel, "set_BorderRadius", std::min(width, height) * 0.5f);
+  set_property(panel, "set_BackgroundColor", mix(from.fill, to.fill, tint));
   if (part.border_width > 0.0f) {
-    set_float(panel, "set_BorderWidth",
+    set_property(panel, "set_BorderWidth",
               std::max(1.0f, part.border_width * scale));
-    set_color(panel, "set_BorderColor", mix(from.border, to.border, tint));
+    set_property(panel, "set_BorderColor", mix(from.border, to.border, tint));
   }
-  set_float(panel, "set_Opacity", opacity);
+  set_property(panel, "set_Opacity", opacity);
 }
 
 float longest(const Style &style) {
@@ -465,7 +423,7 @@ float longest(const Style &style) {
 void place_all(Tracked &entry, const Style &style, float elapsed,
                bool settled) {
   for (size_t i = 0; i < entry.pieces.size() && i < style.pieces.size(); ++i)
-    if (MonoObject *panel = target(entry.pieces[i]))
+    if (MonoObject *panel = Reflect::Target(entry.pieces[i]))
       place(panel, style, style.pieces[i], entry.on, elapsed, settled);
 }
 
@@ -488,21 +446,19 @@ bool build(Tracked &entry, MonoObject *frame, const Style &style) {
 
 /* The system is colouring a switch's frame: make it ours. */
 void style_frame(MonoObject *frame, MonoObject *owner, const Style &style) {
-  set_float(frame, "set_BorderWidth", 0.0f);
-  bool clip = style.clip;
-  void *clip_args[1] = {&clip};
-  call(frame, "set_ClipChildren", clip_args, 1);
+  set_property(frame, "set_BorderWidth", 0.0f);
+  set_property(frame, "set_ClipChildren", style.clip);
   Tracked *entry = find(frame);
   if (!entry) {
     /* drop the switches that are gone before taking a new one */
     for (size_t i = 0; i < s_tracked.size();) {
-      if (target(s_tracked[i].frame)) {
+      if (Reflect::Target(s_tracked[i].frame)) {
         ++i;
         continue;
       }
       for (uint32_t &handle : s_tracked[i].pieces)
-        free_handle(handle);
-      free_handle(s_tracked[i].frame);
+        Reflect::Release(handle);
+      Reflect::Release(s_tracked[i].frame);
       s_tracked.erase(s_tracked.begin() + static_cast<long>(i));
     }
     if (s_tracked.size() >= 96 || !mono_gchandle_new_weakref)
@@ -512,10 +468,11 @@ void style_frame(MonoObject *frame, MonoObject *owner, const Style &style) {
     s_tracked.push_back(std::move(fresh));
     entry = &s_tracked.back();
   }
-  const int wanted = (AniketosTheme::CustomizationOn() ? g_settings.shell_toggle_style : 0);
+  const int wanted = wanted_style();
   const bool whole = entry->style == wanted &&
                      entry->pieces.size() == style.pieces.size() &&
-                     !entry->pieces.empty() && target(entry->pieces.front());
+                     !entry->pieces.empty() &&
+                     Reflect::Target(entry->pieces.front());
   if (!whole) {
     remove_pieces(*entry);
     entry->style = wanted;
@@ -551,26 +508,27 @@ const char *Name(int style) {
              : nullptr;
 }
 
-bool OnPanelBackground(MonoObject *panel, float *rgba) {
+bool OnPanelBackground(MonoObject *panel, UIColor &color) {
   if (s_own_calls > 0)
     return true; /* a panel of ours: as set, untouched by any theme */
   const Style *style = chosen();
-  if (!style || !panel || !rgba || !shellui_hooks_are_ready())
+  if (!style || !panel || !shellui_hooks_are_ready())
     return false;
   ++s_own_calls;
   bool styled = false;
-  const std::string name = text(call(panel, "get_Name"));
+  const std::string name =
+      Mono_to_String(reinterpret_cast<MonoString *>(call(panel, "get_Name")));
   const bool frame = name == "CheckBoxFrame";
   if (frame || name == "CheckBoxFill") {
     if (MonoObject *owner = switch_of(panel)) {
       /* the system's two panels turn invisible; the style's own, on the
          frame, are what is seen */
-      s_color_space = reinterpret_cast<UIColor *>(rgba)->color_space;
-      rgba[3] = 0.0f;
+      s_color_space = color.color_space;
+      color.a = 0.0f;
       if (frame)
         style_frame(panel, owner, *style);
       else
-        set_float(panel, "set_BorderWidth", 0.0f);
+        set_property(panel, "set_BorderWidth", 0.0f);
       styled = true;
     }
   }
@@ -582,12 +540,12 @@ void Tick() {
   const Style *style = chosen();
   if (s_tracked.empty() || !style)
     return;
-  const uint64_t now = now_ms();
+  const uint64_t now = AniketosUI::MonotonicMs();
   ++s_own_calls;
   for (Tracked &entry : s_tracked) {
-    if (entry.style != (AniketosTheme::CustomizationOn() ? g_settings.shell_toggle_style : 0) || entry.pieces.empty())
+    if (entry.style != wanted_style() || entry.pieces.empty())
       continue;
-    MonoObject *frame = target(entry.frame);
+    MonoObject *frame = Reflect::Target(entry.frame);
     MonoObject *owner = frame ? call(frame, "get_Parent") : nullptr;
     if (!owner)
       continue;

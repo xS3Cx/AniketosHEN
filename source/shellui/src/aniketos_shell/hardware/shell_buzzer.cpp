@@ -20,10 +20,8 @@ void Configure(void *set_buzzer, void *set_dim_setting) {
            s_set_buzzer ? 1 : 0, s_set_dim_setting ? 1 : 0);
 }
 
-bool IsSupported() { return s_set_buzzer != nullptr; }
-
 bool PlayTest(Pattern pattern) {
-  if (!IsSupported()) {
+  if (!s_set_buzzer) {
     LOG_WARN("[ANIKETOSHEN:BUZZER] unavailable on this firmware");
     return false;
   }

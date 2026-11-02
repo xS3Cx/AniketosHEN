@@ -5,12 +5,10 @@
 #include "toolbox_i18n.hpp"
 
 #include <onion/distribution.h>
+#include <onion/fs.h>
 #include <onion/log.h>
 
-#include <fcntl.h>
 #include <string>
-#include <sys/stat.h>
-#include <unistd.h>
 
 namespace MigrationNotice {
 namespace {
@@ -27,12 +25,6 @@ enum class State { Check, WaitForHome, Showing, Done };
 State s_state = State::Check;
 int s_home_frames = 0;
 int s_attempts = 0;
-bool s_preview = false;
-
-bool exists(const char *path) {
-  struct stat st {};
-  return stat(path, &st) == 0;
-}
 
 bool show() {
   SystemDialogs::AlertOptions notice;
@@ -48,27 +40,13 @@ bool show() {
 
 } // namespace
 
-void ShowNow(bool in_english) {
-  /* The preview can be asked for in English whatever the console is set to. */
-  const toolbox_i18n::Lang current = toolbox_i18n::active_lang();
-  if (in_english)
-    toolbox_i18n::set_lang(toolbox_i18n::Lang::En);
-  const bool shown = show();
-  if (in_english)
-    toolbox_i18n::set_lang(current);
-  if (shown) {
-    s_preview = true;
-    s_state = State::Showing;
-  }
-}
-
 void Tick() {
   switch (s_state) {
   case State::Check: {
     bool migrated = false;
     for (const char *marker : kMigrated)
-      migrated = migrated || exists(marker);
-    s_state = migrated && !exists(kSeen) ? State::WaitForHome : State::Done;
+      migrated = migrated || if_exists(marker);
+    s_state = migrated && !if_exists(kSeen) ? State::WaitForHome : State::Done;
     break;
   }
   case State::WaitForHome: {
@@ -92,16 +70,11 @@ void Tick() {
     int button = -1;
     if (!SystemDialogs::PollAlert(&button))
       break;
-    LOG_INFO("[MIGRATION-NOTICE] closed button=%d preview=%d", button,
-             s_preview ? 1 : 0);
+    LOG_INFO("[MIGRATION-NOTICE] closed button=%d", button);
     /* Only pressing the button counts as read; backing out of the pop-up
        shows it again on the next start. */
-    if (!s_preview && button == 0) {
-      const int fd = open(kSeen, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-      if (fd >= 0)
-        close(fd);
-    }
-    s_preview = false;
+    if (button == 0)
+      touch_file(kSeen);
     s_state = State::Done;
     break;
   }

@@ -4,9 +4,11 @@
  * when SceShellUI is injected; then every 300 rendered frames one log line
  * reports the average and worst time spent in each section of the render
  * hook. With profiling on, ".../shellmenu_script" is also consumed: a string
- * of T (toggle menu) U D L R X (cross) O (circle) and '.' (wait), one step
- * every 12 frames (lower-case u/d: a held direction, every 4 frames), so the menu can be exercised from a PC without a
- * controller. When the marker file is absent a Scope costs one branch.
+ * of T (toggle menu) U D L R X (cross) O (circle) Q (square), S (Settings)
+ * H (Home), P C (dumps) and '.' (wait), one step every 12 frames (lower-case
+ * u/d: a held direction, every 8 frames), so the menu can be exercised from a
+ * PC without a controller. When the marker file is absent a Scope costs one
+ * branch.
  */
 #pragma once
 
@@ -29,7 +31,8 @@ enum Section : int {
   kSectionCount,
 };
 
-extern bool g_enabled;
+extern bool enabled;
+inline bool &g_enabled = enabled; // renames.tsv
 
 void Initialize();
 /** Close the frame: publish statistics, feed scripted input. UI thread. */
@@ -45,7 +48,7 @@ void Add(Section section, uint64_t elapsed_ns);
 class Scope {
 public:
   explicit Scope(Section section)
-      : section_(section), start_(g_enabled ? NowNs() : 0) {}
+      : section_(section), start_(enabled ? NowNs() : 0) {}
   ~Scope() {
     if (start_)
       Add(section_, NowNs() - start_);

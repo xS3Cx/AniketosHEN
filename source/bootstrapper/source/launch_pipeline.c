@@ -4,11 +4,11 @@
 #include "launch_pipeline.h"
 
 #include "bootstrap_notify.h"
+#include "bootstrap_safety.h"
 #include "kstuff_probe.h"
 
 #include <elfldr_remote.h>
 #include <onion/log.h>
-#include <onion/notify.h>
 #include <onion/payload.h>
 #include <onion/platform.h>
 #include <onion/proc_query.h>
@@ -36,13 +36,6 @@ int sceKernelMprotect(void *addr, size_t len, int prot);
 typedef struct LaunchContext {
   uint16_t loader_port;
 } LaunchContext;
-
-/* Newest firmware the built-in kstuff knows (kstuff-lite v1.11: 1.00-13.60;
- * see KSTUFF_VERSION in scripts/sync_dependencies.sh). Firmware words keep
- * major.minor in the top 16 bits, e.g. 0x13600000 for 13.60. On a newer
- * firmware the built-in kstuff is not loaded: it would patch the kernel at
- * offsets it does not have for that firmware. */
-#define ONION_KSTUFF_MAX_FIRMWARE 0x13600000u
 
 /* The service's pid when its marker points at it running, else -1. */
 static pid_t owned_service_pid(const char *ready_name,
@@ -205,19 +198,7 @@ static void launch_kstuff(LaunchContext *context, uint32_t firmware_version,
 
   /* A kstuff.elf the user put in place is their choice for their firmware;
      the built-in one only runs where it is known to work. */
-  if (!override_elf &&
-      (firmware_version & 0xffff0000u) > ONION_KSTUFF_MAX_FIRMWARE) {
-    LOG_WARN("kstuff not loaded: firmware %x.%02x is newer than the built-in "
-             "kstuff supports (up to %x.%02x)",
-             (firmware_version >> 24) & 0xffu, (firmware_version >> 16) & 0xffu,
-             (ONION_KSTUFF_MAX_FIRMWARE >> 24) & 0xffu,
-             (ONION_KSTUFF_MAX_FIRMWARE >> 16) & 0xffu);
-    if (if_exists(ONION_NOTIFY_ICON_PATH))
-      onion_notify_rich("notify.brand",
-                        "kstuff was not loaded: this firmware is newer than "
-                        "the built-in kstuff supports. Games that need kstuff "
-                        "will not start.",
-                        ONION_NOTIFY_ICON_PATH, "download", "588193135");
+  if (!override_elf && bootstrap_kstuff_too_new(firmware_version)) {
     onion_ready_signal(ONION_READY_KSTUFF);
     return;
   }
