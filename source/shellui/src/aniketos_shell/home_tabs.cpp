@@ -1,5 +1,6 @@
 #include "aniketos_shell/home_tabs.hpp"
 #include "aniketos_shell/home_bookmark.hpp"
+#include "aniketos_shell/home_hidden.hpp"
 
 #include "hooked_funcs.hpp"
 #include "aniketos_shell/system_dialogs.hpp"
@@ -319,6 +320,26 @@ std::string with_added(const std::string &where, const std::string &ids) {
          ") OR (icon.visible = 1 AND icon.titleId IN (" + ids + ") ) ) ";
 }
 
+std::string append_condition(const std::string &where,
+                             const std::string &clause) {
+  if (where.empty())
+    return where;
+  std::string upper = where;
+  for (char &c : upper)
+    c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+  if (upper.find("WHERE") == std::string::npos)
+    return where;
+  size_t at = std::string::npos;
+  for (const char *bound : {"ORDER BY", "GROUP BY", "LIMIT"}) {
+    const size_t found = upper.find(bound);
+    if (found != std::string::npos && (at == std::string::npos || found < at))
+      at = found;
+  }
+  if (at == std::string::npos)
+    return where + clause;
+  return where.substr(0, at) + clause + where.substr(at);
+}
+
 MonoString *build_where_hook(MonoObject *accessor, MonoObject *binds) {
   MonoString *where = s_build_where_original
                           ? s_build_where_original(accessor, binds)
@@ -348,15 +369,28 @@ MonoString *build_where_hook(MonoObject *accessor, MonoObject *binds) {
     const std::string hidden = HomeBookmark::HiddenSql(Target::Media);
     if (!hidden.empty())
       changed += " AND (icon.titleId NOT IN (" + hidden + ") ) ";
+    const std::string hidden_apps = HomeHidden::SqlList();
+    if (!hidden_apps.empty())
+      changed = append_condition(
+          changed,
+          " AND (icon.titleId NOT IN (" + hidden_apps + ") ) ");
     log_list(ListKind::Media, changed);
     return changed == original
                ? where
                : mono_string_new(mono_domain_get(), changed.c_str());
   }
   /* the bookmark tab's list (HomeBookmark), marked as the Emulators one */
-  if (content_limit == HomeBookmark::kContentLimit)
-    return mono_string_new(mono_domain_get(),
-                           HomeBookmark::Where(original).c_str());
+  if (content_limit == HomeBookmark::kContentLimit) {
+    const std::string bookmarked = HomeBookmark::Where(original);
+    const std::string hidden_apps = HomeHidden::SqlList();
+    const std::string changed =
+        hidden_apps.empty()
+            ? bookmarked
+            : append_condition(bookmarked,
+                               " AND (icon.titleId NOT IN (" + hidden_apps +
+                                   ") ) ");
+    return mono_string_new(mono_domain_get(), changed.c_str());
+  }
   /* No emulators installed: the Emulators list matches nothing. */
   const std::string ids = "(" + (s_filter_sql.empty() ? "''" : s_filter_sql) + ")";
   std::string changed;
@@ -382,6 +416,10 @@ MonoString *build_where_hook(MonoObject *accessor, MonoObject *binds) {
   } else {
     changed = original + " AND (icon.titleId IN " + ids + " ) ";
   }
+  const std::string hidden_apps = HomeHidden::SqlList();
+  if (!hidden_apps.empty())
+    changed = append_condition(
+        changed, " AND (icon.titleId NOT IN (" + hidden_apps + ") ) ");
   log_list(emulators_list ? ListKind::Emulators : ListKind::Games, changed);
   return changed == original
              ? where
@@ -834,6 +872,36 @@ void RestoreNames() {
     LOG_WARN("[HOMETABS] the system's names were not saved");
   LOG_INFO("[HOMETABS] games and media tabs back to the system's names");
   shellui_request_home_reload();
+}
+
+bool IsHomeTabLabel(MonoObject *label) {
+  if (!label)
+    return false;
+  MonoObject *home = ShellClock::GetHomeRoot();
+  if (!home || ShellClock::IsWidgetDisposed(home))
+    return false;
+  bool under_home = false;
+  for (MonoObject *node = label; node; node = get(node, "get_Parent")) {
+    if (node == home) {
+      under_home = true;
+      break;
+    }
+  }
+  if (!under_home)
+    return false;
+  MonoObject *switcher = target(s_switcher);
+  if (switcher && !ShellClock::IsWidgetDisposed(switcher)) {
+    for (MonoObject *node = label; node; node = get(node, "get_Parent"))
+      if (node == switcher)
+        return true;
+    for (const TabPanel &tab : s_tab_panels) {
+      MonoObject *panel = target(tab.handle);
+      if (panel && get(panel, "get_FirstChild") == label)
+        return true;
+    }
+    return false;
+  }
+  return true;
 }
 
 void Tick() {

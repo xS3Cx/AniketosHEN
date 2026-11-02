@@ -188,6 +188,7 @@ ONION_SHELL_SETTING_BOOL(home_tab_icons, true)
 /* A bookmark tab on Home after Emulators, named by the user and filled
  * from a game's Options menu (shellui: aniketos_shell/home_bookmark). */
 ONION_SHELL_SETTING_BOOL(home_bookmark, true)
+ONION_SHELL_SETTING_BOOL(home_hide_apps, true)
 /* A key after Shift on the system keyboard that turns the letter keys into
  * pages of the console's glyphs (shellui: aniketos_shell/osk_glyphs). */
 ONION_SHELL_SETTING_BOOL(osk_glyph_key, true)

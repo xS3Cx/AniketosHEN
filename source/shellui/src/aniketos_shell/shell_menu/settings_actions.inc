@@ -178,6 +178,7 @@ bool &toggle_target(OptionId id) {
   case OptionId::HomeEmulatorsTab: return g_settings.home_tab_emulators;
   case OptionId::HomeTabIcons: return g_settings.home_tab_icons;
   case OptionId::HomeBookmark: return g_settings.home_bookmark;
+  case OptionId::HomeHideApps: return g_settings.home_hide_apps;
   case OptionId::OskGlyphKey: return g_settings.osk_glyph_key;
   case OptionId::OskEmoji: return g_settings.osk_emoji;
   case OptionId::MouseControl: return g_settings.mouse_control_enabled;
@@ -946,6 +947,12 @@ void activate(const Option &option) {
       shellui_request_home_reload();
       LOG_INFO("[BOOKMARK] enabled=%d", target ? 1 : 0);
     }
+    if (option.id == OptionId::HomeHideApps) {
+      request_save();
+      shellui_request_home_reload();
+      s_dirty = true;
+      LOG_INFO("[HIDDEN] filter enabled=%d", target ? 1 : 0);
+    }
     if (option.id == OptionId::HomeEmulatorsTab) {
       /* the same for the Emulators tab, whose titles go back to Games */
       request_save();
@@ -1215,6 +1222,14 @@ void activate(const Option &option) {
       /* the system's prompt, on Home once this menu is gone */
       Hide();
       HomeBookmark::RequestRename();
+      break;
+    case OptionId::HiddenAppShow:
+      HomeHidden::Show(option.external_key);
+      s_dirty = true;
+      break;
+    case OptionId::HiddenAppsShowAll:
+      HomeHidden::ShowAll();
+      s_dirty = true;
       break;
     case OptionId::HomeTabRenameGames:
     case OptionId::HomeTabRenameMedia:

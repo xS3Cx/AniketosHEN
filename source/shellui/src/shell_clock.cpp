@@ -10,6 +10,7 @@
 #include "aniketos_theme/home_tiles.hpp"
 #include "aniketos_theme/theme_config.hpp"
 #include "aniketos_shell/home_js.hpp"
+#include "aniketos_shell/home_tabs.hpp"
 #include "toolbox_i18n.hpp"
 
 #include <onion/detour.h>
@@ -1613,14 +1614,14 @@ void native_label_set_text_hook(MonoObject *label, MonoString *text) {
     note_unbound_clock(label, stock);
 
   if (clock_target() != label) {
-    if (AniketosTheme::HomeTiles::IsSpaceSwitcherTabLabel(stock))
+    MonoString *display_text =
+        AniketosTheme::HomeTiles::DecorateSpaceSwitcherLabel(label, text);
+    if (display_text != text)
       prepare_space_tab_label(
           label,
           AniketosTheme::HomeTiles::IsSpaceSwitcherMediaTabLabel(stock)
               ? "media"
               : "games");
-    MonoString *display_text =
-        AniketosTheme::HomeTiles::DecorateSpaceSwitcherLabel(label, text);
     if (s_native_label_set_text_orig)
       s_native_label_set_text_orig(label, display_text ? display_text : text);
     return;
@@ -1755,18 +1756,19 @@ void native_label_on_update_hook(MonoObject *label) {
   // or rewrite the label on every frame.
   if (stock.size() <= 24 &&
       AniketosTheme::HomeTiles::IsSpaceSwitcherTabLabel(stock)) {
-    prepare_space_tab_label(
-        label,
-        AniketosTheme::HomeTiles::IsSpaceSwitcherMediaTabLabel(stock)
-            ? "media"
-            : "games");
     if (MonoString *current_text = ui_string(stock)) {
       MonoString *display_text =
           AniketosTheme::HomeTiles::DecorateSpaceSwitcherLabel(label,
                                                                current_text);
-      if (display_text && display_text != current_text &&
-          s_native_label_set_text_orig)
-        s_native_label_set_text_orig(label, display_text);
+      if (display_text && display_text != current_text) {
+        prepare_space_tab_label(
+            label,
+            AniketosTheme::HomeTiles::IsSpaceSwitcherMediaTabLabel(stock)
+                ? "media"
+                : "games");
+        if (s_native_label_set_text_orig)
+          s_native_label_set_text_orig(label, display_text);
+      }
     }
     return;
   }

@@ -6,6 +6,7 @@
 #include "aniketos_shell/shell_manager.hpp"
 #include "aniketos_shell/trophy_tools.hpp"
 #include "aniketos_shell/home_bookmark.hpp"
+#include "aniketos_shell/home_hidden.hpp"
 #include "aniketos_shell/mouse_control.hpp"
 #include <onion/distribution.h>
 #include "hooked_funcs.hpp"
@@ -99,6 +100,10 @@ bool handle_uri_boot_common(MonoString* uri, int opt, MonoString* titleIdForBoot
 
     if (HomeBookmark::HandleUri(Mono_to_String(uri), g_ui.current_menu_tid))
       return true;
+    if (Mono_to_String(uri) == HomeHidden::kMenuUri) {
+      HomeHidden::Hide(g_ui.current_menu_tid);
+      return true;
+    }
     if (Mono_to_String(uri) == TrophyTools::kUnlockAllUri) {
       TrophyTools::RequestUnlockAll(g_ui.current_menu_tid);
       return true;
@@ -139,6 +144,10 @@ bool handle_uri_boot_common(MonoString* uri, int opt, MonoString* titleIdForBoot
   #endif
     if (HomeBookmark::HandleUri(original_uri, g_ui.current_menu_tid))
       return true;
+    if (original_uri == HomeHidden::kMenuUri) {
+      HomeHidden::Hide(g_ui.current_menu_tid);
+      return true;
+    }
     if (original_uri == TrophyTools::kUnlockAllUri) {
       TrophyTools::RequestUnlockAll(g_ui.current_menu_tid);
       return true;

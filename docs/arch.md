@@ -199,6 +199,11 @@ AniketosHEN 只负责配对和设备注册。配对信息可从网络页面保�
 
 HomeUI 顶部导航和 Settings Debug Settings 入口按固件 profile 覆盖 2.30–12.70；11.00 起 Settings 走 `debug_settings_old`。
 
+`home_tabs.cpp` 的 `build_where_hook` 同时按 `aniketos_shell/home_hidden` 的
+`hidden_apps.json` 过滤 Home 的 Games、Media、Emulators 和 Bookmark 查询：
+在 `ORDER BY` / `GROUP BY` / `LIMIT` 之前追加
+`AND (icon.titleId NOT IN (...))`；列表为空或 `home_hide_apps=false` 时查询保持原样。
+
 监控条 FPS 由 daemon skip-hook 采样：`libonion_fps` 通过 `/dev/dce` ioctl
 和 DMAP 读取游戏加载的 `libSceAgcDriver`，ShellUI 负责显示 FPS、CPU、GPU、
 RAM 与 IP。采样实现参考 [PHU Games Tools](https://github.com/ArkSama)（ArkSama）。

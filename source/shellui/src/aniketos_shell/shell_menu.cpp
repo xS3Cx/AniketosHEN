@@ -14,6 +14,7 @@
 #include "aniketos_shell/account_avatar.hpp"
 #include "aniketos_shell/devkit_overlay.hpp"
 #include "aniketos_shell/home_bookmark.hpp"
+#include "aniketos_shell/home_hidden.hpp"
 #include "aniketos_shell/home_menu.hpp"
 #include "aniketos_shell/home_tabs.hpp"
 
@@ -130,6 +131,7 @@ enum class Page {
   /* the console: information, power, fan, power light, buzzer */
   ConsoleManagement,
   Information,
+  HiddenApps,
   Power,
   Fan,
   PowerIndicator,
@@ -300,6 +302,9 @@ enum class OptionId {
   HomeTabIcons,
   HomeBookmark,
   HomeBookmarkRename,
+  HomeHideApps,
+  HiddenAppShow,
+  HiddenAppsShowAll,
   OskGlyphKey,
   OskEmoji,
   MouseControl,
