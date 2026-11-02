@@ -37,6 +37,7 @@ const char *page_title(Page page) {
   case Page::ShellTiles: return tr("vsh.m.tiles");
   case Page::HomeProfile: return tr("vsh.m.profile");
   case Page::SystemCustomize: return tr("vsh.m.system_look");
+  case Page::IconColor: return tr("vsh.m.icon_color");
   case Page::GlobalCustomization: return tr("vsh.m.global_theme");
   case Page::ShellBackground: return tr("vsh.m.system_bg");
   case Page::ShellOutline: return tr("vsh.m.outlines");
@@ -296,6 +297,10 @@ AniketosTheme::RGB color_of(OptionId id) {
   case OptionId::ColorPanels:
     return rgb_of(g_settings.shell_ui_panels_r, g_settings.shell_ui_panels_g,
                   g_settings.shell_ui_panels_b);
+  case OptionId::ColorIcon:
+    return rgb_of(g_settings.system_icon_color_r,
+                  g_settings.system_icon_color_g,
+                  g_settings.system_icon_color_b);
   case OptionId::ColorClockTime:
     return rgb_of(g_settings.shell_clock_time_r, g_settings.shell_clock_time_g,
                   g_settings.shell_clock_time_b);
@@ -843,6 +848,7 @@ std::vector<Option> build_page(Page page) {
                submenu(tr("vsh.m.system_bg"), Page::ShellBackground),
                submenu(tr("vsh.m.outlines"), Page::ShellOutline),
                submenu(tr("vsh.m.panels"), Page::ShellUIPanels),
+               submenu(tr("vsh.m.icon_color"), Page::IconColor),
                strings(tr("vsh.toggles.style"), OptionId::ShellToggleStyle,
                        name ? name : tr("vsh.toggles.system"), count),
                toggle(tr("vsh.font.enable"), OptionId::CustomFontEnabled,
@@ -963,6 +969,24 @@ std::vector<Option> build_page(Page page) {
         slider_int(tr("vsh.common.animation_speed"),
                    OptionId::ShellUIPanelsAnimationSpeed,
                    g_settings.shell_ui_panels_animation_speed,
+                   25, 400, 25),
+    };
+    break;
+  }
+  case Page::IconColor: {
+    const int animation =
+        g_settings.system_icon_color_animation == 1 ? 1 : 0;
+    options = {
+        toggle(tr("vsh.icon_color.enable"), OptionId::IconColorEnabled,
+               g_settings.system_icon_color_enabled),
+        color_slider(tr("vsh.icon_color.color"), OptionId::ColorIcon),
+        strings(tr("vsh.common.animation"), OptionId::IconColorAnimation,
+                animation == 1 ? tr("vsh.icon_color.rainbow")
+                               : tr("vsh.animation.static"),
+                2),
+        slider_int(tr("vsh.common.animation_speed"),
+                   OptionId::IconColorAnimationSpeed,
+                   g_settings.system_icon_color_animation_speed,
                    25, 400, 25),
     };
     break;

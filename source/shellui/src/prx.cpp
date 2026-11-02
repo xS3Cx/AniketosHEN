@@ -20,6 +20,7 @@ along with this program; see the file COPYING. If not, see
 #include "aniketos_shell/power_indicator.hpp"
 #include "aniketos_shell/shell_buzzer.hpp"
 #include "aniketos_theme/home_tiles.hpp"
+#include "aniketos_theme/icon_color.hpp"
 #include "aniketos_theme/shared_ui.hpp"
 #include "aniketos_theme/toggle_styles.hpp"
 #include "shell_clock.hpp"
@@ -422,6 +423,9 @@ bool resolve_mono_symbols(pid_t pid) {
   KERNEL_DLSYM(libmono, mono_object_clone);
   KERNEL_DLSYM(libmono, mono_class_get_parent);
   KERNEL_DLSYM(libmono, mono_field_set_value);
+  KERNEL_DLSYM(libmono, mono_image_get_table_info);
+  KERNEL_DLSYM(libmono, mono_table_info_get_rows);
+  KERNEL_DLSYM(libmono, mono_class_get);
 
   const bool ok =
       mono_object_to_string && mono_get_root_domain && mono_property_get_get_method &&
@@ -710,6 +714,7 @@ bool install_hooks(const ShellImages& img) {
      there; none of them is required for the Toolbox. */
   AniketosTheme::HomeTiles::Install(img.react_pui, img.pui);
   AniketosTheme::SharedUI::Install(img.pui);
+  AniketosTheme::IconColor::Install(img.pui);
   AniketosTheme::ToggleStyles::Install(img.pui);
   ShellClock::Install(img.pui);
   SystemDialogs::Install(img.pui);

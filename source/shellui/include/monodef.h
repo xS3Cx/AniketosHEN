@@ -66,6 +66,7 @@ typedef gint32 mono_array_lower_bound_t;
 struct MonoDomain;
 struct MonoAssembly;
 struct MonoImage;
+struct MonoTableInfo;
 
 struct MonoMethodSignature;
 struct MonoMethodDesc;

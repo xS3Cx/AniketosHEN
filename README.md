@@ -171,6 +171,7 @@ speed.
 | System Focus Outlines | The colour of the focus outline around the selected item, with a colour slider and an animation; it can follow the background colour |
 | Clock & Date | The home-screen clock: font size and colour, 12- or 24-hour format, seconds, and an optional date line with its own size, colour, order, month and weekday style, year and separator |
 | Console UI Backgrounds | A tint for the system's panels and cards, with strength and opacity |
+| System icon colour | A colour for the console's own interface icons on Home (search, settings, network, accessibility, storage, sound, screen, accessories, notifications and the rest), with its own colour slider, Static or Rainbow animation and speed. App tiles, artwork and avatars keep their colours. Turning it off restores the original icons. Settings screen icons are not covered yet (TODO) |
 | Toggle switches | Another look for the system's on/off switches, drawn with the system's own widgets and animated: Indicator, Classic, Metal, Skull, Indicator Light, or the system's own |
 | Avatar status dot | A presence dot (online, busy or appearing offline) on the user's avatar on Home and in Control Center, as when signed in to PSN |
 
