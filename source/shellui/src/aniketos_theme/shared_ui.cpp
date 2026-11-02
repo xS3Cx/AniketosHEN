@@ -9,6 +9,7 @@
 #include "aniketos_theme/animation.hpp"
 #include "aniketos_theme/color.hpp"
 #include "aniketos_theme/global_theme.hpp"
+#include "aniketos_theme/icon_color.hpp"
 #include "aniketos_theme/theme_config.hpp"
 
 #include <onion/detour.h>
@@ -708,6 +709,12 @@ bool try_token_color_hook(MonoObject *manager, MonoString *managed_key,
                                       : std::string();
   const bool selected = surface_token(key);
   log_token_once(key, *color, selected);
+  const bool icon = AniketosTheme::IconColor::TokenIsIcon(key);
+  AniketosTheme::IconColor::LogTokenOnce(key, color->r, color->g, color->b,
+                                         color->a, icon);
+  if (icon)
+    (void)AniketosTheme::IconColor::TintToken(key, &color->r, &color->g,
+                                              &color->b);
   if (selected && (AniketosTheme::CustomizationOn() && g_settings.shell_ui_panels_enabled))
     *color = tint(*color, animated_theme_color(monotonic_millis()), true);
   return found;

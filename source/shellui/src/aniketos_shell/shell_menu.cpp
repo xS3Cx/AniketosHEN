@@ -29,6 +29,7 @@
 #include "aniketos_theme/custom_font.hpp"
 #include "aniketos_theme/global_theme.hpp"
 #include "aniketos_theme/home_tiles.hpp"
+#include "aniketos_theme/icon_color.hpp"
 #include "aniketos_theme/shell_background.hpp"
 #include "aniketos_theme/theme_config.hpp"
 #include "aniketos_theme/theme_manager.hpp"
@@ -158,6 +159,7 @@ enum class Page {
   ShellBackground,
   ShellOutline,
   ShellUIPanels,
+  IconColor,
   /* overlays on Home and in games */
   OSD,
   HomeScreenOSD,
@@ -334,6 +336,9 @@ enum class OptionId {
   ShellUIPanelsAnimationSpeed,
   ShellUIPanelsStrength,
   ShellUIPanelsOpacity,
+  IconColorEnabled,
+  IconColorAnimation,
+  IconColorAnimationSpeed,
   ShellGlowIntensity,
   ShellRestoreOriginal,
   MenuControls,
@@ -346,6 +351,7 @@ enum class OptionId {
   ColorGlow,
   ColorOutline,
   ColorPanels,
+  ColorIcon,
   ColorClockTime,
   ColorClockDate,
   ColorMenuLeft,
