@@ -49,6 +49,27 @@ MonoObject *find_sub_scene(MonoObject *scene, int depth, Wanted wanted) {
   return nullptr;
 }
 
+void visit_scene(MonoObject *scene, int depth,
+                 void (*visit)(MonoObject *root, void *context),
+                 void *context) {
+  if (!scene || depth > 10)
+    return;
+  if (MonoObject *root = scene_field(scene, "rootWidget"))
+    if (!IsDisposed(root))
+      visit(root, context);
+  for (const char *list_name : {"subSceneList", "modalSceneList"}) {
+    MonoObject *list = scene_field(scene, list_name);
+    MonoObject *boxed = scene_call(list, "get_Count", 0, nullptr);
+    const int32_t count =
+        boxed ? *static_cast<int32_t *>(mono_object_unbox(boxed)) : 0;
+    for (int32_t index = 0; index < count && index < 40; ++index) {
+      void *arguments[1] = {&index};
+      visit_scene(scene_call(list, "get_Item", 1, arguments), depth + 1, visit,
+                  context);
+    }
+  }
+}
+
 MonoMethod *property_getter(MonoObject *object, const char *name) {
   char method[64];
   std::snprintf(method, sizeof(method), "get_%s", name);
@@ -172,6 +193,18 @@ MonoObject *Root() {
   MonoObject *clock_root = ShellClock::ClockSceneRoot();
   MonoObject *home = OwnRoot();
   return home ? home : clock_root;
+}
+
+void VisitSceneRoots(void (*visit)(MonoObject *root, void *context),
+                     void *context) {
+  MonoObject *scene = scene_call(Root(), "get_ParentScene", 0, nullptr);
+  for (int guard = 0; scene && guard < 16; ++guard) {
+    MonoObject *up = scene_field(scene, "superScene");
+    if (!up)
+      break;
+    scene = up;
+  }
+  visit_scene(scene, 0, visit, context);
 }
 
 MonoObject *PropertyObject(MonoObject *object, const char *name) {

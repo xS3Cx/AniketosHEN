@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <b>AniketosHEN</b> · <code>0.04i</code><br/>
+  <b>AniketosHEN</b> · <code>0.04l</code><br/>
   An all-in-one HEN and Toolbox for PlayStation 5<br/>
   <sub>A fork of <a href="https://github.com/aydencharles/onionHEN">OnionHEN</a>
   by 麒麟/0xp0co and contributors. Everything added on top of OnionHEN is by
@@ -34,7 +34,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="license"/></a>
-  <img src="https://img.shields.io/badge/Version-0.04i-8a2be2" alt="version 0.04i"/>
+  <img src="https://img.shields.io/badge/Version-0.04l-8a2be2" alt="version 0.04l"/>
   <img src="https://img.shields.io/badge/Platform-PlayStation%205-003791?style=flat&logo=playstation" alt="PlayStation 5"/>
   <img src="https://img.shields.io/badge/C-00599C?style=flat&logo=c&logoColor=white" alt="C"/>
   <img src="https://img.shields.io/badge/C++-00599C?style=flat&logo=cplusplus&logoColor=white" alt="C++"/>
@@ -130,7 +130,7 @@ The first page has one row per area:
 | **Console** | *Console information* (name, model, masked serial / IDPS / PSID shown only after a confirmation, firmware, kernel, processor and clocks, disc drive, swap, RAM, disk, uptime, IP), *Hidden apps* (bring back apps hidden with *Hide App*; *Filter hidden apps* switches the Home filter off without emptying the list), *Power* (Rest Mode, reboot, power off), *Fan* (manual temperature threshold, with CPU/SoC temperature and fan duty), *Power light* (white, blue, orange), *Buzzer* |
 | **Controller** | Light bar colour and a second colour for pulses, brightness, animations (breathing, pulse, rainbow, fast spectrum, neon wave), player lights, vibration test and strength, console sound mirrored to the DualSense speaker with volume, restore |
 | **Home screen** | *Background*: looping video (with optional sound), still picture, effects (dim, haze, vignette, edges), PlayStation-symbol particles and their count, optionally behind Settings and system screens too · *Clock and date* · *Tabs* (Emulators and Bookmark tabs, tab names and icons) · *Game tiles* (circular, corner rounding) · *Profile* (custom avatar, status dot) |
-| **System look** | Global theme (one colour and animation for every themed surface), system background, focus outlines, interface panels, toggle-switch style (Indicator, Classic, Metal, Skull, Indicator Light or the system's own), custom font |
+| **System look** | Global theme (one colour and animation for every themed surface), system background, focus outlines, interface panels, system icon colour (Home screen; Settings screen icons are not covered yet — TODO), toggle-switch style (Indicator, Classic, Metal, Skull, Indicator Light or the system's own), custom font |
 | **Overlays** | *Home Screen OSD* (frame rate, viewport, CPU/SoC temperature, fan, RAM used and free, disk, system software, uptime, IP; refresh rate, FPS precision, size, units, corner) and the in-game *Performance OSD* (FPS, CPU per core, GPU, memory, fan, IP; background, position) |
 | **Keyboard** | Mouse control of the system UI, glyph key and emoji on the system keyboard |
 | **Debug** | DevKit/TestKit System Info overlay, "expired" banner |
@@ -167,14 +167,14 @@ measurements are in [docs/shell-menu.md](docs/shell-menu.md).
 
 1. Run the kernel exploit and start the external `elfldr` service.
 2. Send `AniketosHEN.elf` through the loader your exploit host provides.
-3. Wait for the utility daemon, `kstuff`, and the main daemon to start, in that order.
+3. Wait for the utility daemon, `kstuff`, ShadowMountPlus, and the main daemon to start, in that order (with a 2-second pause after `kstuff`).
 4. Use the **HEN** button on Home, or open PS5 Settings and enter the AniketosHEN Toolbox.
 
 Startup is sequential. After the first hop, AniketosHEN uses its own
 `onion_elfldr.elf` on port **9020** and keeps **9021** only as a fallback.
 
 ```text
-AniketosHEN.elf → bootstrapper → onion_elfldr.elf (:9020) → util.elf → kstuff.elf → daemon.elf → Toolbox
+AniketosHEN.elf → bootstrapper → onion_elfldr.elf (:9020) → util.elf → kstuff.elf → shadowmountplus.elf → daemon.elf → Toolbox
 ```
 
 External plugins are discovered and started by the daemon after `kstuff` is
@@ -372,6 +372,7 @@ the settings found in `/data/OnionHEN/config.ini` (see
 | `logging.level` | `info` | `off`, `error`, `warn`, `info`, `debug`, `trace` |
 | `reports.send` | `true` | `true`, `false` |
 | `kstuff.autoload` | `true` | `true`, `false` |
+| `shadowmount.autoload` | `true` | `true`, `false` |
 | `home_screen.show_title_ids` | `false` | `true`, `false` |
 | `game_menu.show_aniketoshen_options` | `true` | `true`, `false` (OnionHEN's `show_onionhen_options` is still read) |
 | `rest_mode.resume_reinject_delay_seconds` | `10` | `0` through `255` seconds |
@@ -553,6 +554,7 @@ Everything that OnionHEN does not have is credited to its original authors:
   and avatars (with automatic fitting of large animated avatars), Hide App, controller tools, keyboard and mouse for games, mouse control,
   the Visual Cheats Menu, game Information and trophy tools, error reports,
   the OnionHEN import and the AniketosHEN artwork.
+- ★ **andriushka.exe**
 - Designs the Shell Menu styles are recreated from (no code or assets of
   these projects are included):
   - **Akari** — [kernaltrap8/Akari](https://github.com/kernaltrap8/Akari), by kernaltrap8, original author **jordywastaken**; the order of the menu motion easings also follows Akari
@@ -581,6 +583,7 @@ Everything that OnionHEN does not have is credited to its original authors:
 - [PS5 Payload SDK](https://github.com/ps5-payload-dev/sdk) — Prospero toolchain and headers
 - [elfldr](https://github.com/ps5-payload-dev/elfldr) — John Törnblom; the private loader on port 9020 is built on its code; the external 9021 loader is not shipped
 - [kstuff-lite](https://github.com/EchoStretch/kstuff-lite) — EchoStretch, sleirsgoevy, and contributors; optional `kstuff.elf`
+- [ShadowMountPlus](https://github.com/drakmor/ShadowMountPlus) — drakmor and contributors; unmodified 1.7beta11 `shadowmountplus.elf`, GPL-3.0, loaded after `kstuff`
 - [onionHEN-ftpsrv-plugin](https://github.com/OnionBuddies/onionHEN-ftpsrv-plugin) — optional external FTP server plugin based on drakmor/ftpsrv
 - [onionHEN-shadowmountplus-plugin](https://github.com/OnionBuddies/onionHEN-shadowmountplus-plugin) — optional external ShadowMount+ plugin based on Drakmor's project
 - [libhijacker](https://github.com/astrelsky/libhijacker) — astrelsky; process hijack and kernel R/W

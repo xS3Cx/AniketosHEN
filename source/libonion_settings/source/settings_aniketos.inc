@@ -9,6 +9,9 @@ void apply_aniketos_keys(IniParser *parser, Settings *out) {
                                        out->cheats_visual_menu);
   if (const char *render = ini_get(parser, "cheats.visual_menu_render"))
     out->cheats_visual_render = std::strcmp(render, "pui3") == 0 ? 1 : 0;
+  out->shadowmount_autoload =
+      parse_bool(ini_get(parser, "shadowmount.autoload"),
+                 out->shadowmount_autoload);
 }
 
 /* [shell_menu]: keys are the field names. A missing or unparsable value
@@ -62,6 +65,11 @@ void append_cheats_visual_keys(std::string &b, const Settings &in) {
 }
 
 void append_shell_menu_section(std::string &b, const Settings &in) {
+  b += "\n";
+  b += "[shadowmount]\n";
+  b += "# autoload loads ShadowMountPlus before kstuff when " ONION_DIST_NAME " starts.\n";
+  b += "# Available values: true, false\n";
+  b += "autoload=" + bool_text(in.shadowmount_autoload) + "\n";
   b += "\n";
   b += "[shell_menu]\n";
   b += "# Shell Menu (L1+R3) and shell appearance. Managed from the menu itself;\n";

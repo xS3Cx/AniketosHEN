@@ -1,5 +1,8 @@
 # AniketosHEN build options, included by source/CMakeLists.txt.
 
+set(ONIONHEN_SHADOWMOUNT_ELF "${ONIONHEN_ROOT}/.cache/dependencies/shadowmountplus.elf"
+	CACHE FILEPATH "Path to the ShadowMountPlus ELF embedded by the bootstrapper")
+
 # Bug-report address shown in crash notifications (see <onion/distribution.h>).
 # Left empty, the notification names the tracker without a link.
 set(ANIKETOSHEN_ISSUES_URL "" CACHE STRING
@@ -27,5 +30,5 @@ endif()
 # Version shown to users (welcome notification, About page, Settings banner,
 # error reports). Bump it for every build handed out. Empty falls back to the
 # git tag, or dirty-<sha> for an untagged tree.
-set(ANIKETOSHEN_VERSION "0.04j" CACHE STRING
+set(ANIKETOSHEN_VERSION "0.04l" CACHE STRING
 	"Release version shown to users (empty: derive from git)")

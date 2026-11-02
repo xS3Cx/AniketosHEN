@@ -434,6 +434,7 @@ void system_look_pages(Page page, std::vector<Option> &options) {
                submenu(Page::ShellBackground),
                submenu(Page::ShellOutline),
                submenu(Page::ShellUIPanels),
+               submenu(Page::IconColor),
                strings(tr("vsh.toggles.style"), OptionId::ShellToggleStyle,
                        name ? name : tr("vsh.toggles.system"), count),
                toggle(tr("vsh.font.enable"), OptionId::CustomFontEnabled,
@@ -529,6 +530,24 @@ void system_look_pages(Page page, std::vector<Option> &options) {
                                g_settings.shell_ui_panels_animation_speed),
     };
     break;
+  case Page::IconColor: {
+    const int animation =
+        g_settings.system_icon_color_animation == 1 ? 1 : 0;
+    options = {
+        toggle(tr("vsh.icon_color.enable"), OptionId::IconColorEnabled,
+               g_settings.system_icon_color_enabled),
+        color_slider(tr("vsh.icon_color.color"), OptionId::ColorIcon),
+        strings(tr("vsh.common.animation"), OptionId::IconColorAnimation,
+                animation == 1 ? tr("vsh.icon_color.rainbow")
+                               : tr("vsh.animation.static"),
+                2),
+        slider_int(tr("vsh.common.animation_speed"),
+                   OptionId::IconColorAnimationSpeed,
+                   g_settings.system_icon_color_animation_speed,
+                   25, 400, 25),
+    };
+    break;
+  }
   default:
     break;
   }

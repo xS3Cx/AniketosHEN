@@ -30,7 +30,7 @@ AniketosHEN 是 PS5 的 All-in-One Homebrew Enabler，提供提权、后台服�
         │  2. remount /system、/system_ex
         │  3. unmount /update（阻止系统更新）
         │  4. 经 9021 启动内嵌 onion_elfldr.elf（监听 9020）
-        │  5. 将内嵌 ELF 字节经 9020 顺序启动：util → kstuff → daemon
+        │  5. 将内嵌 ELF 字节经 9020 顺序启动：util → kstuff → ShadowMountPlus → daemon
         │  6. 扫描并启动 /data/AniketosHEN/plugins/ 下带 descriptor 的 .elf
         ▼
 ┌───────────────┬────────────────┬──────────────────┐
@@ -48,7 +48,7 @@ AniketosHEN 是 PS5 的 All-in-One Homebrew Enabler，提供提权、后台服�
   Unix IPC                       ShellUI monitor bar
 ```
 
-**启动顺序串行：** util → kstuff → daemon。
+**启动顺序串行：** util → kstuff → ShadowMountPlus → daemon。
 
 - util 先提供网络/IPC 等服务
 - kstuff 需先完成 ShellUI 补丁
@@ -130,7 +130,7 @@ AniketosHEN/
 
 - 提权、分区 remount、阻止更新
 - 以 `.incbin` 嵌入 `onion_elfldr.elf`、`daemon.elf`、`util.elf`、`kstuff.elf` 与图标资源
-- 先用外部 9021 启动内置 `onion_elfldr.elf`，再通过 9020 启动 util / daemon / kstuff
+- 先用外部 9021 启动内置 `onion_elfldr.elf`，再通过 9020 启动 util / kstuff / ShadowMountPlus / daemon
 - 扫描并自动启动带 `.auto_start` 标记的用户 Payload ELF
 - 可选日志端口 **9088**
 
@@ -138,7 +138,7 @@ AniketosHEN/
 
 1. 检查 `127.0.0.1:9021` 上的外部 elfldr（首跳必需）
 2. 启动内置 `onion_elfldr.elf`，并通过握手确认 `127.0.0.1:9020`
-3. 顺序发送内部 ELF 字节：util → kstuff → daemon；9020 是正常路径，9021 仅承担引导/恢复职责
+3. 顺序发送内部 ELF 字节：util → kstuff → ShadowMountPlus → daemon；9020 是正常路径，9021 仅承担引导/恢复职责
 4. 各子 ELF 启动后把主线程名设为稳定进程名（`onion_util.elf` / `kstuff.elf` / `onion_daemon.elf`）
 5. 仅在 9020 健康时加载 `/data/AniketosHEN/payloads/` 下带 `.auto_start` 的用户 `.elf`；插件由
    `libonion_plugin_manager` 扫描 `/data/AniketosHEN/plugins/`，校验 `.onion_plugin`

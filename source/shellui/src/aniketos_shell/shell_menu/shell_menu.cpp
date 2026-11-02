@@ -31,6 +31,7 @@
 #include "aniketos_theme/clock/shell_clock.hpp"
 #include "aniketos_theme/color.hpp"
 #include "aniketos_theme/custom_font.hpp"
+#include "aniketos_theme/icon_color.hpp"
 #include "aniketos_theme/global_theme.hpp"
 #include "aniketos_theme/shell_background.hpp"
 #include "aniketos_theme/theme_config.hpp"

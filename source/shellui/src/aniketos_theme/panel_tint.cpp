@@ -6,6 +6,8 @@
 #include "aniketos_theme/customization.hpp"
 #include "aniketos_theme/panel_tint.hpp"
 
+#include "aniketos_theme/icon_color.hpp"
+
 #include "external_symbols.hpp"
 #include "hooked_funcs.hpp"
 #include "aniketos_theme/animation.hpp"
@@ -308,6 +310,10 @@ bool try_token_color_hook(MonoObject *manager, MonoString *managed_key,
                                       : std::string();
   const bool selected = surface_token(key);
   log_token_once(key, *color, selected);
+  const bool icon = IconColor::TokenIsIcon(key);
+  IconColor::LogTokenOnce(key, color->r, color->g, color->b, color->a, icon);
+  if (icon)
+    (void)IconColor::TintToken(key, &color->r, &color->g, &color->b);
   if (selected && panels_on())
     *color = tint(*color, animated_theme_color(MonotonicMs()));
   return found;

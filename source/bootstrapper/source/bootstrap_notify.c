@@ -18,4 +18,7 @@ void bootstrap_notify_starting(bool custom_icon_ready) {
   onion_notify_rich_toast("notify.brand", "notify.boot.starting",
                           custom_icon_ready ? ONION_NOTIFY_ICON_PATH : "",
                           "download", "588193128");
+  onion_notify_rich_toast("notify.boot.welcome_star", "notify.boot.loading",
+                          custom_icon_ready ? ONION_NOTIFY_ICON_PATH : "",
+                          "download", "588193129");
 }

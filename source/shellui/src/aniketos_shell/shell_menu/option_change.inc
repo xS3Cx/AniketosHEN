@@ -67,6 +67,10 @@ void write_slider_color(OptionId id, int position) {
     put(g_settings.shell_clock_date_r, g_settings.shell_clock_date_g,
         g_settings.shell_clock_date_b);
     break;
+  case OptionId::ColorIcon:
+    put(g_settings.system_icon_color_r, g_settings.system_icon_color_g,
+        g_settings.system_icon_color_b);
+    break;
   case OptionId::ColorLogo:
     put(g_settings.logo_color_r, g_settings.logo_color_g,
         g_settings.logo_color_b);
@@ -278,6 +282,8 @@ void finish_change(OptionId id) {
     ShellClock::RequestRefresh();
   if (is_shell_ui_panel_option(id))
     g_settings.shell_ui_panels_enabled = true;
+  if (is_icon_color_option(id))
+    AniketosTheme::IconColor::RequestApply();
   leave_global_theme(id);
   Telemetry::SetRefreshSeconds(g_settings.overlay_refresh_seconds);
   if (is_overlay_option(id))

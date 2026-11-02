@@ -65,6 +65,8 @@ bool &toggle_target(OptionId id) {
   case OptionId::ShellClockYear: return g_settings.shell_clock_show_year;
   case OptionId::ShellUIPanelsEnabled:
     return g_settings.shell_ui_panels_enabled;
+  case OptionId::IconColorEnabled:
+    return g_settings.system_icon_color_enabled;
   case OptionId::MenuControls: return g_settings.vsh_show_controls;
   case OptionId::CustomizationEnabled:
     return g_settings.shell_customization_enabled;
@@ -151,6 +153,10 @@ int &int_target(OptionId id) {
     return g_settings.shell_ui_panels_strength;
   case OptionId::ShellUIPanelsOpacity:
     return g_settings.shell_ui_panels_opacity;
+  case OptionId::IconColorAnimation:
+    return g_settings.system_icon_color_animation;
+  case OptionId::IconColorAnimationSpeed:
+    return g_settings.system_icon_color_animation_speed;
   case OptionId::ShellGlowIntensity:
     return g_settings.shell_background_glow_intensity;
   case OptionId::ShellTilesCornerRadius:

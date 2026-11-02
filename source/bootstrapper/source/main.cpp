@@ -83,6 +83,8 @@ int main(void) {
   bootstrap_filesystem_disable_updates();
 
   const BootstrapLaunchPlan plan = {
+      .shadowmount_autoload =
+          config.shadowmount_autoload && level < ONION_BOOT_MINIMAL,
       .kstuff_autoload = config.kstuff_autoload && level < ONION_BOOT_MINIMAL,
       .kstuff_user_override = level == ONION_BOOT_NORMAL,
       .launch_daemon = level < ONION_BOOT_RECOVERY,

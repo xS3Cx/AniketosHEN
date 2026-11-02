@@ -31,5 +31,14 @@ extern void (*mono_field_static_get_value)(MonoVTable* vt,
                                            void* value);
 extern MonoObject* (*mono_object_clone)(MonoObject* obj);
 extern MonoClass* (*mono_class_get_parent)(MonoClass* klass);
+extern MonoClassField* (*mono_class_get_fields)(MonoClass* klass, void** iter);
+extern const char* (*mono_field_get_name)(MonoClassField* field);
+extern MonoType* (*mono_field_get_type)(MonoClassField* field);
+extern uint32_t (*mono_field_get_flags)(MonoClassField* field);
+struct MonoTableInfo;
+
+extern const MonoTableInfo* (*mono_image_get_table_info)(MonoImage* image, int table_id);
+extern int (*mono_table_info_get_rows)(const MonoTableInfo* table);
+extern MonoClass* (*mono_class_get)(MonoImage* image, uint32_t type_token);
 extern void (*mono_field_set_value)(MonoObject* obj, MonoClassField* field,
                                     void* value);

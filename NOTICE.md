@@ -84,6 +84,14 @@ The kernel-side helpers, the cheat engine, the plugin runtime and the loaders
 are as OnionHEN has them. Every OnionHEN name that was deliberately kept is
 listed in [docs/aniketoshen-migration.md](docs/aniketoshen-migration.md).
 
+## Embedded third-party binaries
+
+- **ShadowMountPlus 1.7beta11** - <https://github.com/drakmor/ShadowMountPlus>
+  - License: GPL-3.0
+  - The unmodified `shadowmountplus.elf` release asset is downloaded and
+    SHA-256 verified at build time by `scripts/sync_dependencies.sh`, then
+    embedded in the bootstrapper.
+
 ## Not affiliated
 
 AniketosHEN is not endorsed by, or affiliated with, the OnionHEN or etaHEN

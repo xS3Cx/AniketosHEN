@@ -14,6 +14,10 @@ MonoObject *Root();
 /* Home's root and no other scene's: null while Home is not there. */
 MonoObject *OwnRoot();
 bool Contains(MonoObject *widget);
+/* Calls `visit` with the root widget of every scene in ShellUI's scene tree,
+ * sub-scenes and modal scenes included. */
+void VisitSceneRoots(void (*visit)(MonoObject *root, void *context),
+                     void *context);
 
 /* Gives IsDisposed the getter of `widget_class` or a base of it. Until then
  * nothing counts as disposed. */

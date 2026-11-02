@@ -2,6 +2,7 @@
 # Sync / build external dependencies for AniketosHEN.
 #
 # Embedded payload input: kstuff.elf
+# Also embedded: shadowmountplus.elf (ShadowMountPlus 1.7beta11, GPL-3.0)
 # Also built from source: onion_elfldr.elf (private 9020 runtime loader)
 # Removed: external elfldr.elf (9021 service), ps5debug, ps5-app-dumper, Byepervisor/hen.bin
 #
@@ -28,6 +29,12 @@ KSTUFF_SOURCE_DIR="${TP}/kstuff-lite"
 # Real release blob is hundreds of KB+; stubs are tiny markers.
 KSTUFF_MIN_BYTES=65536
 
+# ShadowMountPlus 1.7beta11, loaded after kstuff and before the daemon.
+SHADOWMOUNT_VERSION="1.7beta11"
+SHADOWMOUNT_URL="https://github.com/drakmor/ShadowMountPlus/releases/download/${SHADOWMOUNT_VERSION}/shadowmountplus.elf"
+SHADOWMOUNT_SHA256="08c843018750bef013fe3a4de5f80c5c9738c6c2dafa2406e6b6e68d7585f3da"
+SHADOWMOUNT_MIN_BYTES=1048576
+
 log()  { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
 ok()   { printf '\033[1;32m[ok]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[warn]\033[0m %s\n' "$*"; }
@@ -39,6 +46,7 @@ Sync AniketosHEN external dependencies from open-source upstreams.
 
 Submodules (under third_party/):
   kstuff-lite      https://github.com/EchoStretch/kstuff-lite
+  shadowmountplus  https://github.com/drakmor/ShadowMountPlus   GPL-3.0
 Runtime-only external dependency:
   elfldr @ 9021    https://github.com/ps5-payload-dev/elfldr
                   Required only for initial bootstrap; AniketosHEN starts
@@ -188,6 +196,42 @@ sync_kstuff() {
   die "kstuff.elf unavailable (prefer release download)"
 }
 
+shadowmount_looks_cached() {
+  local path="$1"
+  [[ -f "${path}" ]] || return 1
+  local sz
+  sz="$(wc -c < "${path}" | tr -d ' ')"
+  if [[ "${sz}" -lt "${SHADOWMOUNT_MIN_BYTES}" ]]; then
+    return 1
+  fi
+  if head -c 32 "${path}" 2>/dev/null | grep -Eq '(AniketosHEN|OnionHEN)-STUB'; then
+    return 1
+  fi
+  [[ "$(file_sha256 "${path}")" == "${SHADOWMOUNT_SHA256}" ]]
+}
+
+sync_shadowmount() {
+  local dest="${CACHE}/shadowmountplus.elf"
+
+  if [[ "${FORCE_DOWNLOAD}" -eq 0 ]] &&
+      shadowmount_looks_cached "${dest}"; then
+    ok "shadowmountplus.elf already present ($(wc -c < "${dest}" | tr -d ' ') bytes) -- skip download"
+    return 0
+  fi
+
+  log "shadowmount: download ShadowMountPlus ${SHADOWMOUNT_VERSION}"
+  if download_verified "${SHADOWMOUNT_URL}" "${dest}" "${SHADOWMOUNT_SHA256}"; then
+    ok "shadowmountplus.elf (ShadowMountPlus ${SHADOWMOUNT_VERSION}, sha256 verified)"
+    return 0
+  fi
+
+  if [[ "${STUB_MISSING}" -eq 1 ]]; then
+    stub "${dest}" "shadowmountplus.elf"
+    return 0
+  fi
+  die "shadowmountplus.elf unavailable (release download failed)"
+}
+
 main() {
   log "AniketosHEN dependency sync"
   echo "  third_party = ${TP}"
@@ -203,9 +247,10 @@ main() {
   fi
 
   sync_kstuff
+  sync_shadowmount
 
   log "Dependency sync done"
-  ls -lah "${CACHE}/kstuff.elf" 2>/dev/null || true
+  ls -lah "${CACHE}/kstuff.elf" "${CACHE}/shadowmountplus.elf" 2>/dev/null || true
 }
 
 main

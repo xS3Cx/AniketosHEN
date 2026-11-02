@@ -160,6 +160,10 @@ AniketosTheme::RGB color_of(OptionId id) {
   case OptionId::ColorPanels:
     return rgb_of(g_settings.shell_ui_panels_r, g_settings.shell_ui_panels_g,
                   g_settings.shell_ui_panels_b);
+  case OptionId::ColorIcon:
+    return rgb_of(g_settings.system_icon_color_r,
+                  g_settings.system_icon_color_g,
+                  g_settings.system_icon_color_b);
   case OptionId::ColorClockTime:
     return rgb_of(g_settings.shell_clock_time_r, g_settings.shell_clock_time_g,
                   g_settings.shell_clock_time_b);

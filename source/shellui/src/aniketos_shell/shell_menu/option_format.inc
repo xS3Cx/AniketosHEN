@@ -29,6 +29,7 @@ const char *page_title(Page page) {
   case Page::ShellTiles: return tr("vsh.m.tiles");
   case Page::HomeProfile: return tr("vsh.m.profile");
   case Page::SystemCustomize: return tr("vsh.m.system_look");
+  case Page::IconColor: return tr("vsh.m.icon_color");
   case Page::GlobalCustomization: return tr("vsh.m.global_theme");
   case Page::ShellBackground: return tr("vsh.m.system_bg");
   case Page::ShellOutline: return tr("vsh.m.outlines");

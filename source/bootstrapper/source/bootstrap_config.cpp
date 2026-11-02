@@ -68,6 +68,7 @@ bool bootstrap_config_load(BootstrapConfig *config) {
   std::snprintf(config->firmware_text, sizeof(config->firmware_text),
                 "%x.%02x", (version.version >> 24) & 0xffu,
                 (version.version >> 16) & 0xffu);
+  config->shadowmount_autoload = settings.shadowmount_autoload;
   config->kstuff_autoload = settings.kstuff_autoload;
   return true;
 }

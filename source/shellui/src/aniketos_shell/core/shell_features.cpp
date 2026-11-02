@@ -26,6 +26,7 @@
 #include "aniketos_shell/toolbox/kbm_toolbox.hpp"
 #include "aniketos_theme/clock/shell_clock.hpp"
 #include "aniketos_theme/custom_font.hpp"
+#include "aniketos_theme/icon_color.hpp"
 #include "aniketos_theme/panel_tint.hpp"
 #include "aniketos_theme/theme_manager.hpp"
 #include "aniketos_theme/tiles/home_tiles.hpp"
@@ -43,6 +44,7 @@ void Install(MonoImage *react_pui, MonoImage *pui) {
      there; none of them is required for the Toolbox. */
   AniketosTheme::HomeTiles::Install(react_pui, pui);
   AniketosTheme::PanelTint::Install(pui);
+  AniketosTheme::IconColor::Install(pui);
   AniketosTheme::ToggleStyles::Install(pui);
   ShellClock::Install(pui);
   SystemDialogs::Install(pui);
@@ -94,6 +96,7 @@ void BeforeNativeFrame() {
   {
     Profile::Scope scope(Profile::kSharedUi);
     AniketosTheme::PanelTint::Tick();
+    AniketosTheme::IconColor::Tick();
   }
   {
     Profile::Scope scope(Profile::kTheme);

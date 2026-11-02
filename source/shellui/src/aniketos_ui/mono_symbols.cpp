@@ -23,6 +23,13 @@ void (*mono_field_static_get_value)(MonoVTable* vt, MonoClassField* field,
                                     void* value) = nullptr;
 MonoObject* (*mono_object_clone)(MonoObject* obj) = nullptr;
 MonoClass* (*mono_class_get_parent)(MonoClass* klass) = nullptr;
+MonoClassField* (*mono_class_get_fields)(MonoClass* klass, void** iter) = nullptr;
+const char* (*mono_field_get_name)(MonoClassField* field) = nullptr;
+MonoType* (*mono_field_get_type)(MonoClassField* field) = nullptr;
+uint32_t (*mono_field_get_flags)(MonoClassField* field) = nullptr;
+const MonoTableInfo* (*mono_image_get_table_info)(MonoImage* image, int table_id) = nullptr;
+int (*mono_table_info_get_rows)(const MonoTableInfo* table) = nullptr;
+MonoClass* (*mono_class_get)(MonoImage* image, uint32_t type_token) = nullptr;
 void (*mono_field_set_value)(MonoObject* obj, MonoClassField* field,
                              void* value) = nullptr;
 
@@ -50,4 +57,11 @@ void ResolveReflectionSymbols(int libmono) {
   KERNEL_DLSYM(libmono, mono_object_clone);
   KERNEL_DLSYM(libmono, mono_class_get_parent);
   KERNEL_DLSYM(libmono, mono_field_set_value);
+  KERNEL_DLSYM(libmono, mono_class_get_fields);
+  KERNEL_DLSYM(libmono, mono_field_get_name);
+  KERNEL_DLSYM(libmono, mono_field_get_type);
+  KERNEL_DLSYM(libmono, mono_field_get_flags);
+  KERNEL_DLSYM(libmono, mono_image_get_table_info);
+  KERNEL_DLSYM(libmono, mono_table_info_get_rows);
+  KERNEL_DLSYM(libmono, mono_class_get);
 }

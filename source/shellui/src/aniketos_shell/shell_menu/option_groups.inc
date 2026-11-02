@@ -64,6 +64,18 @@ bool is_shell_ui_panel_option(OptionId id) {
   }
 }
 
+bool is_icon_color_option(OptionId id) {
+  switch (id) {
+  case OptionId::IconColorEnabled:
+  case OptionId::IconColorAnimation:
+  case OptionId::IconColorAnimationSpeed:
+  case OptionId::ColorIcon:
+    return true;
+  default:
+    return false;
+  }
+}
+
 bool is_global_theme_owned_option(OptionId id) {
   if (is_shell_background_option(id) || is_shell_tile_option(id) ||
       is_shell_ui_panel_option(id))

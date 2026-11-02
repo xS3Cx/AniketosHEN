@@ -57,6 +57,7 @@ void reset_vsh_settings() {
   PowerIndicator::RestoreNormal();
   reset_highlight_for_theme_change();
   reapply_customization();
+  AniketosTheme::IconColor::RequestApply();
   Telemetry::SetRefreshSeconds(g_settings.overlay_refresh_seconds);
 }
 
@@ -197,6 +198,8 @@ void after_media_toggle(OptionId id, bool on) {
 void flip_toggle(OptionId id) {
   bool &target = toggle_target(id);
   target = !target;
+  if (id == OptionId::IconColorEnabled)
+    AniketosTheme::IconColor::RequestApply();
   const bool on = target;
   /* the game bar shows the average or every core, not both */
   if (on && id == OptionId::PerformanceOverlayCpu)
