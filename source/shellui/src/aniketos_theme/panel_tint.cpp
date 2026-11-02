@@ -310,10 +310,7 @@ bool try_token_color_hook(MonoObject *manager, MonoString *managed_key,
                                       : std::string();
   const bool selected = surface_token(key);
   log_token_once(key, *color, selected);
-  const bool icon = IconColor::TokenIsIcon(key);
-  IconColor::LogTokenOnce(key, color->r, color->g, color->b, color->a, icon);
-  if (icon)
-    (void)IconColor::TintToken(key, &color->r, &color->g, &color->b);
+  (void)IconColor::TintToken(key, &color->r, &color->g, &color->b);
   if (selected && panels_on())
     *color = tint(*color, animated_theme_color(MonotonicMs()));
   return found;

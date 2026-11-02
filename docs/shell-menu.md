@@ -201,16 +201,13 @@ the colour slider sets the icon colour, the animation is Static or Rainbow,
 and its speed is adjustable. App and game icons, artwork, avatars and
 wallpapers are untouched.
 
-`source/shellui/src/aniketos_theme/icon_color.cpp` finds the PUI type that
+`source/shellui/src/aniketos_theme/icon_color/` finds the PUI type that
 exposes `IconFilterColor`, checks that its setter is `void(UIColor)`, and only
-then installs a detour. The detour replaces the colour and remembers the
-original of each object it sees, so turning the feature off restores them.
-When the same type has `EnableIconFilterColor`, it is switched on with the
-feature. If the setter is never called, the existing
+then installs a detour. The detour replaces the colour and tracks each object
+it sees, so turning the feature off puts them back to plain white, the stock
+colour. If the setter is never called, the existing
 `StyleManager.TryGetComponentTokenColor` hook is the fallback: component
 tokens whose key contains `icon` take the chosen colour, preserving alpha.
-The diagnostic file `/user/data/AniketosHEN/icon_color.log` records the
-discovery result, the icon token keys and the first applies.
 
 Settings screen icons are not covered yet (TODO). Those rows expose their
 glyph through `MenuListItem.iconElement`, a `Lazy<ImageElement>` whose element
