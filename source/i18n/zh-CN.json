@@ -1069,6 +1069,8 @@
     "notify.payload.config_invalid": "请输入 0 到 %d 之间的整数。",
     "notify.payload.config_save_failed": "无法保存 Payload 配置：%s",
     "notify.boot.starting": "AniketosHEN 正在启动...",
+    "notify.boot.welcome_star": "★ Welcome to AniketosHEN",
+    "notify.boot.loading": "Loading Kstuff...\nLoading ShadowMountPlus...",
     "notify.boot.welcome": "欢迎使用 AniketosHEN",
     "notify.boot.goto_toolbox": "前往 AniketosHEN 工具箱",
     "notify.boot.made_by": " · 作者：",

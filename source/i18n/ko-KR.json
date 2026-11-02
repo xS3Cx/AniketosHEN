@@ -1069,6 +1069,8 @@
     "notify.payload.config_invalid": "0에서 %d 사이의 정수를 입력하세요.",
     "notify.payload.config_save_failed": "Payload 설정을 저장하지 못했습니다: %s",
     "notify.boot.starting": "AniketosHEN을 시작하는 중...",
+    "notify.boot.welcome_star": "★ Welcome to AniketosHEN",
+    "notify.boot.loading": "Loading Kstuff...\nLoading ShadowMountPlus...",
     "notify.boot.welcome": "AniketosHEN에 오신 것을 환영합니다",
     "notify.boot.goto_toolbox": "AniketosHEN 툴박스로 이동",
     "notify.boot.made_by": " · 제작: ",

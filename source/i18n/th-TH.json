@@ -1069,6 +1069,8 @@
     "notify.payload.config_invalid": "กรุณาป้อนจำนวนเต็มตั้งแต่ 0 ถึง %d",
     "notify.payload.config_save_failed": "ไม่สามารถบันทึกการตั้งค่า Payload: %s",
     "notify.boot.starting": "AniketosHEN กำลังเริ่มทำงาน...",
+    "notify.boot.welcome_star": "★ Welcome to AniketosHEN",
+    "notify.boot.loading": "Loading Kstuff...\nLoading ShadowMountPlus...",
     "notify.boot.welcome": "ยินดีต้อนรับสู่ AniketosHEN",
     "notify.boot.goto_toolbox": "ไปที่ AniketosHEN Toolbox",
     "notify.boot.made_by": " สร้างโดย ",

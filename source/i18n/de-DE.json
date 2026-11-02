@@ -1069,6 +1069,8 @@
     "notify.payload.config_invalid": "Gib eine ganze Zahl zwischen 0 und %d ein.",
     "notify.payload.config_save_failed": "Payload-Einstellungen konnten nicht gespeichert werden: %s",
     "notify.boot.starting": "AniketosHEN wird gestartet...",
+    "notify.boot.welcome_star": "★ Welcome to AniketosHEN",
+    "notify.boot.loading": "Loading Kstuff...\nLoading ShadowMountPlus...",
     "notify.boot.welcome": "Willkommen bei AniketosHEN",
     "notify.boot.goto_toolbox": "Zur AniketosHEN-Toolbox",
     "notify.boot.made_by": " · von ",
