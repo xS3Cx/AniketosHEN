@@ -72,6 +72,14 @@ OnionHEN at commit `b23ffe6` are:
 - Settings added to `source/libonion_settings` for the above, and strings in
   all fourteen languages of `source/i18n`.
 
+- Automatic fitting of large animated avatars to a 256×256 GIF (192×192 or
+  128×128 when the 150 KB cap requires it), cached under the avatar directory.
+  Three unmodified upstream single-header libraries under `third_party/`
+  implement it: `stb/stb_image.h` (public domain / MIT, Sean Barrett and
+  contributors), `stb/stb_image_resize2.h` (public domain, Jeff Roberts and
+  Jorge L. Rodriguez) and `msf_gif/msf_gif.h` (MIT or public domain, Miles
+  Fogle).
+
 The kernel-side helpers, the cheat engine, the plugin runtime and the loaders
 are as OnionHEN has them. Every OnionHEN name that was deliberately kept is
 listed in [docs/aniketoshen-migration.md](docs/aniketoshen-migration.md).

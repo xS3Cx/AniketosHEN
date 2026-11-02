@@ -73,6 +73,7 @@ its own on top.
 - **Remote Play pairing** — enable the native PS5 Remote Play service, generate a pairing PIN, and register a client from the Network section
 - **User payload manager** — start and stop user-provided `.elf` payloads, with optional auto-start
 - **Game overlay** — an in-game bar for FPS, CPU, GPU, RAM, temperatures, and network info
+- **Game Options menu** — Cheats, trophy unlock, **Copy / Move** and **Hide App** on a game's or app's Options menu, with a Hidden apps page that brings hidden tiles back
 - **Cheat engine** — local JSON, SHN, MC4, and ShnExt files that can be toggled at runtime
 - **DPI v2** — available as the optional external `onionHEN-dpiv2-plugin`
 - **Console tools** — account activation, external HDD, Title IDs, fan control, shortcuts, and game options
@@ -134,6 +135,10 @@ A live readout of the console. Rows that a console cannot provide are left out.
   slider (the controller takes the colour as it moves), run an animation
   on it (breathing, pulse, rainbow, fast spectrum, neon wave), or restore
   system control.
+- **Hidden apps** — the apps taken off Home by *Hide App* in their Options
+  menu. *Show <name>* puts one back, *Show all hidden apps* puts them all
+  back, and *Filter hidden apps* (`home_hide_apps` in `[shell_menu]`, on by
+  default) turns the Home filter off without emptying the list.
 
 ### OSD
 

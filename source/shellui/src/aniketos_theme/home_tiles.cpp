@@ -1075,6 +1075,8 @@ MonoString *DecorateSpaceSwitcherLabel(MonoObject *label, MonoString *text) {
       symbol = kMediaSymbol;
   }
   if (!symbol) {
+    if (!HomeTabs::IsHomeTabLabel(label))
+      return text;
     int tab = localized_space_tab(original);
     /* the bookmark's caption is the user's name as typed, which may be a
        stock tab's word ("Games", "Gry", "Media"): it is not that tab */

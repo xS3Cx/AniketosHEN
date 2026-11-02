@@ -31,6 +31,8 @@ inline constexpr int kEmulatorsContentLimit = 7771;
 /* Home's own tabs, the ones that can be renamed. */
 enum class StockTab { Games, Media };
 
+bool IsHomeTabLabel(MonoObject *label);
+
 /* Whether the tabs carry their glyphs (home_tab_icons). */
 bool IconsShown();
 /* A tab's caption: `name` with `glyph` in front, unless the icons are

@@ -228,7 +228,7 @@ name that starts with a glyph of the user's shows that one instead of ours.
 
 ## Bookmark tab, and copying or moving between tabs
 
-A game's or app's Options menu has *Copy / move*, with AniketosHEN's star
+A game's or app's Options menu has *Copy / Move*, with AniketosHEN's star
 in front. It opens a menu like the HEN button's: *Copy to*, *Move to* and
 *Remove from*, each opening the tabs under the names they have now: Games,
 Media (a name of the user's if they were renamed) and the bookmark. A copy
@@ -264,6 +264,36 @@ Emulators, the bookmark).
   a list in `home_bookmark.json` and a filter on the queries.
 - **Safety:** with the setting off, or `no_home_js` in `/data/AniketosHEN`,
   Home stays as the system has it, moved titles back in their rows.
+
+## Hidden apps
+
+A game's or app's Options menu has *Hide App*, with the same star as the
+other AniketosHEN entries, after *Copy / Move* and before Sony's *Delete*. It
+takes the tile out of Home's Games, Media, Emulators and
+bookmark rows without uninstalling anything and without writing to the system's
+app database: the query hook of `home_tabs.cpp` adds
+`AND (icon.titleId NOT IN (...))` to those four queries. The app stays
+launchable from Search and the library, which is the safety net.
+
+*Console → Hidden apps* keeps the list:
+
+- *Filter hidden apps* (`home_hide_apps` in `[shell_menu]`, on by default):
+  off, every app shows again and the list is kept;
+- *Show <name>*: one app goes back to Home;
+- *Show all hidden apps*: every app in the list goes back;
+- *No hidden apps*: the list is empty.
+
+- **Settings:** `home_hide_apps` in `[shell_menu]`; the list is
+  `/data/AniketosHEN/hidden_apps.json` (`{"version":1,"hidden":[...]}`).
+- **How it works:** `hook_launch.cpp` adds the entry at the first of
+  `MENU_ID_APPLICATION_DELETE` and `MENU_ID_CHECK_PATCH` it meets, one block
+  per menu (a 500 ms gap between bursts of entries tells a new menu apart); the
+  URI comes back through the boot hook and `home_hidden.cpp` records the
+  Title ID, writes the file atomically, reloads Home, and shows a toast. The
+  name shown in the list is read from `/user/app/<TID>/sce_sys/param.json`
+  and cached, so rebuilding the page every frame does not read the disk.
+- **Safety:** delete `/data/AniketosHEN/hidden_apps.json` over FTP, or turn
+  `home_hide_apps` off, to bring every app back.
 
 ## More on the Information screen
 

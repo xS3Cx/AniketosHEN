@@ -66,13 +66,19 @@ set_source_files_properties("${ANIKETOS_ICON_ASSEMBLY}" PROPERTIES
 
 file(GLOB SrcFiles CONFIGURE_DEPENDS ${D_SRC}/*.c ${D_SRC}/*.cpp ${D_SRC}/../include/*.h ${D_SRC}/../include/*.hpp ${D_SRC}/*.s ${ONIONHEN_THIRD_PARTY_DIR}/cjson/*.cpp ${ONIONHEN_THIRD_PARTY_DIR}/cjson/*.hpp)
 
+set(AVATAR_CODEC_SOURCE "${D_SRC}/aniketos_shell/avatar_codec.c")
+set_source_files_properties("${AVATAR_CODEC_SOURCE}" PROPERTIES
+	COMPILE_OPTIONS "-w;-std=gnu17"
+	C_STANDARD 17
+	C_STANDARD_REQUIRED ON)
+
 set(CMAKE_C_FLAGS "${ONION_PS5_TARGET_FLAGS} ")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-nested-anon-types -Wno-gnu-anonymous-struct -Wno-zero-length-array -Wno-keyword-macro -fPIC -fPIE -march=znver2 -Wall -Werror -fstack-protector-all -ffunction-sections -fdata-sections")
 set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -gfull -gdwarf-2 -pedantic -pedantic-errors")
 set(CMAKE_C_FLAGS_RELEASE "-Os -DNDEBUG")
 set(CMAKE_CXX_FLAGS_RELEASE "-Os -DNDEBUG")
 
-target_sources(${PROJECT_NAME} PRIVATE ${SrcFiles} ${ShellMenuSrc} "${ANIKETOS_ICON_ASSEMBLY}")
+target_sources(${PROJECT_NAME} PRIVATE ${SrcFiles} ${ShellMenuSrc} "${AVATAR_CODEC_SOURCE}" "${ANIKETOS_ICON_ASSEMBLY}")
 add_dependencies(${PROJECT_NAME} shellui_i18n_catalog onion_version onion_ipc onion_settings onion_detour onion_proc onion_platform onion_ready onion_plugin_ui onion_plugin_bridge onion_kbm onion_kbm_profile)
 onion_target_debug_define(${PROJECT_NAME})
 target_include_directories(${PROJECT_NAME} PRIVATE
@@ -80,7 +86,9 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 	"${D_CWD}/include"
 	"${I18N_GENERATED_DIR}"
 	"${ONIONHEN_THIRD_PARTY_DIR}/cjson"
+	"${ONIONHEN_THIRD_PARTY_DIR}/msf_gif"
 	"${ONIONHEN_THIRD_PARTY_DIR}/sha1"
+	"${ONIONHEN_THIRD_PARTY_DIR}/stb"
 	"${PROJECT_ROOT}/libonion_ipc/include"
 	"${PROJECT_ROOT}/libonion_settings/include"
 	"${PROJECT_ROOT}/libonion_detour/include"

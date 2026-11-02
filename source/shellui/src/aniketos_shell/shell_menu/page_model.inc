@@ -1,5 +1,13 @@
 const char *tr(const char *key) { return toolbox_i18n::tr(key); }
 
+std::string with_name(const char *key, const std::string &name) {
+  const std::string text = tr(key);
+  const size_t at = text.find("%s");
+  return at == std::string::npos
+             ? text
+             : text.substr(0, at) + name + text.substr(at + 2);
+}
+
 const char *menu_header_text() { return kMenuBrandName; }
 
 const char *menu_footer_text() { return "https://goodfeelings.cc"; }
@@ -9,6 +17,7 @@ const char *page_title(Page page) {
   case Page::Main: return tr("vsh.m.main");
   case Page::ConsoleManagement: return tr("vsh.m.console");
   case Page::Information: return tr("vsh.m.info");
+  case Page::HiddenApps: return tr("vsh.m.hidden_apps");
   case Page::Power: return tr("vsh.m.power");
   case Page::Fan: return tr("vsh.m.fan");
   case Page::PowerIndicator: return tr("vsh.m.power_light");
@@ -399,11 +408,30 @@ std::vector<Option> build_page(Page page) {
   /* ---- Console ---- */
   case Page::ConsoleManagement:
     options = {submenu(tr("vsh.m.info"), Page::Information),
+               submenu(tr("vsh.m.hidden_apps"), Page::HiddenApps),
                submenu(tr("vsh.m.power"), Page::Power),
                submenu(tr("vsh.m.fan"), Page::Fan),
                submenu(tr("vsh.m.power_light"), Page::PowerIndicator),
                submenu(tr("vsh.m.buzzer"), Page::Buzzer)};
     break;
+  case Page::HiddenApps: {
+    const std::vector<HomeHidden::Entry> hidden = HomeHidden::List();
+    options.push_back(toggle(tr("vsh.hidden.enable"), OptionId::HomeHideApps,
+                             g_settings.home_hide_apps));
+    for (const HomeHidden::Entry &entry : hidden) {
+      Option row = action(tr("vsh.hidden.show_fmt"), OptionId::HiddenAppShow);
+      row.title = with_name("vsh.hidden.show_fmt", entry.name);
+      row.external_key = entry.title_id;
+      options.push_back(row);
+    }
+    if (hidden.size() > 1)
+      options.push_back(
+          action(tr("vsh.hidden.show_all"), OptionId::HiddenAppsShowAll));
+    if (hidden.empty())
+      options.push_back(value(tr("vsh.hidden.none"), ""));
+    options.push_back(value(tr("vsh.hidden.hint"), ""));
+    break;
+  }
   case Page::Information:
     /* who the console is, its software, its hardware, then memory, disk and
        network; the button that shows the hidden numbers comes last */
