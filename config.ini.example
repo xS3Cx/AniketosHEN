@@ -125,3 +125,8 @@ toolbox=off
 # autoload loads kstuff when AniketosHEN starts.
 # Available values: true, false
 autoload=true
+
+[shadowmount]
+# autoload loads ShadowMountPlus before kstuff when AniketosHEN starts.
+# Available values: true, false
+autoload=true

@@ -11,6 +11,8 @@ extern "C" {
 /** What this start may launch; narrowed by the boot level
  *  (<onion/boot_safety.h>) after starts that did not finish. */
 typedef struct BootstrapLaunchPlan {
+  /* config.ini [shadowmount] autoload; off from the minimal level on. */
+  bool shadowmount_autoload;
   /* config.ini [kstuff] autoload; off from the minimal level on. */
   bool kstuff_autoload;
   /* /data/AniketosHEN/kstuff.elf may replace the built-in kstuff. Off in any
@@ -21,7 +23,7 @@ typedef struct BootstrapLaunchPlan {
   bool launch_daemon;
 } BootstrapLaunchPlan;
 
-/** Launch the owned util, kstuff and daemon dependency chain. */
+/** Launch the owned util, ShadowMountPlus, kstuff and daemon dependency chain. */
 int bootstrap_launch_services(uint32_t firmware_version,
                               const BootstrapLaunchPlan *plan);
 

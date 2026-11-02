@@ -11,6 +11,7 @@ extern "C" {
 typedef struct BootstrapConfig {
   uint32_t firmware_version;
   char firmware_text[32]; /* e.g. "11.40", for reports */
+  bool shadowmount_autoload;
   bool kstuff_autoload;
 } BootstrapConfig;
 

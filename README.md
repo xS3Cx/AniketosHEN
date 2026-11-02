@@ -167,14 +167,14 @@ measurements are in [docs/shell-menu.md](docs/shell-menu.md).
 
 1. Run the kernel exploit and start the external `elfldr` service.
 2. Send `AniketosHEN.elf` through the loader your exploit host provides.
-3. Wait for the utility daemon, `kstuff`, and the main daemon to start, in that order.
+3. Wait for the utility daemon, `kstuff`, ShadowMountPlus, and the main daemon to start, in that order (with a 2-second pause after `kstuff`).
 4. Use the **HEN** button on Home, or open PS5 Settings and enter the AniketosHEN Toolbox.
 
 Startup is sequential. After the first hop, AniketosHEN uses its own
 `onion_elfldr.elf` on port **9020** and keeps **9021** only as a fallback.
 
 ```text
-AniketosHEN.elf → bootstrapper → onion_elfldr.elf (:9020) → util.elf → kstuff.elf → daemon.elf → Toolbox
+AniketosHEN.elf → bootstrapper → onion_elfldr.elf (:9020) → util.elf → kstuff.elf → shadowmountplus.elf → daemon.elf → Toolbox
 ```
 
 External plugins are discovered and started by the daemon after `kstuff` is
@@ -372,6 +372,7 @@ the settings found in `/data/OnionHEN/config.ini` (see
 | `logging.level` | `info` | `off`, `error`, `warn`, `info`, `debug`, `trace` |
 | `reports.send` | `true` | `true`, `false` |
 | `kstuff.autoload` | `true` | `true`, `false` |
+| `shadowmount.autoload` | `true` | `true`, `false` |
 | `home_screen.show_title_ids` | `false` | `true`, `false` |
 | `game_menu.show_aniketoshen_options` | `true` | `true`, `false` (OnionHEN's `show_onionhen_options` is still read) |
 | `rest_mode.resume_reinject_delay_seconds` | `10` | `0` through `255` seconds |
@@ -580,6 +581,7 @@ Everything that OnionHEN does not have is credited to its original authors:
 - [PS5 Payload SDK](https://github.com/ps5-payload-dev/sdk) — Prospero toolchain and headers
 - [elfldr](https://github.com/ps5-payload-dev/elfldr) — John Törnblom; the private loader on port 9020 is built on its code; the external 9021 loader is not shipped
 - [kstuff-lite](https://github.com/EchoStretch/kstuff-lite) — EchoStretch, sleirsgoevy, and contributors; optional `kstuff.elf`
+- [ShadowMountPlus](https://github.com/drakmor/ShadowMountPlus) — drakmor and contributors; unmodified 1.7beta11 `shadowmountplus.elf`, GPL-3.0, loaded after `kstuff`
 - [onionHEN-ftpsrv-plugin](https://github.com/OnionBuddies/onionHEN-ftpsrv-plugin) — optional external FTP server plugin based on drakmor/ftpsrv
 - [onionHEN-shadowmountplus-plugin](https://github.com/OnionBuddies/onionHEN-shadowmountplus-plugin) — optional external ShadowMount+ plugin based on Drakmor's project
 - [libhijacker](https://github.com/astrelsky/libhijacker) — astrelsky; process hijack and kernel R/W
