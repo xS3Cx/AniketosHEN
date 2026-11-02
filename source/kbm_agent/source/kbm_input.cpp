@@ -1,6 +1,5 @@
 /* Keyboard and mouse input inside the game: see kbm_input.hpp. The calls,
-   structures and event ids are the ones proven in GTA V on 11.40
-   (.docker/kbm-agent/agent.c). */
+   structures and event ids are the ones proven in GTA V on 11.40. */
 #include "kbm_input.hpp"
 
 #include <atomic>

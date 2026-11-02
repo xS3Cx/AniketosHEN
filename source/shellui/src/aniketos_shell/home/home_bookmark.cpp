@@ -52,7 +52,7 @@ std::vector<std::string> s_media;
 std::vector<std::string> s_moved;
 /* Changes whenever the script has to fetch the rows again. */
 unsigned s_revision = 1;
-/* The Home that is up has the script, and the tab (set by home_js). */
+/* The Home that is up has the script, and the tab (set by script_injector). */
 std::atomic<bool> s_script_in{false};
 std::atomic<bool> s_tab_shown{false};
 

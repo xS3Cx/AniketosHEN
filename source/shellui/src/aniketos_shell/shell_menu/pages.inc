@@ -393,7 +393,7 @@ void home_pages(Page page, std::vector<Option> &options) {
     };
     break;
   case Page::HomeProfile: {
-    /* the dot on the user's avatar, as if signed in (home_js) */
+    /* the dot on the user's avatar, as if signed in (script_injector) */
     const char *dots[] = {tr("vsh.home_presence.system"),
                           tr("vsh.home_presence.online"),
                           tr("vsh.home_presence.busy"),

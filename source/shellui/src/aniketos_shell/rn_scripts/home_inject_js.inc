@@ -582,7 +582,7 @@ R"JS((function () {
     own.children = clockTime(now, text.props.children);
     own.key = 'time';
     /* the native label hooks leave a clock with this ending alone
-       (shell_clock.cpp, kScriptClockMark) */
+       (clock_label.cpp, kScriptClockMark) */
     own.testID = text.props.testID + '.aniketos';
     var children = [React.createElement(text.type, own)];
     if (c.date) {

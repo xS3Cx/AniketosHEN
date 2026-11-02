@@ -23,11 +23,17 @@ own addition to the OnionHEN tree it is forked from.
 
 | Path | Content |
 |---|---|
-| `source/shellui/src/aniketos_shell/` | menu lifecycle, input, telemetry, the menu frontend (`shell_menu*`) |
-| `source/shellui/src/aniketos_ui/` | PUI primitives and menu style |
-| `source/shellui/src/aniketos_theme/` | native shell appearance (background, tiles, notifications, panels) |
-| `source/shellui/src/controller/`, `controller_tools.cpp` | DualSense reader and light-bar control |
-| `source/shellui/src/shell_clock.cpp` | home-screen clock and date |
+| `source/shellui/src/aniketos_shell/core/` | menu lifecycle (`menu_host`), what the features install and tick (`shell_features`), the profiler |
+| `source/shellui/src/aniketos_shell/shell_menu/` | the menu frontend, one translation unit (see [its README](../source/shellui/src/aniketos_shell/shell_menu/README.md)) |
+| `source/shellui/src/aniketos_shell/input/` | L1+R3 pad reader, mouse, keyboard capture, on-screen keyboard glyphs |
+| `source/shellui/src/aniketos_shell/hardware/` | telemetry, memory, fan, buzzer, power LED, pad speaker |
+| `source/shellui/src/aniketos_shell/controller/` | DualSense reader and light-bar control |
+| `source/shellui/src/aniketos_shell/home/`, `games/`, `system_ui/`, `toolbox/` | Home features, per-title features, system dialogs, our Toolbox pages |
+| `source/shellui/src/aniketos_shell/rn_scripts/` | scripts put into the React Native apps |
+| `source/shellui/src/aniketos_ui/` | PUI primitives, menu style, helpers the others share |
+| `source/shellui/src/aniketos_theme/` | native shell appearance (background, panels, switches, font) |
+| `source/shellui/src/aniketos_theme/tiles/` | tile outline and shape, tab labels |
+| `source/shellui/src/aniketos_theme/clock/` | home-screen clock and date |
 | `source/libonion_settings/include/onion/shell_menu_settings.def` | every setting the menu owns |
 
 Its directories and namespaces are named `aniketos_*`, `AniketosShell` and
@@ -38,10 +44,10 @@ Its directories and namespaces are named `aniketos_*`, `AniketosShell` and
 | Hook point | Call |
 |---|---|
 | `prx.cpp` `main()` after the Mono images load | `AniketosShell::Initialize()`; failure only disables the menu |
-| `prx.cpp` `install_hooks()` | `Notifications`, `HomeTiles`, `PanelTint`, `ShellClock` `Install()` |
-| `prx.cpp` after hooks are published | telemetry worker, L1+R3 pad reader, controller manager |
-| `prx_overlay.cpp` `OnRender_Hook` | per-frame ticks; the tile pass runs after the native frame |
-| `hook_boot.cpp` `GetData_hook` | while the menu is open, ShellUI receives no controller input |
+| `prx.cpp` `install_hooks()` | `ShellFeatures::Install()`: `HomeTiles`, `PanelTint`, `ShellClock` and the other features, in order |
+| `prx.cpp` after hooks are published | `ShellFeatures::StartWorkers()`: telemetry worker, L1+R3 pad reader, controller manager |
+| `prx_overlay.cpp` `OnRender_Hook` | `ShellFeatures::BeforeNativeFrame()` and per-frame ticks; the tile pass runs after the native frame (`AfterNativeFrame`) |
+| `hook_boot.cpp` `GetData_hook` | `AniketosShell::FilterPad()`: while the menu is open, ShellUI receives no controller input |
 
 ## What was adapted
 
@@ -62,7 +68,7 @@ Its directories and namespaces are named `aniketos_*`, `AniketosShell` and
   (Thai falls back to English for them).
 - **Circular home tiles.** The two Hermes-bytecode edits (tile radius and
   content mask) were moved into this tree's HomeUI patch routine as
-  `homeui_home_tiles.inc`. They are located by instruction structure and are
+  `homeui_tile_patch.inc`. They are located by instruction structure and are
   applied only when exactly one site matches.
 - **Defaults.** The menu starts with the Apparition skin and the red global
   theme.
@@ -79,8 +85,8 @@ running; choosing one starts it, or stops it when it runs, and a
 notification says so. Auto-start, priority and delay stay on the Toolbox's
 page.
 
-- **How it works:** `home_menu.cpp` builds the rows with the native pop-up
-  of `system_dialogs.cpp` each time the menu opens. The payloads come from
+- **How it works:** `hen_menu.cpp` builds the rows with the native pop-up
+  of `popup_menu.cpp` each time the menu opens. The payloads come from
   the scan the Toolbox page uses (`shellui_scan_payloads`, `toolbox_xml.cpp`);
   starting goes through util and stopping kills the recorded process
   (`onpress_payloads.cpp`), as the Toolbox's switch does.
@@ -123,7 +129,7 @@ behind the Home screen.
 - **How it works:** the console's own `Sce.Vsh.Video.VideoPlayer` and PUI
   `VideoView` are created by name and placed under Home's React tree, so the
   video fades and moves with Home. The player core cannot open files from the
-  data folder but can stream, so `home_video.cpp` serves the chosen file from
+  data folder but can stream, so `home_video_server.cpp` serves the chosen file from
   an HTTP server bound to `127.0.0.1` on a system-assigned port. No system
   file is changed.
 - **Safety:** playback pauses while Home is hidden. If two starts in a row
@@ -135,7 +141,7 @@ behind the Home screen.
 
 The custom clock (seconds, 12/24-hour form, colour and size, the date under
 it) is drawn by Sony's own clock, in Home and in the Control Center, which
-have the same component. The script (`aniketos_shell/home_inject_js.inc`)
+have the same component. The script (`aniketos_shell/rn_scripts/home_inject_js.inc`)
 finds the module that exports `Clock` and puts its own component behind that
 name: it renders Sony's clock (a View
 holding one Text) and swaps in the text with the seconds and a second Text
@@ -163,7 +169,7 @@ minutes.
   for the script to get in.
 - **Label hooks:** the time Text the script draws has Sony's test id with
   `.aniketos` added (`clock-text.aniketos`). The label hooks in
-  `shell_clock.cpp` still follow that label (Home's root, the opacity) but
+  `clock_label.cpp` still follow that label (Home's root, the opacity) but
   write nothing into it; any clock without the mark (an app without the
   script, a firmware without that `Clock`) is drawn by the hooks as before.
   A dotted time such as "10.40" counts as a clock only on the label Sony
@@ -181,7 +187,7 @@ rounded tiles on.
 - **Settings:** `shell_tiles_circular` (on/off) and
   `shell_tiles_corner_radius` (percent) in `[shell_menu]`. The
   customization switch off keeps the stock shape.
-- **How it works:** `homeui_home_tiles.inc` edits two constants in HomeUI's
+- **How it works:** `homeui_tile_patch.inc` edits two constants in HomeUI's
   Hermes bytecode as the bundle loads: the 106px icon's corner radius and
   the 168px focus frame's, scaled by Sony's own factor, and clips the
   artwork to that corner. The focus outline drawn by `home_tiles.cpp` takes
@@ -204,14 +210,14 @@ name that starts with a glyph of the user's shows that one instead of ours.
 - **Settings:** `home_tab_games_name` and `home_tab_media_name` (empty: the
   system's name), `home_tab_emulators` and `home_tab_icons` in
   `[shell_menu]`.
-- **How it works:** Home's script (`home_inject_js.inc`) gives React the
+- **How it works:** Home's script (`rn_scripts/home_inject_js.inc`) gives React the
   captions Games and Media show: the user's name with its glyph, or the
   glyph in front of the system's own translated caption (a text element the
   system translates, so the console's language still applies). React then
   lays the tab bar out for the text the tabs really show; before that, its
   layout was a frame behind on every page switch and the tabs jumped. The
   text hook that
-  puts the glyph in front of Games and Media (`home_tiles.cpp`) hands each
+  puts the glyph in front of Games and Media (`space_switcher_labels.cpp`) hands each
   label it dresses to `home_tabs.cpp`, which writes the user's name into it
   once the label turns out to sit in the tab bar's `space-switcher-game` or
   `space-switcher-media` panel (Search shows the same words, and its labels
@@ -219,12 +225,12 @@ name that starts with a glyph of the user's shows that one instead of ours.
   system's caption on a known tab label again (it does as the focus moves),
   the hook hands it the name straight away. A Home reload or a new language
   goes down the same path. Without the Emulators tab, the script in Home
-  (`home_inject_js.inc`) leaves that space out, and the query hook of
-  `home_tabs.cpp` stops taking the emulators out of Games.
+  (`rn_scripts/home_inject_js.inc`) leaves that space out, and the query hook of
+  `home_rows.cpp` stops taking the emulators out of Games.
 - **Safety:** with `no_home_js` in `/data/AniketosHEN` there is no Emulators
   tab, and the Games row keeps its emulators. A Home reload asked for within
   4 s of Home starting (switches flipped in a row) waits until Home is up
-  (`mono_runtime.cpp`).
+  (`rn_reload.cpp`).
 
 ## Bookmark tab, and copying or moving between tabs
 
@@ -248,13 +254,13 @@ Emulators, the bookmark).
   (`home_bookmark` in `[shell_menu]`, on by default) and *Rename bookmark*.
   The bookmark and the titles put in Games or Media are kept in
   `/data/AniketosHEN/home_bookmark.json`.
-- **How it works:** `hook_launch.cpp` adds the one entry; its URI comes
+- **How it works:** `game_options_menu.cpp` adds the one entry; its URI comes
   back through the boot hook, and `home_bookmark.cpp` opens the menu with
-  the same native pop-up the HEN button uses (`system_dialogs.cpp`), keeps
+  the same native pop-up the HEN button uses (`popup_menu.cpp`), keeps
   the lists and asks for the bookmark's name. The tab is made the same way
   as Emulators: the
-  script in Home (`home_inject_js.inc`) adds the space, and the query hook
-  of `home_tabs.cpp` gives its list the bookmark's title ids, lets the
+  script in Home (`rn_scripts/home_inject_js.inc`) adds the space, and the query hook
+  of `home_rows.cpp` gives its list the bookmark's title ids, lets the
   titles copied or moved into Games or Media into those rows, and leaves the
   moved ones out of the rows they left. A moved title is left out only while
   it shows somewhere else in Home. Home is reloaded when the tab comes, goes
@@ -271,7 +277,7 @@ A game's or app's Options menu has *Hide App*, with the same star as the
 other AniketosHEN entries, after *Copy / Move* and before Sony's *Delete*. It
 takes the tile out of Home's Games, Media, Emulators and
 bookmark rows without uninstalling anything and without writing to the system's
-app database: the query hook of `home_tabs.cpp` adds
+app database: the query hook of `home_rows.cpp` adds
 `AND (icon.titleId NOT IN (...))` to those four queries. The app stays
 launchable from Search and the library, which is the safety net.
 
@@ -285,10 +291,10 @@ launchable from Search and the library, which is the safety net.
 
 - **Settings:** `home_hide_apps` in `[shell_menu]`; the list is
   `/data/AniketosHEN/hidden_apps.json` (`{"version":1,"hidden":[...]}`).
-- **How it works:** `hook_launch.cpp` adds the entry at the first of
+- **How it works:** `game_options_menu.cpp` adds the entry at the first of
   `MENU_ID_APPLICATION_DELETE` and `MENU_ID_CHECK_PATCH` it meets, one block
   per menu (a 500 ms gap between bursts of entries tells a new menu apart); the
-  URI comes back through the boot hook and `home_hidden.cpp` records the
+  URI comes back through the boot hook and `hidden_apps.cpp` records the
   Title ID, writes the file atomically, reloads Home, and shows a toast. The
   name shown in the list is read from `/user/app/<TID>/sce_sys/param.json`
   and cached, so rebuilding the page every frame does not read the disk.
@@ -309,7 +315,7 @@ are the console's local time.
   like the entries in the Options menu.
 - **How it works:** the screen is its own React Native app
   (`rnps-content-information`, NPXS40017), started anew for every title with
-  `pscontentinfo:info?titleId=...`. `home_js.cpp` evaluates
+  `pscontentinfo:info?titleId=...`. `script_injector.cpp` evaluates
   `content_info_inject_js.inc` before its bundle, with the labels and the
   `/user/app/*/mount.lnk` targets from `content_info.cpp`. The script reads
   the title from the URL the app was opened with (`LinkingPS.initialURL`),
@@ -385,7 +391,7 @@ What changed:
 - **Logging off the render thread.** `onion_log_set_async()` hands records to a
   writer thread; the three sinks cost a caller about 5 ms per record on a
   console, and the menu and theme code log on navigation.
-- **Cached managed accessors** (`aniketos_ui/mono_fast.hpp`). Property setters
+- **Cached managed accessors** (`aniketos_ui/mono_property_cache.hpp`). Property setters
   were looked up by name and re-resolved on every call; colours allocated a
   managed object each time.
 - **Write skipping** in `aniketos_ui/pui_primitives.cpp`: panel geometry,

@@ -133,10 +133,11 @@ Saves always go to the AniketosHEN paths. Nothing writes under `/data/OnionHEN`.
 
 ## 6. Migration
 
-Implemented in `source/libonion_platform/source/migrate.c`
-(`<onion/migrate.h>`), called from the bootstrapper after privileges are
-raised and the conflict check has passed, and before any directory or file is
-created under the data root.
+Implemented in `source/libonion_platform/source/` (`<onion/migrate.h>`):
+`migrate.c` runs the import, `migrate_tree.c` copies the files and
+`migrate_config.c` converts `config.ini`. It is called from the bootstrapper
+(`bootstrap_migration.cpp`) after privileges are raised and the conflict check
+has passed, and before any directory or file is created under the data root.
 
 For each of the two views (`/data`, `/user/data`):
 

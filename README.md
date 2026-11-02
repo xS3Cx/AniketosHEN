@@ -498,6 +498,7 @@ directory as it left it. Details are in
 │   ├── util/                  Utility daemon, IPC, cheats and host tests
 │   ├── daemon/                Critical daemon and Toolbox injection
 │   ├── shellui/               Toolbox, Shell Menu and ShellUI hooks
+│   │   └── src/aniketos_*/    Our ShellUI code: aniketos_shell (features), aniketos_theme (look), aniketos_ui (shared helpers)
 │   ├── kbm_agent/             Keyboard and mouse agent injected into games
 │   ├── i18n/                  Toolbox, Shell Menu and notification catalogs
 │   ├── unpacker/              Final AniketosHEN payload wrapper

@@ -12,11 +12,16 @@ features, usage, configuration, and credits.
 | `daemon/` | Main daemon |
 | `util/` | Utility daemon (cheats, IPC, …) |
 | `shellui/` | Toolbox / ShellUI hooks |
+| `shellui/src/aniketos_shell/` | Shell Menu and our other ShellUI features, one folder per area: `core`, `shell_menu`, `home`, `input`, `toolbox`, `system_ui`, `games`, `hardware`, `controller`, `rn_scripts` |
+| `shellui/src/aniketos_theme/` | How the shell looks: background, panels, switches, font, `clock/`, `tiles/` |
+| `shellui/src/aniketos_ui/` | Helpers the two above share |
+| `kbm_agent/` | Keyboard and mouse agent injected into games |
 | `i18n/` | Shared Toolbox / notification locale catalogs (see [its README](i18n/README.md)) |
 | `unpacker/` | Payload unpacker |
 | `libhijacker/`, `libNineS/`, `libNidResolver/`, `libonion_sprx/` | Internal static libs |
 | `include/` | Shared headers |
 | `common/` | Shared low-level implementations |
+| `cmake/` | CMake helpers and build options |
 | `platform/ps5/stubs/` | PS5 system-library link stubs |
 
 External source and prebuilt dependencies live in the repository-level

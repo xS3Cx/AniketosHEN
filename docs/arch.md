@@ -99,6 +99,11 @@ AniketosHEN/
 │   ├── daemon/       # 核心守护
 │   ├── util/         # 工具守护（金手指、IPC 等）
 │   ├── shellui/      # Toolbox
+│   │   ├── src/aniketos_shell/ # Shell Menu 与各功能，按领域分目录：core、shell_menu、home、input、toolbox、system_ui、games、hardware、controller、rn_scripts
+│   │   ├── src/aniketos_theme/ # 外观：背景、面板、开关样式、字体，以及 clock/、tiles/
+│   │   ├── src/aniketos_ui/    # 上面两者共用的辅助代码
+│   │   └── include/            # 结构与 src/ 相同
+│   ├── kbm_agent/    # 注入游戏的键鼠代理
 │   ├── unpacker/     # 最终 AniketosHEN.elf
 │   ├── libhijacker/ libNineS/ libNidResolver/
 │   ├── libonion_*    # 共享：ipc/settings/proc/platform/ready/detour/payload/elfldr
@@ -199,7 +204,7 @@ AniketosHEN 只负责配对和设备注册。配对信息可从网络页面保�
 
 HomeUI 顶部导航和 Settings Debug Settings 入口按固件 profile 覆盖 2.30–12.70；11.00 起 Settings 走 `debug_settings_old`。
 
-`home_tabs.cpp` 的 `build_where_hook` 同时按 `aniketos_shell/home_hidden` 的
+`home_rows.cpp` 的 `build_where_hook` 同时按 `aniketos_shell/home/hidden_apps` 的
 `hidden_apps.json` 过滤 Home 的 Games、Media、Emulators 和 Bookmark 查询：
 在 `ORDER BY` / `GROUP BY` / `LIMIT` 之前追加
 `AND (icon.titleId NOT IN (...))`；列表为空或 `home_hide_apps=false` 时查询保持原样。
@@ -291,10 +296,11 @@ OverlayLayout         仅 shellui：由 overlay.edge + overlay.align 派生；�
 | `sync_dependencies.sh` | 同步 kstuff 等外部依赖 |
 | `send_elf.py` / `send_payload.ps1` | 网络发送 ELF |
 | `launch.py` | IPC 控制应用 |
-| `shutdown_onion.py` / `kill_daemon.py` | 从 PC 关栈：util → 重启 ShellUI → daemon 退出；**不杀 kstuff**（TCP **9048**） |
+| `shutdown_aniketoshen.py` | 从 PC 关栈：util → 重启 ShellUI → daemon 退出；**不杀 kstuff**（TCP **9048**） |
 | `daemon_log.py` | 守护进程日志 |
 | `ps5_cmake.sh` | Prospero CMake 封装 |
 | `pack_bootstrapper.sh` | bootstrapper 尺寸记录 + lzma 打包 |
+| `generate_particle_assets.py` | 生成 Home 默认粒子图片 |
 
 ---
 

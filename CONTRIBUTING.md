@@ -42,6 +42,29 @@ Settings persist through `onion::Settings` and the twin `config.ini` paths.
 A Toolbox save is `settings_commit` → `BREW_RELOAD_SETTINGS` → `LoadSettings`.
 That rereads config in daemon and util. It does not inject ShellUI again.
 
+## ShellUI layout
+
+OnionHEN's ShellUI files stay flat in `source/shellui/src/`. Everything of
+ours goes below one of three folders there, never loose in `src/`:
+
+| Folder | What goes in it |
+|---|---|
+| `aniketos_shell/` | Features, one folder per area: `core`, `shell_menu`, `home`, `input`, `toolbox`, `system_ui`, `games`, `hardware`, `controller`, `rn_scripts` |
+| `aniketos_theme/` | How things look, with `clock/` and `tiles/` |
+| `aniketos_ui/` | Helpers the other two share |
+
+`include/` mirrors `src/`: `src/aniketos_shell/home/web_tiles.cpp` has
+`include/aniketos_shell/home/web_tiles.hpp`, written as
+`#include "aniketos_shell/home/web_tiles.hpp"`. CMake globs the three folders,
+so a new `.c` or `.cpp` needs no CMake edit; the next build picks it up.
+
+Name a new file in lower snake case for what its code does, never `manager`,
+`utils`, `common`, `misc`, `new` or `v2`. The namespace matches the file
+(`script_injector` has `ScriptInjector`). A private header shared by a split
+is `<module>_internal.hpp`, next to the `.cpp` files. `.inc` is a piece of one
+translation unit (a Shell Menu partition, data or code for one includer) or
+injected JS (`*_inject_js.inc`, all in `rn_scripts/`).
+
 ## Code
 
 - Match the `snake_case` already in `source/`.
@@ -71,6 +94,10 @@ make -C source/util/tests test
 
 Host tests live in `source/util/tests/`. They cover settings, IPC, cheats,
 Toolbox routing, and i18n. Run them even if you cannot flash a console.
+
+Logic that can run off the console (parsers, file formats, policy decisions)
+gets a host test: keep it free of Mono and SDK calls, add `test_<name>.cpp` to
+that `Makefile` and its `test_<name>_suite` to `test_main.cpp`.
 
 Products go under `build/`. Downloads go under `.cache/dependencies/`.
 Do not write either into `source/`.
