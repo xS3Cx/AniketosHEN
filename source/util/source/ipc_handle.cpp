@@ -25,6 +25,7 @@ extern "C" {
 #include "cheats/cheat_service.hpp"
 #include "cheats/runtime.h"
 #include "cheats/sync/cheat_sync_service.hpp"
+#include "web_tile_icon.hpp"
 #include <cstdio>
 #include <cerrno>
 #include <cstdlib>
@@ -331,6 +332,13 @@ void handleIPC(clientArgs *client, std::string &inputStr,
     reply(sender_app, body.empty(), body);
     break;
   }
+  case BREW_UTIL_WEB_TILE_ICON:
+    /* the fetch can take seconds: this thread serves every other client */
+    reply(sender_app,
+          !web_tile_icon_start(onion_cjson::string_item(my_json.get(), "id", ""),
+                               onion_cjson::string_item(my_json.get(), "url", ""),
+                               onion_cjson::string_item(my_json.get(), "title", "")));
+    break;
   case BREW_UTIL_UNUSED_DOWNLOAD_KSTUFF:
     LOG_WARN("DOWNLOAD_KSTUFF: unsupported (online download removed)");
     reply(sender_app, true);

@@ -1,9 +1,9 @@
 /* JavaScript evaluated in Home's runtime right before its bundle (see
  * home_js.cpp). `__aniketosConfig` is defined by the native side just ahead
  * of it: {app, space, emulators, caption, label, limit, icon, presence, clock,
- * and the bookmark's}; app is 'home' or 'control-center', space is empty in
- * the Control Center, where only the presence dot and the clock are touched,
- * and emulators is false when the Emulators tab is switched off.
+ * webTiles, and the bookmark's}; app is 'home' or 'control-center', space is empty in
+ * the Control Center, where only the presence dot, the clock and the size
+ * limit of action cards are touched, and emulators is false when the Emulators tab is switched off.
  *
  * Home is a webpack bundle whose screens are driven by data: the tab bar is
  * `spaceIds.map(...)`, a tab's caption is `textBySpaceId[id]`, and each
@@ -254,11 +254,84 @@ R"JS((function () {
       }, function () { F.asking = false; });
     }, 2000);
   }
+  /* The websites kept among the media apps. They are in no database: their
+     rows are put in with the Media row as it comes back from the store, in
+     front, because Home cuts the list to its length. A row is what the store's query
+     gives, and pressing it opens deeplinkUri, here the browser with the
+     marker that makes its card (web_browser_inject_js.inc) full screen. The
+     list is read through the registry module, which the native side answers
+     (aniketos.web_tiles), as the bookmark's revision is. */
+  var W = { rev: cfg.webTiles ? cfg.webTiles.rev : 0,
+            tiles: cfg.webTiles ? cfg.webTiles.tiles : [], asking: false };
+  function tileLink(url) {
+    return 'pscontrolcenter:main?target=action-card&type=ActionCardWebBrowser' +
+           '&mode=selected&anchor=' +
+           encodeURIComponent(JSON.stringify({ vertical: 'center',
+                                               horizontal: 'center' })) +
+           '&param=' +
+           encodeURIComponent(JSON.stringify({
+             url: url, hideHeader: true,
+             webviewProps: { aniketosFull: url } }));
+  }
+  function isTile(titleId) {
+    for (var i = 0; i < W.tiles.length; i++)
+      if (W.tiles[i].id === titleId) return true;
+    return false;
+  }
+  function addTiles(results, spaces) {
+    var row = results && Array.isArray(spaces) &&
+              results[spaces.indexOf('media')];
+    if (!row || !Array.isArray(row.items)) return;
+    var rows = [];
+    for (var i = 0; i < W.tiles.length; i++) {
+      var tile = W.tiles[i];
+      rows.push({ titleId: tile.id, titleName: tile.name,
+                  deeplinkUri: tileLink(tile.url),
+                  icon0PathWithTs: tile.icon || undefined,
+                  pinnedStatus: 'notPinnable' });
+    }
+    row.items = rows.concat(row.items);
+  }
+  function watchTiles() {
+    setInterval(function () {
+      var nm = F.nm;
+      if (W.asking || !nm || typeof nm.Get !== 'function' ||
+          !F.listeners.length)
+        return;
+      W.asking = true;
+      var asked;
+      try { asked = nm.Get({ keys: ['aniketos.web_tiles'] }); }
+      catch (e) { W.asking = false; return; }
+      Promise.resolve(asked).then(function (answer) {
+        W.asking = false;
+        if (typeof answer !== 'string') return;
+        var state = JSON.parse(answer);
+        if (!state || state.rev === W.rev || !Array.isArray(state.tiles))
+          return;
+        W.rev = state.rev;
+        W.tiles = state.tiles;
+        refreshRows();
+      }).then(null, function (e) { W.asking = false; log('tiles: ' + e); });
+    }, 2000);
+  }
   function patchTitles(o, id) {
     var store = o && o.default;
-    if (!F.watch || A.patched.titles || !store ||
+    if (!SPACE || A.patched.titles || !store ||
         typeof store.fetchTitleByUserId !== 'function' ||
         typeof store.addListener !== 'function') return;
+    var query = store.fetchTitleByUserId;
+    store.fetchTitleByUserId = function () {
+      return Promise.resolve(query.apply(this, arguments)).then(function (rows) {
+        try { addTiles(rows, o.spaceIds); }
+        catch (e) { log('tiles: ' + e); }
+        return rows;
+      });
+    };
+    var touch = store.updateLastAccessTimeUser;
+    if (typeof touch === 'function')
+      store.updateLastAccessTimeUser = function (titleId) {
+        if (!isTile(titleId)) return touch.apply(this, arguments);
+      };
     var listen = store.addListener;
     store.addListener = function (handler) {
       if (typeof handler === 'function') F.listeners.push(handler);
@@ -272,7 +345,30 @@ R"JS((function () {
         return unlisten.apply(this, arguments);
       };
     once('titles', id);
-    watchBookmark();
+    if (F.watch) watchBookmark();
+    watchTiles();
+  }
+  /* The Control Center owns an action card's place on screen and keeps a card
+     within a limit of its own (under the screen's width). The browser's
+     full screen (web_browser_inject_js.inc) is the one size asked for past
+     it: that exact size goes through, every other as before. Read as a data
+     property: re-exporting modules have this name as a getter. */
+  function patchCardSize(o, id) {
+    if (cfg.app !== 'control-center' || A.patched.cardSize || !o ||
+        typeof o !== 'object')
+      return;
+    var d = Object.getOwnPropertyDescriptor(o, 'normalizeSelectedSize');
+    if (!d || typeof d.value !== 'function') return;
+    var stock = d.value;
+    var wrapped = function (preset, height, width) {
+      if (width === 1920 && height === 1080)
+        return { preset: preset || null, height: height, width: width };
+      return stock.apply(this, arguments);
+    };
+    try { o.normalizeSelectedSize = wrapped; } catch (e) {}
+    if (Object.getOwnPropertyDescriptor(o, 'normalizeSelectedSize').value ===
+        wrapped)
+      once('cardSize', id);
   }
   /* The hub viewer of the row hears of every tile that gets the focus:
      its space is the one in front, for L1/R1 (patchSpaceFocus). */
@@ -643,6 +739,7 @@ R"JS((function () {
       if (exports) patchClockCache(exports.default);
       patchClock(module, id);
       patchTitles(exports, id);
+      patchCardSize(exports, id);
       patchHubViewer(exports, id);
       patchSpaceFocus(exports, id);
       patchIcons(exports, id);

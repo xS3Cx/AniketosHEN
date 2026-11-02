@@ -10,6 +10,13 @@ aniketos_icon_png_start:
 .global aniketos_icon_png_end
 .type aniketos_icon_png_end,@object
 aniketos_icon_png_end:
+.global aniketos_icon_rgba_start
+.type aniketos_icon_rgba_start,@object
+aniketos_icon_rgba_start:
+.incbin "@ANIKETOS_ICON_RGBA@"
+.global aniketos_icon_rgba_end
+.type aniketos_icon_rgba_end,@object
+aniketos_icon_rgba_end:
 
 .p2align 4
 .global home_menu_internet_on_png_start

@@ -16,6 +16,7 @@ along with this program; see the file COPYING. If not, see
 
 #include "hooked_funcs.hpp"
 #include "homeui_top_nav_patch.hpp"
+#include "aniketos_shell/home_menu.hpp"
 #include "settings_bundle_patch.hpp"
 #include "toolbox_i18n.hpp"
 #include <onion/platform.h>
@@ -215,7 +216,9 @@ MonoString * CxmlUri_Hook(MonoObject * Instance, MonoString * uri) {
     LOG_DEBUG("CxmlUri_Hook: intercepted Settings icon -> "
               "/system_ex/vsh_asset/onionhen.png");
 #endif
-    return mono_str_ui("/system_ex/vsh_asset/onionhen.png");
+    return mono_str_ui(g_settings.logo_color_enabled
+                           ? AniketosIconPath()
+                           : "/system_ex/vsh_asset/onionhen.png");
   }
   if (uri_string.rfind("//usb") != std::string::npos || uri_string.rfind("//data") != std::string::npos || uri_string.rfind("//user//data") != std::string::npos){
     //replace // with//
@@ -255,7 +258,10 @@ void MenuListItem_SetIconImage_Hook(MonoObject *item, MonoObject *asset) {
     MenuListItem_SetIconImage(item, asset);
   if (!shellui_hooks_are_ready() || !item || !asset || !mono_object_to_string)
     return;
-  static constexpr const char kOwnIcon[] = ONION_NOTIFY_ICON_PATH;
+  /* a coloured logo has a name of its own: the system keeps pictures by path */
+  const std::string kOwnIcon = g_settings.logo_color_enabled
+                                   ? AniketosIconPath()
+                                   : ONION_NOTIFY_ICON_PATH;
   MonoObject *exception = nullptr;
   MonoString *shown = mono_object_to_string(asset, &exception);
   if (exception || !shown)
@@ -279,13 +285,13 @@ void MenuListItem_SetIconImage_Hook(MonoObject *item, MonoObject *asset) {
   MonoMethod *set_uri = method_in_hierarchy(item, "set_IconUri", 1);
   if (!set_uri)
     return;
-  void *args[1] = {mono_string_new(mono_domain_get(), kOwnIcon)};
+  void *args[1] = {mono_string_new(mono_domain_get(), kOwnIcon.c_str())};
   exception = nullptr;
   mono_runtime_invoke(set_uri, item, args, &exception);
   static bool logged = false;
   if (!logged) {
     logged = true;
-    LOG_INFO("settings icon: row given %s (%s)", kOwnIcon,
+    LOG_INFO("settings icon: row given %s (%s)", kOwnIcon.c_str(),
              exception ? "refused" : "ok");
   }
 }

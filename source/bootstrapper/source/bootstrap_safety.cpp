@@ -88,7 +88,9 @@ onion_boot_level bootstrap_safety_begin(const char *firmware_text) {
           "restarted before the stack had been up for %d s (kernel panic, "
           "crash or power loss).\n"
           "This start: level %s (%s).\n"
-          "firmware: %s\n",
+          "firmware: %s\n"
+          "The logs below may end before the failed start: it can stop before "
+          "it writes anything.\n",
           onion_boot_level_name(guard.previous),
           ONION_BOOT_RUNNING_AFTER_SECONDS, onion_boot_level_name(guard.level),
           level_effect(guard.level),

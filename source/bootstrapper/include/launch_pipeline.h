@@ -21,6 +21,9 @@ typedef struct BootstrapLaunchPlan {
   bool launch_daemon;
 } BootstrapLaunchPlan;
 
+/** True while the daemon of an earlier start runs. */
+bool bootstrap_stack_running(void);
+
 /** Launch the owned util, kstuff and daemon dependency chain. */
 int bootstrap_launch_services(uint32_t firmware_version,
                               const BootstrapLaunchPlan *plan);

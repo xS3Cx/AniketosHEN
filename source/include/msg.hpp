@@ -75,6 +75,9 @@ enum DaemonCommands : unsigned int {
   // Daemon pushes a live console system language so util re-applies it without
   // needing a SystemService query (util is under PTRACE_AUTHID after launch).
   BREW_UTIL_SET_SYSTEM_LANG = 0x8000019u,
+  // Fetch a website's icon for its Home tile. Carries the tile id and the
+  // page; util derives the file from the validated id.
+  BREW_UTIL_WEB_TILE_ICON = 0x800001Au,
 
   // Crit daemon plugin management. Payloads contain only validated plugin IDs;
   // filesystem paths never cross the IPC boundary.

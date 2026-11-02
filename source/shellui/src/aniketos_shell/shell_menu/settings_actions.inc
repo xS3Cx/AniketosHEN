@@ -211,6 +211,7 @@ bool &toggle_target(OptionId id) {
     return g_settings.shell_customization_enabled;
   case OptionId::FanDynamic: return g_settings.enable_fan_speed;
   case OptionId::MenuDualColor: return g_settings.vsh_dual_color;
+  case OptionId::LogoColorEnabled: return g_settings.logo_color_enabled;
   case OptionId::MenuBorderEnabled: return g_settings.vsh_border_enabled;
   case OptionId::MenuMove: return s_moving;
   default: return s_moving;
@@ -568,6 +569,13 @@ void set_color(OptionId id, int position) {
   case OptionId::ColorClockDate:
     put(g_settings.shell_clock_date_r, g_settings.shell_clock_date_g,
         g_settings.shell_clock_date_b, r, g, b);
+    break;
+  case OptionId::ColorLogo:
+    put(g_settings.logo_color_r, g_settings.logo_color_g,
+        g_settings.logo_color_b, r, g, b);
+    /* each move puts this off: the picture is made once, when it stops */
+    if (g_settings.logo_color_enabled)
+      shellui_request_presence_reload(1500, true);
     break;
   default:
     break;
@@ -986,6 +994,8 @@ void activate(const Option &option) {
       if (target && HomeVideo::Images(true).empty())
         notify("notify.vsh.home_image.none");
     }
+    if (option.id == OptionId::LogoColorEnabled)
+      shellui_request_presence_reload(1500, true);
     if (option.id == OptionId::AccountAvatarEnabled) {
       /* The first file is the one shown until another is chosen. */
       const std::vector<std::string> &files = AccountAvatar::Files(true);
@@ -1083,6 +1093,9 @@ void activate(const Option &option) {
     case OptionId::AccountAvatarRefresh:
       notify("notify.vsh.account_avatar.found_count",
              AccountAvatar::Files(true).size());
+      if (AccountAvatar::Unsupported())
+        notify("notify.vsh.account_avatar.unsupported",
+               AccountAvatar::Unsupported());
       s_dirty = true;
       break;
     case OptionId::HomeVideoRefresh:

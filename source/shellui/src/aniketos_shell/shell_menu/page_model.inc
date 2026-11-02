@@ -293,6 +293,9 @@ AniketosTheme::RGB color_of(OptionId id) {
   case OptionId::ColorClockDate:
     return rgb_of(g_settings.shell_clock_date_r, g_settings.shell_clock_date_g,
                   g_settings.shell_clock_date_b);
+  case OptionId::ColorLogo:
+    return rgb_of(g_settings.logo_color_r, g_settings.logo_color_g,
+                  g_settings.logo_color_b);
   default:
     return {1.0f, 1.0f, 1.0f};
   }
@@ -793,6 +796,10 @@ std::vector<Option> build_page(Page page) {
                              OptionId::AccountAvatarRefresh));
     options.push_back(value(tr("vsh.account_avatar.folder"),
                             ONION_DIST_DATA_ROOT "/ShellUI/avatars"));
+    options.push_back(value(tr("vsh.account_avatar.supported"),
+                            "GIF, WebP, PNG, JPG"));
+    options.push_back(value(tr("vsh.account_avatar.animated_limit"),
+                            tr("vsh.account_avatar.animated_limit_value")));
     /* the dot on the user's avatar, as if signed in (home_js) */
     const char *dots[] = {tr("vsh.home_presence.system"),
                           tr("vsh.home_presence.online"),
@@ -850,6 +857,9 @@ std::vector<Option> build_page(Page page) {
         slider_int(tr("vsh.common.animation_speed"),
                    OptionId::GlobalThemeAnimationSpeed,
                    g_settings.vsh_color_animation_speed, 25, 400, 25),
+        toggle(tr("vsh.logo.enable"), OptionId::LogoColorEnabled,
+               g_settings.logo_color_enabled),
+        color_slider(tr("vsh.logo.color"), OptionId::ColorLogo),
     };
     break;
   }

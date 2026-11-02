@@ -2,6 +2,7 @@
 
 #include "aniketos_shell/home_tabs.hpp"
 #include "aniketos_shell/system_dialogs.hpp"
+#include "aniketos_shell/web_tiles.hpp"
 #include "hooked_funcs.hpp"
 #include "onion_cjson.hpp"
 #include "shell_clock.hpp"
@@ -281,6 +282,10 @@ void registry_get_hook(MonoObject *module, MonoObject *param,
        change in the Shell Menu shows without reloading Home */
     if (asked.find(kClockKey) != std::string::npos &&
         resolve(promise, ShellClock::ScriptConfig()))
+      return;
+    /* ... and for the websites kept on it */
+    if (asked.find(WebTiles::kRegistryKey) != std::string::npos &&
+        resolve(promise, WebTiles::HomeState()))
       return;
   }
   if (param && promise && Enabled()) {

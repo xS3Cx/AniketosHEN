@@ -506,6 +506,23 @@ bool IPC_Client::CancelCheatSync(uint32_t task_id, std::string &out) {
   return true;
 }
 
+bool IPC_Client::WebTileIcon(const std::string &id, const std::string &url,
+                             const std::string &title) {
+  if (!require_util("WebTileIcon")) {
+    return false;
+  }
+  cJSON *j = cJSON_CreateObject();
+  cJSON_AddStringToObject(j, "id", id.c_str());
+  cJSON_AddStringToObject(j, "url", url.c_str());
+  cJSON_AddStringToObject(j, "title", title.c_str());
+  std::string out;
+  if (!IPCSendCommand(BREW_UTIL_WEB_TILE_ICON, out, json_object_str(j))) {
+    LOG_ERROR("Failed to ask for a web tile icon");
+    return false;
+  }
+  return true;
+}
+
 void IPC_Client::Reload_Daemon_Settings() {
   std::string ipc_msg;
   if (!IPCSendCommand(BREW_RELOAD_SETTINGS, ipc_msg)) {

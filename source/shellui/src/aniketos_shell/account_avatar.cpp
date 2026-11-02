@@ -1,5 +1,6 @@
 #include "aniketos_shell/account_avatar.hpp"
 
+#include "avatar_image.hpp"
 #include "hooked_funcs.hpp"
 
 #include <onion/detour.h>
@@ -30,6 +31,8 @@ constexpr std::initializer_list<const char *> kPictures = {
 constexpr std::initializer_list<const char *> kAnimated = {".gif", ".webp"};
 
 constexpr size_t kMaxBoxes = 32;
+/* Enough of a file to count the frames of any picture that can play. */
+constexpr size_t kMaxInspected = 16 * 1024 * 1024;
 
 /* UI3.ImageBox.LoadAsync(string uri, Action<...> loadedAction,
    ImageOptions option, bool setImage): the load every React Native image
@@ -43,12 +46,18 @@ MonoClass *s_box_class = nullptr;
 MonoClass *s_options_class = nullptr;
 
 std::vector<std::string> s_files;
+size_t s_unsupported = 0; /* other files in the folder */
 bool s_scanned = false;
 
 /* The boxes showing the user's picture (weak), with the URI they asked for,
    so a change of setting can load them again. */
 std::vector<std::pair<uint32_t, std::string>> s_boxes;
 std::string s_logged_path;
+
+/* Times the chosen picture failed to load; at kMaxFailures the user's own
+   picture stays. */
+constexpr int kMaxFailures = 2;
+int s_failures = 0;
 
 std::string lower(std::string text) {
   std::transform(text.begin(), text.end(), text.begin(),
@@ -116,7 +125,7 @@ bool is_own_face(const std::string &uri) {
 
 /* The picture wanted in place of the user's own, or none. */
 std::string chosen() {
-  if (!g_settings.account_avatar_enabled ||
+  if (!g_settings.account_avatar_enabled || s_failures >= kMaxFailures ||
       g_settings.account_avatar_path.empty() ||
       !has_extension(g_settings.account_avatar_path, kPictures) ||
       !exists(g_settings.account_avatar_path))
@@ -166,8 +175,11 @@ void box_hook(MonoObject *box, MonoString *uri, MonoObject *action,
   }
   if (option && s_options_class) {
     Set_Property(s_options_class, option, "IsAnimatedImage", animated);
+    /* ImageAnimationDecodeMode: BulkDecode decodes all frames at load, and the
+       native reader refuses that for a big or long GIF; ProgressiveDecode
+       decodes them as they play. */
     Set_Property(s_options_class, option, "AnimationDecodeMode",
-                 animated ? 1 : 0); /* ImageAnimationDecodeMode.BulkDecode */
+                 !animated ? 0 : s_failures ? 2 : 1);
   }
   if (path != s_logged_path) {
     s_logged_path = path;
@@ -208,12 +220,16 @@ const std::vector<std::string> &Files(bool rescan) {
   (void)mkdir(ONION_DIST_USER_DATA_ROOT "/ShellUI", 0777);
   (void)mkdir(kDirectory, 0777);
   s_files.clear();
+  s_unsupported = 0;
   if (DIR *handle = opendir(kDirectory)) {
     while (dirent *entry = readdir(handle)) {
       const std::string path = std::string(kDirectory) + "/" + entry->d_name;
-      if (entry->d_name[0] != '.' && has_extension(entry->d_name, kPictures) &&
-          exists(path))
+      if (entry->d_name[0] == '.' || !exists(path))
+        continue;
+      if (has_extension(entry->d_name, kPictures))
         s_files.push_back(path);
+      else
+        ++s_unsupported;
     }
     closedir(handle);
   }
@@ -230,6 +246,8 @@ std::string FileName(const std::string &path) {
   const size_t slash = path.rfind('/');
   return slash == std::string::npos ? path : path.substr(slash + 1);
 }
+
+size_t Unsupported() { return s_unsupported; }
 
 const char *Directory() { return kDirectory; }
 
@@ -267,6 +285,88 @@ void refresh_cache(int user) {
 int owner() { return static_cast<int>(owner_id()); }
 
 int s_frames = 0;
+int s_check_frames = 0;
+
+/* The box behind a handle, if it is still in use. */
+MonoObject *live_box(uint32_t handle) {
+  MonoObject *box = mono_gchandle_get_target(handle);
+  return box && !Get_Property<bool>(s_box_class, box, "IsDisposed") ? box
+                                                                    : nullptr;
+}
+
+int reload_boxes() {
+  /* Copied: loading may remember the boxes again. */
+  const auto boxes = s_boxes;
+  int reloaded = 0;
+  for (const auto &[handle, uri] : boxes) {
+    MonoObject *box = live_box(handle);
+    if (!box)
+      continue;
+    box_hook(box, mono_string_new(mono_domain_get(), uri.c_str()), nullptr,
+             nullptr, true);
+    ++reloaded;
+  }
+  return reloaded;
+}
+
+/* Tells the user at once why the chosen picture will not show; the checks
+   are advice, the load still decides (check_failed). */
+void report_chosen() {
+  const std::string path = chosen();
+  if (path.empty())
+    return;
+  struct stat file_info {};
+  FILE *file = std::fopen(path.c_str(), "rb");
+  if (!file)
+    return;
+  std::vector<uint8_t> bytes;
+  if (fstat(fileno(file), &file_info) == 0)
+    bytes.resize(std::min(static_cast<size_t>(file_info.st_size), kMaxInspected));
+  bytes.resize(std::fread(bytes.data(), 1, bytes.size(), file));
+  std::fclose(file);
+  const AvatarImage::Info info = AvatarImage::Inspect(bytes.data(), bytes.size());
+  const std::string name = FileName(path);
+  LOG_INFO("[AVATAR] '%s' format=%d %dx%d frames=%d", name.c_str(),
+           static_cast<int>(info.format), info.width, info.height, info.frames);
+  switch (AvatarImage::Check(info)) {
+  case AvatarImage::Problem::NotPicture:
+    notify("notify.vsh.account_avatar.not_picture", name.c_str());
+    break;
+  case AvatarImage::Problem::TooLarge:
+    notify("notify.vsh.account_avatar.too_large", name.c_str(), info.width,
+           info.height);
+    break;
+  case AvatarImage::Problem::TooManyFrames:
+    notify("notify.vsh.account_avatar.too_many_frames", name.c_str(),
+           info.frames);
+    break;
+  case AvatarImage::Problem::None:
+    break;
+  }
+}
+
+/* A box the loader could not fill shows its error picture, and nothing else
+   tells: load again, the next way box_hook has, until the user's own picture
+   is back. */
+void check_failed() {
+  if (s_boxes.empty())
+    return;
+  const std::string path = chosen();
+  if (path.empty())
+    return;
+  for (const auto &[handle, uri] : s_boxes) {
+    MonoObject *box = live_box(handle);
+    if (!box || !Get_Property<bool>(s_box_class, box, "IsErrorStateShown"))
+      continue;
+    ++s_failures;
+    LOG_INFO("[AVATAR] load failed path='%s' failures=%d", path.c_str(),
+             s_failures);
+    if (s_failures >= kMaxFailures)
+      notify("notify.vsh.account_avatar.load_failed", FileName(path).c_str());
+    reload_boxes();
+    return;
+  }
+}
 
 } // namespace
 
@@ -278,6 +378,10 @@ void Tick() {
       refresh_cache(owner());
   }
 
+  if (++s_check_frames >= 30) {
+    s_check_frames = 0;
+    check_failed();
+  }
 }
 
 std::string SignedInUser() {
@@ -292,17 +396,9 @@ std::string SignedInUser() {
 void Refresh() {
   if (!s_box_original)
     return;
-  /* Copied: loading may remember the boxes again. */
-  const auto boxes = s_boxes;
-  int reloaded = 0;
-  for (const auto &[handle, uri] : boxes) {
-    MonoObject *box = mono_gchandle_get_target(handle);
-    if (!box)
-      continue;
-    box_hook(box, mono_string_new(mono_domain_get(), uri.c_str()), nullptr,
-             nullptr, true);
-    ++reloaded;
-  }
+  s_failures = 0;
+  report_chosen();
+  const int reloaded = reload_boxes();
   LOG_INFO("[AVATAR] refreshed %d avatar(s) path='%s' enabled=%d", reloaded,
            chosen().c_str(), g_settings.account_avatar_enabled ? 1 : 0);
   refresh_cache(owner());

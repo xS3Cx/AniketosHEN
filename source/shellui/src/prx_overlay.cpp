@@ -9,6 +9,7 @@
 #include "aniketos_theme/toggle_styles.hpp"
 #include "aniketos_shell/home_tabs.hpp"
 #include "aniketos_shell/home_bookmark.hpp"
+#include "aniketos_shell/web_tiles.hpp"
 #include "aniketos_shell/osk_glyphs.hpp"
 #include "aniketos_shell/home_particles.hpp"
 #include "aniketos_shell/home_video.hpp"
@@ -634,6 +635,7 @@ void OnRender_Hook(MonoObject* instance) {
   MigrationNotice::Tick();
   HomeTabs::Tick();
   HomeBookmark::Tick();
+  WebTiles::Tick();
   OskGlyphs::Tick();
   HomeVideo::Tick();
   AccountAvatar::Tick();

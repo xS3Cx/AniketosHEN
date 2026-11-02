@@ -116,6 +116,9 @@ public:
                       std::string &out);
   bool CheatSyncStatus(std::string &out);
   bool CancelCheatSync(uint32_t task_id, std::string &out);
+  /** Util fetches a website's icon for its Home tile; returns at once. */
+  bool WebTileIcon(const std::string &id, const std::string &url,
+                   const std::string &title);
   void Reload_Daemon_Settings();
   bool Launch_Elfldr();
   bool Set_Fan_Threshold(int temp, bool enabled);

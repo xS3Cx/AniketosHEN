@@ -16,6 +16,8 @@ void Install(MonoImage *pui);
 /* The pictures in the avatars folder, sorted by name. */
 const std::vector<std::string> &Files(bool rescan = false);
 std::string FileName(const std::string &path);
+/* Files of other kinds the last scan of the folder passed over. */
+size_t Unsupported();
 const char *Directory();
 /* UI thread, once a frame. */
 void Tick();

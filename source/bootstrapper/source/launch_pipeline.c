@@ -44,13 +44,12 @@ typedef struct LaunchContext {
  * offsets it does not have for that firmware. */
 #define ONION_KSTUFF_MAX_FIRMWARE 0x13600000u
 
-static void stop_owned_service(const char *ready_name,
+/* The service's pid when its marker points at it running, else -1. */
+static pid_t owned_service_pid(const char *ready_name,
                                const char *expected_process_name) {
   pid_t pid = -1;
-  if (!onion_ready_read_pid(ready_name, &pid) || pid <= 1) {
-    onion_ready_clear(ready_name);
-    return;
-  }
+  if (!onion_ready_read_pid(ready_name, &pid) || pid <= 1)
+    return -1;
 
   char process_name[32] = {0};
   if (!onion_proc_is_alive(pid) ||
@@ -58,6 +57,19 @@ static void stop_owned_service(const char *ready_name,
       strcmp(process_name, expected_process_name) != 0) {
     LOG_WARN("Ignoring stale %s ownership marker pid=%d", ready_name,
              (int)pid);
+    return -1;
+  }
+  return pid;
+}
+
+bool bootstrap_stack_running(void) {
+  return owned_service_pid(ONION_READY_DAEMON, "onion_daemon.elf") > 0;
+}
+
+static void stop_owned_service(const char *ready_name,
+                               const char *expected_process_name) {
+  const pid_t pid = owned_service_pid(ready_name, expected_process_name);
+  if (pid <= 0) {
     onion_ready_clear(ready_name);
     return;
   }

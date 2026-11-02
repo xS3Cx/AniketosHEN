@@ -8,6 +8,7 @@
 #include "aniketos_shell/home_menu.hpp"
 #include "aniketos_shell/home_tabs.hpp"
 #include "aniketos_shell/trophy_tools.hpp"
+#include "aniketos_shell/web_tiles.hpp"
 #include "shell_clock.hpp"
 #include "toolbox_i18n.hpp"
 
@@ -78,12 +79,16 @@ struct AppStarts {
 };
 AppStarts s_home_starts;
 AppStarts s_control_center_starts;
+AppStarts s_browser_starts;
+/* The browser's script is left out on its own: it costs Home nothing. */
+bool s_browser_disabled = false;
 constexpr int kRestartsAllowed = 2;
 
-void note_app_start(AppStarts &starts, const char *app) {
+void note_app_start(AppStarts &starts, const char *app,
+                    bool &disabled = s_disabled) {
   if (starts.unconfirmed && ++starts.restarts >= kRestartsAllowed &&
-      !s_disabled) {
-    s_disabled = true;
+      !disabled) {
+    disabled = true;
     LOG_WARN("[HOMEJS] %s started %d times over before it was running with "
              "the script; it stays out until ShellUI starts again",
              app, starts.restarts);
@@ -146,8 +151,14 @@ bool write_unconfirmed(const Unconfirmed &record) {
 /* The JS side reports through the executor's own logging hook. */
 void console_log_hook(MonoString *message, int level, void *a, void *b) {
   const std::string text = text_of(reinterpret_cast<MonoObject *>(message));
-  if (text.compare(0, 8, "ANIKETOS") == 0) {
+  /* the pages the user keeps stay out of the log */
+  const bool web_tile = text.compare(0, 13, "ANIKETOS:web|") == 0;
+  if (web_tile)
+    WebTiles::HandleScriptMessage(text.substr(13));
+  if (text.compare(0, 8, "ANIKETOS") == 0 && !web_tile) {
     LOG_INFO("[HOMEJS] js: %s", text.substr(0, 400).c_str());
+    if (text.compare(0, 18, "ANIKETOS web alive") == 0)
+      s_browser_starts = {};
     if (text.compare(0, 14, "ANIKETOS alive") == 0) {
       unlink(kUnconfirmed); /* Home survived with the script in it */
       s_unconfirmed = {};
@@ -225,12 +236,9 @@ void run_script_hook(MonoObject *executor, MonoObject *bundle) {
   LOG_INFO("[HOMEJS] RunScript in '%s'", app.c_str());
   const bool home = app.find("rnps-home") != std::string::npos;
   /* Home, when the new tab's tile row can be filled; Control Center for the
-     presence dot and the custom clock. */
+     presence dot, the custom clock and the browser's full screen. */
   const bool control_center =
-      app.find("rnps-control-center") != std::string::npos &&
-      ((AniketosTheme::CustomizationOn() ? g_settings.home_presence_dot : 0) !=
-           0 ||
-       ShellClock::CustomClockOn());
+      app.find("rnps-control-center") != std::string::npos;
   if (home) {
     shellui_note_home_start();
     note_app_start(s_home_starts, "Home");
@@ -290,6 +298,9 @@ void run_script_hook(MonoObject *executor, MonoObject *bundle) {
         ", stockCaptions: {game: [" + JsString(games_name) + ", " +
         JsString(games_glyph) + "], media: [" + JsString(media_name) + ", " +
         JsString(media_glyph) + "]}" +
+        /* the websites kept among the games, asked for again while it is up:
+           aniketos.web_tiles */
+        ", webTiles: " + WebTiles::HomeState() +
         "};";
     const bool ok = eval(executor, config.c_str(), "aniketos-config.js") &&
                     eval(executor, kInjectedScript, "aniketos-home.js");
@@ -307,6 +318,21 @@ void run_script_hook(MonoObject *executor, MonoObject *bundle) {
   if (home) {
     HomeTabs::SetEmulatorsTabShown(injected && emulators);
     HomeBookmark::SetHome(injected, injected && bookmark);
+  }
+  /* The web browser's card: full screen and the Home tile row. */
+  const bool browser = app.find("rnps-action-cards") != std::string::npos;
+  if (browser)
+    note_app_start(s_browser_starts, "The action cards", s_browser_disabled);
+  if (browser && !s_disabled && !s_browser_disabled && !exists(kOff)) {
+    const int fd = open(kPending, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd >= 0)
+      close(fd);
+    const std::string config = WebTiles::ScriptConfig();
+    const bool ok = eval(executor, config.c_str(), "aniketos-web-config.js") &&
+                    eval(executor, WebTiles::InjectedScript(), "aniketos-web.js");
+    unlink(kPending);
+    s_browser_starts.unconfirmed = ok;
+    LOG_INFO("[HOMEJS] injected into '%s' ok=%d", app.c_str(), ok ? 1 : 0);
   }
   /* The Trophies app: View, Unlock and Lock in its options menus. A failure
      there costs that app alone, so only the in-flight marker guards it. */

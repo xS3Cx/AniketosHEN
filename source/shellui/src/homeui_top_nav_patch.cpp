@@ -1347,8 +1347,12 @@ void patch_homeui_top_nav(unsigned char *buffer, int *size_ptr,
   /* The top-bar icon, on a profiled HomeUI whose patch sites all hold a
      known shape; otherwise home_js adds it. */
   bool top_nav_change = false;
+  /* the patch names a fixed picture; a coloured logo is home_js's */
   const bool top_nav_ready =
-      profile && top_nav_byte_patches(hbc, *profile, false, &top_nav_change);
+      profile && !g_settings.logo_color_enabled &&
+      top_nav_byte_patches(hbc, *profile, false, &top_nav_change);
+  if (!top_nav_ready)
+    g_top_nav_patched.store(false, std::memory_order_relaxed);
 
   /* Rounded tiles: the user's rounding, up to a full circle, with the
      artwork clipped to it. A rounded frame around square artwork would look

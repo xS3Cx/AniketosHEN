@@ -333,6 +333,7 @@ enum class OptionId {
   ShellRestoreOriginal,
   MenuControls,
   CustomizationEnabled,
+  LogoColorEnabled,
   /* one gradient slider per colour (OptionType::ColorSlider) */
   ColorGlobal,
   ColorController,
@@ -343,6 +344,7 @@ enum class OptionId {
   ColorPanels,
   ColorClockTime,
   ColorClockDate,
+  ColorLogo,
   ColorMenuLeft,
   ColorMenuRight,
   MenuAnimation,

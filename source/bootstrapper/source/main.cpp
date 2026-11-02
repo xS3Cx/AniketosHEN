@@ -59,6 +59,15 @@ int main(void) {
     return 0;
   }
 
+  /* The stack can be stopped from here, but the module of the running start
+     stays in ShellUI, and a second one on top of it can panic the console:
+     it has to be unloaded first. */
+  if (bootstrap_stack_running()) {
+    LOG_ERROR("refusing start: " ONION_DIST_NAME " is already running");
+    bootstrap_notify("notify.boot.conflict", ONION_DIST_NAME);
+    return 0;
+  }
+
   LOG_DEBUG("============== Spawner (Bootstrapper) Started =================");
   /* Before anything else is written: a start cut short by a restart left
      its logs, and they decide how cautious this start is. */
@@ -71,8 +80,11 @@ int main(void) {
   else
     LOG_WARN("%s start: data import skipped", onion_boot_level_name(level));
   bootstrap_filesystem_create_directories();
-  if (!bootstrap_filesystem_mount_system())
+  if (!bootstrap_filesystem_mount_system()) {
+    /* it stopped by itself: the next report must not call this a crash */
+    onion_boot_guard_mark_ended(ONION_BOOT_STATE_PATH);
     return -1;
+  }
 
   LOG_DEBUG("Writing embedded assets ...");
   const bool icon_ready = bootstrap_assets_write();
@@ -89,8 +101,10 @@ int main(void) {
   };
   const int launch_result =
       bootstrap_launch_services(config.firmware_version, &plan);
-  if (launch_result != 0)
+  if (launch_result != 0) {
+    onion_boot_guard_mark_ended(ONION_BOOT_STATE_PATH);
     return launch_result;
+  }
 
   if (level == ONION_BOOT_NORMAL)
     bootstrap_payload_autostart();

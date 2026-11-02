@@ -6,19 +6,31 @@
 
 #include <onion/detour.h>
 #include <onion/distribution.h>
+#include <onion/fs.h>
 #include <onion/log.h>
+#include <onion/notify.h>
+#include <onion/settings.hpp>
 
+#include <algorithm>
 #include <atomic>
 #include <cstdio>
 #include <cstring>
+#include <dirent.h>
 #include <fcntl.h>
+#include <mutex>
 #include <string>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <vector>
+
+#include "logo_tint.hpp"
+#include "web_icon.hpp"
 
 extern "C" {
 extern const unsigned char aniketos_icon_png_start[];
 extern const unsigned char aniketos_icon_png_end[];
+extern const unsigned char aniketos_icon_rgba_start[];
+extern const unsigned char aniketos_icon_rgba_end[];
 extern const unsigned char color_track_png_start[];
 extern const unsigned char color_track_png_end[];
 extern const unsigned char color_track_gray_png_start[];
@@ -37,6 +49,8 @@ extern const unsigned char home_background_edges_png_start[];
 extern const unsigned char home_background_edges_png_end[];
 }
 
+extern onion::Settings g_settings;
+
 namespace ControlCenterEntry {
 namespace {
 
@@ -53,6 +67,7 @@ std::atomic<bool> s_button_focused{false};
 std::atomic<bool> s_pressed{false};
 
 uint32_t s_icon_handle = 0; /* our ImageAsset, kept alive */
+std::string s_icon_for;     /* the picture it was made of */
 
 uint32_t s_button_handle = 0;
 uint32_t s_label_holder_handle = 0;
@@ -216,9 +231,14 @@ bool is_focused(MonoObject *widget) {
 
 /* An ImageAsset of our icon, made once. */
 MonoObject *icon_asset() {
+  const char *path = AniketosIconPath();
+  if (s_icon_for != path && s_icon_handle) {
+    mono_gchandle_free(s_icon_handle);
+    s_icon_handle = 0;
+  }
+  s_icon_for = path;
   if (MonoObject *asset = target(s_icon_handle))
     return asset;
-  const char *path = AniketosIconPath();
   MonoImage *pui = getDLLimage("Sce.PlayStation.PUI.dll");
   MonoClass *klass =
       pui && *path ? mono_class_from_name(pui, "Sce.PlayStation.PUI", "ImageAsset")
@@ -394,9 +414,87 @@ const char *embedded_image(const char *file, const unsigned char *start,
 }
 } // namespace
 
+namespace {
+constexpr int kLogoSide = 128;
+
+/* Back to no coloured logo; false when there was none. */
+bool clear_logo_folder() {
+  DIR *folder = opendir(ONION_LOGO_DIR);
+  if (!folder)
+    return false;
+  bool any = false;
+  while (const dirent *entry = readdir(folder))
+    if (entry->d_name[0] != '.') {
+      unlink((std::string(ONION_LOGO_DIR) + "/" + entry->d_name).c_str());
+      any = true;
+    }
+  closedir(folder);
+  return any;
+}
+
+void write_notification_logo(const void *data, size_t size) {
+  if (!write_file_atomic_if_changed(ONION_NOTIFY_ICON_PATH, data, size))
+    LOG_WARN("logo: the notifications' picture stays as it was");
+}
+
+/* The logo in the chosen colour, under a name of its own: the system keeps
+   pictures by their path. Empty when it cannot be made. */
+const char *coloured_logo() {
+  static std::mutex mutex;
+  static char path[160];
+  static int made_for = -1;
+  const auto channel = [](int value) { return std::clamp(value, 0, 255); };
+  const int red = channel(g_settings.logo_color_r);
+  const int green = channel(g_settings.logo_color_g);
+  const int blue = channel(g_settings.logo_color_b);
+  const int colour = red << 16 | green << 8 | blue;
+  std::lock_guard<std::mutex> lock(mutex);
+  if (colour == made_for)
+    return path;
+  made_for = colour;
+  path[0] = '\0';
+  std::vector<uint8_t> pixels(aniketos_icon_rgba_start, aniketos_icon_rgba_end);
+  if (pixels.size() != kLogoSide * kLogoSide * 4)
+    return path;
+  LogoTint::Apply(pixels.data(), pixels.size() / 4, red, green, blue);
+  const std::vector<uint8_t> png =
+      WebIcon::EncodePng(kLogoSide, kLogoSide, pixels);
+  (void)mkdir(ONION_LOGO_DIR, 0777);
+  clear_logo_folder();
+  char candidate[160];
+  std::snprintf(candidate, sizeof(candidate), "%s/%06x.png", ONION_LOGO_DIR,
+                colour);
+  const int fd = open(candidate, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+  if (fd < 0)
+    return path;
+  const bool written =
+      write(fd, png.data(), png.size()) == static_cast<ssize_t>(png.size());
+  close(fd);
+  if (written) {
+    std::snprintf(path, sizeof(path), "%s", candidate);
+    write_notification_logo(png.data(), png.size());
+  } else {
+    unlink(candidate);
+  }
+  return path;
+}
+} // namespace
+
 const char *AniketosIconPath() {
   static char path[160];
   static bool tried = false;
+  static std::atomic<bool> stock_checked{false};
+  if (g_settings.logo_color_enabled) {
+    stock_checked.store(false, std::memory_order_relaxed);
+    const char *coloured = coloured_logo();
+    if (*coloured)
+      return coloured;
+  } else if (!stock_checked.exchange(true, std::memory_order_relaxed) &&
+             clear_logo_folder()) {
+    write_notification_logo(
+        aniketos_icon_png_start,
+        static_cast<size_t>(aniketos_icon_png_end - aniketos_icon_png_start));
+  }
   return embedded_image("aniketos_icon.png", aniketos_icon_png_start,
                         aniketos_icon_png_end, path, tried);
 }
