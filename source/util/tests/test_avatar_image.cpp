@@ -1,7 +1,7 @@
 /* Host tests for reading an avatar file's format and size (no PS5/Mono). */
 #include "test_harness.h"
 
-#include "avatar_image.hpp"
+#include "aniketos_shell/system_ui/avatar_image.hpp"
 
 #include <cstdint>
 #include <string>

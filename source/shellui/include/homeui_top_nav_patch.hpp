@@ -33,7 +33,7 @@ struct MonoImage;
 
 /* Whether the Home bundle last loaded got the top-bar icon from the byte
  * patch. When it did not (a firmware without a profile), the script
- * home_js.cpp puts into Home adds the icon instead. */
+ * script_injector.cpp puts into Home adds the icon instead. */
 bool homeui_top_nav_patched();
 
 /* What the last Home bundle's tiles ended up with, so the focus outline and

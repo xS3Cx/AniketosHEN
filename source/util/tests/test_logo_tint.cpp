@@ -1,7 +1,7 @@
 /* Host tests for colouring the logo (no PS5/Mono). */
 #include "test_harness.h"
 
-#include "logo_tint.hpp"
+#include "aniketos_theme/logo_tint.hpp"
 
 #include <cstdint>
 

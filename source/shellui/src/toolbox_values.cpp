@@ -11,7 +11,7 @@
 #include "toolbox_i18n.hpp"
 #include "dynamic_ui_runtime.hpp"
 #include "plugin_sprx_pages.hpp"
-#include "kbm_toolbox.hpp"
+#include "aniketos_shell/toolbox/kbm_toolbox.hpp"
 
 #include <onion/platform.h>
 #include <onion/ipc_client.hpp>

@@ -13,7 +13,7 @@
 #include "dynamic_ui_runtime.hpp"
 #include "external_plugin_ui.hpp"
 #include "external_sprx_ui.hpp"
-#include "kbm_toolbox.hpp"
+#include "aniketos_shell/toolbox/kbm_toolbox.hpp"
 #include <onion/platform.h>
 #include <string>
 

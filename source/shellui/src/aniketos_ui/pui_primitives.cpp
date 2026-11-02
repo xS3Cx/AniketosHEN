@@ -1,16 +1,16 @@
 #include "aniketos_ui/pui_primitives.hpp"
 
 #include "hooked_funcs.hpp"
-#include "aniketos_ui/mono_fast.hpp"
+#include "aniketos_ui/mono_property_cache.hpp"
 
 #include <cmath>
 #include <unordered_map>
 #include <unordered_set>
 
 /* Per-frame code: resolve each managed property once and reuse the compiled
- * accessor (see aniketos_ui/mono_fast.hpp) instead of looking it up by name on
+ * accessor (see aniketos_ui/mono_property_cache.hpp) instead of looking it up by name on
  * every call. Same call syntax and semantics as the hooked_funcs.hpp helpers. */
-#include "aniketos_ui/mono_fast.hpp"
+#include "aniketos_ui/mono_property_cache.hpp"
 #define Get_Property AniketosUI::MonoFast::Get
 #define Set_Property AniketosUI::MonoFast::Set
 #define Set_Property_Invoke AniketosUI::MonoFast::SetInvoke

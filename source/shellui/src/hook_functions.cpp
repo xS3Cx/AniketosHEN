@@ -16,7 +16,7 @@ along with this program; see the file COPYING. If not, see
 
 #include "hooked_funcs.hpp"
 #include "homeui_top_nav_patch.hpp"
-#include "aniketos_shell/home_menu.hpp"
+#include "aniketos_shell/home/hen_menu.hpp"
 #include "settings_bundle_patch.hpp"
 #include "toolbox_i18n.hpp"
 #include <onion/platform.h>

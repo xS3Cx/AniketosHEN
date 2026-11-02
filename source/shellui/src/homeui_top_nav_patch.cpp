@@ -39,7 +39,7 @@ along with this program; see the file COPYING. If not, see
 #include <string>
 #include <string.h>
 
-const char *AniketosIconPath(); /* aniketos_shell/control_center_entry.cpp */
+const char *AniketosIconPath(); /* aniketos_shell/home/control_center_entry.cpp */
 
 /* Set when a Home bundle was given the top-bar icon by the patch below. */
 static std::atomic<bool> g_top_nav_patched{false};
@@ -905,7 +905,7 @@ static void update_hbc_footer_sha1(HbcView &hbc, size_t file_length) {
   SHA1Final(hbc.data + footer_offset, &ctx);
 }
 
-#include "homeui_home_tiles.inc"
+#include "aniketos_theme/tiles/homeui_tile_patch.inc"
 
 /* Sony's focus-frame corner: the 16 px icon corner scaled to the 168 px
    focused tile. */
@@ -939,7 +939,7 @@ static bool is_homeui_top_nav_icon_source(MonoObject *source) {
   }
 
   /* The byte patch names the picture by its system path; where it has no
-     profile, the script home_js.cpp puts into Home names our own file. */
+     profile, the script script_injector.cpp puts into Home names our own file. */
   const std::string uri = Mono_to_String(text);
   const char *own = AniketosIconPath();
   return uri.find(kOnionHenTopNavIconPath) != std::string::npos ||
@@ -1381,7 +1381,7 @@ void patch_homeui_top_nav(unsigned char *buffer, int *size_ptr,
              tile_shape_ready ? static_cast<int>(*tile_shape.icon_radius) : -1,
              round_tiles ? static_cast<int>(wanted_shape.icon_radius) : -1,
              tile_clip_ready ? 1 : 0);
-    /* The focus outline and the arc labels (aniketos_theme/home_tiles.cpp)
+    /* The focus outline and the arc labels (aniketos_theme/tiles/home_tiles.cpp)
        follow the tiles this bundle ends up with. */
     publish_home_tiles(round_tiles ? tile_rounding : -1,
                        round_tiles        ? read_double(wanted_shape.focus_radius)

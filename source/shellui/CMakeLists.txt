@@ -49,11 +49,11 @@ add_custom_command(
 )
 add_custom_target(shellui_i18n_catalog DEPENDS "${I18N_CATALOG}")
 
-# Shell Menu (L1+R3) and the subsystems it drives. They keep their own
-# subdirectories.
-file(GLOB_RECURSE ShellMenuSrc CONFIGURE_DEPENDS
-	${D_SRC}/aniketos_shell/*.cpp ${D_SRC}/aniketos_ui/*.cpp
-	${D_SRC}/aniketos_theme/*.cpp ${D_SRC}/controller/*.cpp)
+# Our code. Any depth below these folders is picked up: a new file needs no edit here.
+file(GLOB_RECURSE AniketosSrc CONFIGURE_DEPENDS
+	${D_SRC}/aniketos_shell/*.c ${D_SRC}/aniketos_shell/*.cpp
+	${D_SRC}/aniketos_theme/*.c ${D_SRC}/aniketos_theme/*.cpp
+	${D_SRC}/aniketos_ui/*.c ${D_SRC}/aniketos_ui/*.cpp)
 
 set(ANIKETOS_ICON_PNG "${D_CWD}/../bootstrapper/assets/aniketoshen_sicon.png")
 set(HOME_MENU_ASSETS "${D_CWD}/assets/home_menu")
@@ -68,15 +68,14 @@ add_custom_command(
 	COMMENT "Decoding the logo for its colour setting"
 	VERBATIM
 )
-set(ANIKETOS_ICON_ASSEMBLY "${I18N_GENERATED_DIR}/aniketos_icon_asset.s")
-configure_file("${D_SRC}/aniketos_icon_asset.s.in" "${ANIKETOS_ICON_ASSEMBLY}" @ONLY)
-set_source_files_properties("${ANIKETOS_ICON_ASSEMBLY}" PROPERTIES
+set(EMBEDDED_ASSETS_ASSEMBLY "${I18N_GENERATED_DIR}/embedded_assets.s")
+configure_file("${D_SRC}/aniketos_shell/core/embedded_assets.s.in" "${EMBEDDED_ASSETS_ASSEMBLY}" @ONLY)
+set_source_files_properties("${EMBEDDED_ASSETS_ASSEMBLY}" PROPERTIES
 	OBJECT_DEPENDS "${ANIKETOS_ICON_RGBA};${ANIKETOS_ICON_PNG};${HOME_MENU_ASSETS}/internet_on.png;${HOME_MENU_ASSETS}/internet_off.png;${HOME_MENU_ASSETS}/color_track.png;${HOME_MENU_ASSETS}/color_track_gray.png;${HOME_MENU_ASSETS}/color_track_solid.png;${HOME_MENU_ASSETS}/color_track_fade.png;${PARTICLE_ASSETS}/triangle.png;${PARTICLE_ASSETS}/circle.png;${PARTICLE_ASSETS}/cross.png;${PARTICLE_ASSETS}/square.png;${PARTICLE_ASSETS}/dot.png;${HOME_BACKGROUND_ASSETS}/vignette.png;${HOME_BACKGROUND_ASSETS}/edges.png")
 
 file(GLOB SrcFiles CONFIGURE_DEPENDS ${D_SRC}/*.c ${D_SRC}/*.cpp ${D_SRC}/../include/*.h ${D_SRC}/../include/*.hpp ${D_SRC}/*.s ${ONIONHEN_THIRD_PARTY_DIR}/cjson/*.cpp ${ONIONHEN_THIRD_PARTY_DIR}/cjson/*.hpp)
 
-set(AVATAR_CODEC_SOURCE "${D_SRC}/aniketos_shell/avatar_codec.c")
-set_source_files_properties("${AVATAR_CODEC_SOURCE}" PROPERTIES
+set_source_files_properties("${D_SRC}/aniketos_shell/system_ui/avatar_codec.c" PROPERTIES
 	COMPILE_OPTIONS "-w;-std=gnu17"
 	C_STANDARD 17
 	C_STANDARD_REQUIRED ON)
@@ -87,7 +86,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -gfull -gdwarf-2 -pedantic -pedantic-error
 set(CMAKE_C_FLAGS_RELEASE "-Os -DNDEBUG")
 set(CMAKE_CXX_FLAGS_RELEASE "-Os -DNDEBUG")
 
-target_sources(${PROJECT_NAME} PRIVATE ${SrcFiles} ${ShellMenuSrc} "${AVATAR_CODEC_SOURCE}" "${ANIKETOS_ICON_ASSEMBLY}")
+target_sources(${PROJECT_NAME} PRIVATE ${SrcFiles} ${AniketosSrc} "${EMBEDDED_ASSETS_ASSEMBLY}")
 add_dependencies(${PROJECT_NAME} shellui_i18n_catalog onion_version onion_ipc onion_settings onion_detour onion_proc onion_platform onion_ready onion_plugin_ui onion_plugin_bridge onion_kbm onion_kbm_profile)
 onion_target_debug_define(${PROJECT_NAME})
 target_include_directories(${PROJECT_NAME} PRIVATE

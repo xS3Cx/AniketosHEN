@@ -1,13 +1,13 @@
 /* Copyright (C) 2025 OnionHEN / LightningMods
  * Extracted from hook_functions.cpp — hook_boot
  */
-#include "aniketos_shell/home_menu.hpp"
-#include "controller_tools.hpp"
-#include "aniketos_shell/shell_manager.hpp"
-#include "aniketos_shell/trophy_tools.hpp"
-#include "aniketos_shell/home_bookmark.hpp"
-#include "aniketos_shell/home_hidden.hpp"
-#include "aniketos_shell/mouse_control.hpp"
+#include "aniketos_shell/home/hen_menu.hpp"
+#include "aniketos_shell/controller/controller_tools.hpp"
+#include "aniketos_shell/core/menu_host.hpp"
+#include "aniketos_shell/games/trophy_tools.hpp"
+#include "aniketos_shell/home/home_bookmark.hpp"
+#include "aniketos_shell/home/hidden_apps.hpp"
+#include "aniketos_shell/input/mouse_control.hpp"
 #include <onion/distribution.h>
 #include "hooked_funcs.hpp"
 #include "debug_settings_route_runtime.hpp"

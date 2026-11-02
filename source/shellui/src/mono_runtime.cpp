@@ -7,7 +7,7 @@
 #include "external_symbols.hpp"
 #include "defs.h"
 #include "ipc.hpp" // shellui_log
-#include "aniketos_shell/home_js.hpp"
+#include "aniketos_shell/rn_scripts/script_injector.hpp"
 #include <chrono>
 #include <atomic>
 #include <string>

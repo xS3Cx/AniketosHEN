@@ -5,9 +5,9 @@
 #include "ipc.hpp"
 #include "external_symbols.hpp"
 #include "toolbox_i18n.hpp"
-#include "aniketos_shell/trophy_tools.hpp"
-#include "aniketos_shell/home_bookmark.hpp"
-#include "aniketos_shell/home_hidden.hpp"
+#include "aniketos_shell/games/trophy_tools.hpp"
+#include "aniketos_shell/home/home_bookmark.hpp"
+#include "aniketos_shell/home/hidden_apps.hpp"
 #include <onion/platform.h>
 #include <onion/system_tmp.h>
 #include <string>

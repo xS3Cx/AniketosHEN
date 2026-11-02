@@ -17,7 +17,7 @@ namespace AniketosTheme::ToggleStyles {
 
 void Install(MonoImage *pui);
 
-/* From the Panel background hook (shared_ui.cpp): `rgba` is the colour the
+/* From the Panel background hook (panel_tint.cpp): `rgba` is the colour the
  * system is about to give `panel`, changed in place when the panel is part
  * of a switch and a style is chosen; true then. */
 bool OnPanelBackground(MonoObject *panel, float *rgba);

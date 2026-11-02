@@ -1,7 +1,7 @@
 /* Host tests for recognising the system clock's text (no PS5/Mono). */
 #include "test_harness.h"
 
-#include "clock_text.hpp"
+#include "aniketos_theme/clock/clock_text.hpp"
 
 #include <cstdio>
 
