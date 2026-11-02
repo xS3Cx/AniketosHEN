@@ -1,7 +1,5 @@
 #pragma once
 
-#include "aniketos_shell/core/embedded_assets.hpp" // renames.tsv
-#include "aniketos_shell/home/control_center_entry.hpp" // renames.tsv
 #include "external_symbols.hpp"
 
 /* The distribution's menu (Toolbox, unload...): a native pop-up opened from
@@ -16,4 +14,3 @@ void Request(MonoObject *scene = nullptr);
 /* UI thread, once a frame. */
 void Tick();
 }
-namespace HomeMenu = HenMenu; // renames.tsv

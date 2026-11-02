@@ -162,7 +162,7 @@ void update_controls() {
   hide_control_frame();
 
   for (int i = next_label; i < kControlLabelCount; ++i) {
-    collapse_label(s_widgets.control_labels[i]);
+    clear_label(s_widgets.control_labels[i]);
     metrics[i] = {};
   }
 }
@@ -170,8 +170,8 @@ void update_controls() {
 void hide_anomaly_extras() {
   collapse_panel(s_widgets.anomaly_controls);
   for (MonoObject *icon : s_widgets.anomaly_control_icons)
-    image_geometry(icon, 0, 0, 0, 0, false);
+    collapse_image(icon);
   for (MonoObject *label : s_widgets.anomaly_control_labels)
-    collapse_label(label);
-  image_geometry(s_widgets.position_edit_icon, 0, 0, 0, 0, false);
+    clear_label(label);
+  collapse_image(s_widgets.position_edit_icon);
 }

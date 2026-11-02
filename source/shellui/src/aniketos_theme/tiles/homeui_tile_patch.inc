@@ -709,10 +709,9 @@ static void plan_home_tiles(const HbcView &hbc, size_t file_length,
            shape_ready ? static_cast<int>(*plan->shape.icon_radius) : -1,
            plan->round ? static_cast<int>(plan->wanted.icon_radius) : -1,
            clip_ready ? 1 : 0);
-  /* The focus outline and the arc labels (home_tiles.cpp) follow the tiles
-     this bundle ends up with. */
-  homeui_publish_tiles(plan->round ? rounding : -1,
-                       plan->round   ? plan->wanted.focus_radius
+  /* The focus outline (home_tiles.cpp) follows the tiles this bundle ends up
+     with. */
+  homeui_publish_tiles(plan->round   ? plan->wanted.focus_radius
                        : shape_ready ? read_double(plan->shape.focus_radius)
                                      : kSonyTileFocusRadius);
 }

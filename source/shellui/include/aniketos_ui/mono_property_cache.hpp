@@ -66,5 +66,3 @@ void SetInvoke(MonoClass *klass, MonoObject *instance, const char *property,
 MonoObject *ScratchColor(float r, float g, float b, float a);
 
 } // namespace AniketosUI::MonoPropertyCache
-
-namespace AniketosUI { namespace MonoFast = MonoPropertyCache; } // renames.tsv

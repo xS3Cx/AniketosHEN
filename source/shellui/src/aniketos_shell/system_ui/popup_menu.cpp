@@ -200,21 +200,6 @@ bool ShowPopupMenu(const std::vector<MenuEntry> &entries,
   return true;
 }
 
-bool UpdatePopupMenu(const std::vector<MenuEntry> &entries,
-                     const std::string &header, int focus,
-                     std::string *failure) {
-  Failure result{failure};
-  MonoObject *menu = Reflect::Target(s_menu_handle);
-  if (!menu_is_open(menu))
-    return result.fail("no popup menu on screen");
-  if (!fill_popup(menu, entries, header, result))
-    return false;
-  focus_popup_row(menu, focus);
-  s_menu_selected = -1;
-  LOG_INFO("[SYSDIALOG] popup menu now has entries=%zu", entries.size());
-  return true;
-}
-
 bool PopupMenuDismissed() {
   if (!s_menu_handle || !s_menu_stays)
     return false;

@@ -19,5 +19,3 @@ void Show(const std::string &title_id);
 void ShowAll();
 std::vector<Entry> List();
 }
-
-namespace HomeHidden = HiddenApps; // renames.tsv

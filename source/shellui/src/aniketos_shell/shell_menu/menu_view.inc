@@ -118,18 +118,11 @@ void update_menu_widgets() {
   update_highlight_target(state, target_highlight);
   panel_geometry(s_widgets.highlight, border, s_highlight_y, width, row);
   for (int i = 0; i < kGradientSlices; ++i) {
-    // Derive both edges independently. This removes the old +1 px overlap,
-    // which doubled alpha at every seam and caused the visible banding.
-    const float x0 = width * static_cast<float>(i) /
-                     static_cast<float>(kGradientSlices);
-    const float x1 = width * static_cast<float>(i + 1) /
-                     static_cast<float>(kGradientSlices);
-    const float t = (static_cast<float>(i) + 0.5f) /
-                    static_cast<float>(kGradientSlices);
-    panel_geometry(s_widgets.highlight_slices[i], x0, 0, x1 - x0, row);
+    const GradientSlice slice = gradient_slice(width, i, kGradientSlices);
+    panel_geometry(s_widgets.highlight_slices[i], slice.x, 0, slice.width, row);
     panel_color(s_widgets.highlight_slices[i],
                 menu_dual_color()
-                    ? mix(left_color(), right_color(), gradient_t(t),
+                    ? mix(left_color(), right_color(), gradient_t(slice.t),
                           0.4f * text_opacity)
                     : right_color(0.4f * text_opacity));
   }
@@ -184,8 +177,7 @@ void update_menu_widgets() {
     label_text(s_widgets.rows[visible_index], option.title);
     label_geometry(s_widgets.rows[visible_index], text_x, row_y, title_width,
                    row);
-    const bool selector = option.type == OptionType::Strings ||
-                          option.type == OptionType::ThemeChoice;
+    const bool selector = option.type == OptionType::Strings;
     std::string display_value;
     if (option.type == OptionType::Submenu) {
       display_value = ">";

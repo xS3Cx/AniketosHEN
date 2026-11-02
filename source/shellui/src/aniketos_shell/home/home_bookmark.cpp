@@ -3,6 +3,7 @@
 #include "aniketos_shell/home/home_tabs.hpp"
 #include "aniketos_shell/home/title_info.hpp"
 #include "aniketos_shell/home/web_tiles.hpp"
+#include "aniketos_shell/system_ui/popup_menu.hpp"
 #include "aniketos_shell/system_ui/system_dialogs.hpp"
 #include "aniketos_ui/small_file.hpp"
 #include "hooked_funcs.hpp"

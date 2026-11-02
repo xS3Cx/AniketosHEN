@@ -28,7 +28,7 @@ void update_highlight_motion(uint64_t now) {
     s_highlight_follow = false;
   }
   AniketosUI::Pui::PanelY(s_pui, s_widgets.highlight, s_highlight_y);
-  if (Profile::g_enabled)
+  if (Profile::enabled)
     LOG_INFO("[SHELLMENU:PROFILE] cursor t=%llu y=%.1f to=%.1f hold=%d",
              static_cast<unsigned long long>(now), s_highlight_y,
              s_highlight_to, s_highlight_follow ? 1 : 0);

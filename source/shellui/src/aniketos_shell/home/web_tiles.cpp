@@ -1,7 +1,7 @@
 #include "aniketos_shell/home/web_tiles.hpp"
 
 #include "aniketos_shell/home/home_bookmark.hpp"
-#include "aniketos_shell/rn_scripts/script_injector.hpp"
+#include "aniketos_shell/rn_scripts/js_string.hpp"
 #include "aniketos_ui/small_file.hpp"
 #include "hooked_funcs.hpp"
 #include "onion_cjson.hpp"
@@ -231,12 +231,12 @@ std::string ScriptConfig() {
     std::lock_guard<std::mutex> lock(s_mutex);
     load_locked();
     for (const Tile &tile : s_tiles)
-      urls += (urls.empty() ? "" : ", ") + HomeJs::JsString(tile.url);
+      urls += (urls.empty() ? "" : ", ") + JsString(tile.url);
   }
   return "globalThis.__aniketosWeb = {tiles: [" + urls + "], fullscreen: " +
-         HomeJs::JsString(tr("web_tiles.fullscreen")) + ", addHome: " +
-         HomeJs::JsString(tr("web_tiles.add")) + ", removeHome: " +
-         HomeJs::JsString(tr("web_tiles.remove")) + "};";
+         JsString(tr("web_tiles.fullscreen")) + ", addHome: " +
+         JsString(tr("web_tiles.add")) + ", removeHome: " +
+         JsString(tr("web_tiles.remove")) + "};";
 }
 
 const char *InjectedScript() { return kInjectedScript; }
@@ -247,10 +247,10 @@ std::string HomeState() {
   std::string tiles;
   for (const Tile &tile : s_tiles)
     tiles += (tiles.empty() ? "{" : ",{") + std::string("\"id\":") +
-             HomeJs::JsString(tile.id) + ",\"url\":" +
-             HomeJs::JsString(tile.url) + ",\"name\":" +
-             HomeJs::JsString(tile.name) + ",\"icon\":" +
-             HomeJs::JsString(tile.icon) + "}";
+             JsString(tile.id) + ",\"url\":" +
+             JsString(tile.url) + ",\"name\":" +
+             JsString(tile.name) + ",\"icon\":" +
+             JsString(tile.icon) + "}";
   return "{\"rev\":" + std::to_string(s_revision) + ",\"tiles\":[" + tiles +
          "]}";
 }

@@ -275,9 +275,7 @@ void update_anomaly_menu_widgets() {
              option.type == OptionType::SliderFloat ||
              option.type == OptionType::Value)
       display_value = option.value;
-    const bool selector = option.type == OptionType::Strings ||
-                          option.type == OptionType::ThemeChoice;
-    if (selector) {
+    if (option.type == OptionType::Strings) {
       /* the plain choice; "< choice >" on the row the cursor is on, without
          the arrow that has nothing beyond it */
       const bool first = option.string_index <= 0;

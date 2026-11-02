@@ -1,6 +1,5 @@
 #pragma once
 
-#include "aniketos_shell/rn_scripts/js_string.hpp" // renames.tsv
 #include "external_symbols.hpp"
 
 /* Running JavaScript of our own inside ShellUI's React Native apps.
@@ -18,7 +17,4 @@ void Install(MonoImage *react_pui);
  * restart after a fall-over, so the restart guard leaves the script in. */
 void NoteRequestedReload(const char *title_id);
 
-using ::JsString; // renames.tsv
 }
-
-namespace HomeJs = ScriptInjector; // renames.tsv

@@ -17,5 +17,3 @@ void ApplyFocusHierarchy(MonoObject *focus_layer, const std::string &test_id);
 void Tick();
 
 } // namespace AniketosTheme::PanelTint
-
-namespace AniketosTheme { namespace SharedUI = PanelTint; } // renames.tsv

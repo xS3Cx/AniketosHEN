@@ -30,7 +30,6 @@ private:
   MonoMethod *find_scene_ = nullptr;
   bool probed_ = false;
 };
-using ShellContext = HostScene; // renames.tsv
 
 /* Who has the screen: LayerManager.s_curFocusLayer, read by name. Other is a
  * layer that is none of these (the Control Center's, say); Unknown means the

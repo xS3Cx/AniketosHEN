@@ -3,7 +3,7 @@
 #include "aniketos_shell/home/home_bookmark.hpp"
 #include "aniketos_shell/home/home_rows.hpp"
 #include "aniketos_shell/system_ui/system_dialogs.hpp"
-#include "aniketos_theme/clock/shell_clock.hpp"
+#include "aniketos_ui/home_scene.hpp"
 #include "aniketos_ui/mono_reflect.hpp"
 #include "hooked_funcs.hpp"
 #include "toolbox_i18n.hpp"
@@ -101,7 +101,7 @@ MonoObject *find_switcher(MonoObject *widget, int depth, int &budget) {
 }
 
 bool find_tab_bar() {
-  MonoObject *root = ShellClock::GetHomeRoot();
+  MonoObject *root = AniketosUI::HomeScene::Root();
   if (!root)
     return false;
   int budget = 300;
@@ -261,7 +261,7 @@ void remember_named(MonoObject *label, StockTab tab) {
   /* the labels of a Home that is gone first, then the oldest if still full */
   for (size_t i = 0; i < s_named_labels.size();) {
     MonoObject *other = Reflect::Target(s_named_labels[i].handle);
-    if (other && !ShellClock::IsWidgetDisposed(other)) {
+    if (other && !AniketosUI::HomeScene::IsDisposed(other)) {
       ++i;
       continue;
     }
@@ -304,7 +304,7 @@ void name_tab_labels(const std::string (&captions)[2]) {
   for (size_t i = 0; i < s_tab_labels.size();) {
     TabLabel &entry = s_tab_labels[i];
     MonoObject *label = Reflect::Target(entry.handle);
-    const Place place = label && !ShellClock::IsWidgetDisposed(label)
+    const Place place = label && !AniketosUI::HomeScene::IsDisposed(label)
                             ? place_of(label)
                             : Place::Elsewhere;
     if (place == Place::Unattached && ++entry.frames < kTabLabelFrames) {
@@ -537,13 +537,13 @@ void RestoreNames() {
 bool IsHomeTabLabel(MonoObject *label) {
   if (!label)
     return false;
-  MonoObject *home = ShellClock::GetHomeRoot();
-  if (!home || ShellClock::IsWidgetDisposed(home))
+  MonoObject *home = AniketosUI::HomeScene::Root();
+  if (!home || AniketosUI::HomeScene::IsDisposed(home))
     return false;
   if (!is_under(label, home))
     return false;
   MonoObject *switcher = Reflect::Target(s_switcher);
-  if (switcher && !ShellClock::IsWidgetDisposed(switcher)) {
+  if (switcher && !AniketosUI::HomeScene::IsDisposed(switcher)) {
     if (is_under(label, switcher))
       return true;
     for (const TabPanel &tab : s_tab_panels) {
@@ -565,7 +565,7 @@ void Tick() {
                                    caption_of(StockTab::Media)};
   name_tab_labels(captions);
   MonoObject *switcher = Reflect::Target(s_switcher);
-  if (!switcher || ShellClock::IsWidgetDisposed(switcher)) {
+  if (!switcher || AniketosUI::HomeScene::IsDisposed(switcher)) {
     if (--s_search_countdown > 0)
       return;
     s_search_countdown = 90;

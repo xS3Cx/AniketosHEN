@@ -360,10 +360,10 @@ void run_home_action(const Option &option) {
     HomeBookmark::RequestRename();
     break;
   case OptionId::HiddenAppShow:
-    HomeHidden::Show(option.external_key);
+    HiddenApps::Show(option.external_key);
     break;
   case OptionId::HiddenAppsShowAll:
-    HomeHidden::ShowAll();
+    HiddenApps::ShowAll();
     break;
   case OptionId::HomeTabRenameGames:
   case OptionId::HomeTabRenameMedia:

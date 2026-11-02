@@ -2,6 +2,7 @@
 #include "home_video_internal.hpp"
 
 #include "aniketos_theme/customization.hpp"
+#include "aniketos_ui/small_file.hpp"
 #include "hooked_funcs.hpp"
 #include "shellui_types.hpp"
 

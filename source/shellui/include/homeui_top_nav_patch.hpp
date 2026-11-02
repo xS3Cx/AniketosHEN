@@ -37,14 +37,10 @@ struct MonoImage;
 bool homeui_top_nav_patched();
 void homeui_note_top_nav_patched(bool patched);
 
-/* What the last Home bundle's tiles ended up with, so the focus outline and
- * the arc labels match them: the rounding the patch gave them (percent of a
- * full circle; -1 when they kept Sony's shape, -2 before a Home bundle was
- * seen), and the focus frame's corner in pixels (negative before a Home
- * bundle was seen). */
-int homeui_tile_rounding();
+/* The focus frame's corner in pixels on the last Home bundle's tiles, so the
+ * focus outline matches them (negative before a Home bundle was seen). */
 float homeui_tile_focus_radius();
-void homeui_publish_tiles(int rounding, double focus_radius);
+void homeui_publish_tiles(double focus_radius);
 
 void patch_homeui_top_nav(unsigned char *buffer, int *size_ptr,
                           int buffer_capacity);

@@ -13,9 +13,12 @@
 #include "aniketos_shell/shell_menu/shell_menu.hpp"
 #include "aniketos_shell/system_ui/account_avatar.hpp"
 #include "aniketos_shell/system_ui/devkit_overlay.hpp"
+#include "aniketos_shell/system_ui/native_menu.hpp"
+#include "aniketos_shell/system_ui/popup_menu.hpp"
+#include "aniketos_shell/core/embedded_assets.hpp"
+#include "aniketos_shell/rn_scripts/rn_reload.hpp"
 #include "aniketos_shell/home/home_bookmark.hpp"
 #include "aniketos_shell/home/hidden_apps.hpp"
-#include "aniketos_shell/home/hen_menu.hpp"
 #include "aniketos_shell/home/home_tabs.hpp"
 #include "aniketos_shell/home/title_info.hpp"
 
@@ -32,6 +35,7 @@
 #include "aniketos_theme/shell_background.hpp"
 #include "aniketos_theme/theme_config.hpp"
 #include "aniketos_theme/theme_manager.hpp"
+#include "aniketos_ui/home_scene.hpp"
 #include "aniketos_ui/menu_style.hpp"
 #include "aniketos_ui/mono_reflect.hpp"
 #include "aniketos_ui/monotonic_clock.hpp"
@@ -65,11 +69,9 @@
  * accessor (see aniketos_ui/mono_property_cache.hpp) instead of looking it up by name on
  * every call. Same call syntax and semantics as the hooked_funcs.hpp helpers. */
 #include "aniketos_ui/mono_property_cache.hpp"
-#define Get_Property AniketosUI::MonoFast::Get
-#define Set_Property AniketosUI::MonoFast::Set
-#define Set_Property_Invoke AniketosUI::MonoFast::SetInvoke
-
-namespace AniketosShell::TextUnits { inline constexpr char kCelsiusSuffix[] = "\xC2\xB0" "C"; } // renames.tsv
+#define Get_Property AniketosUI::MonoPropertyCache::Get
+#define Set_Property AniketosUI::MonoPropertyCache::Set
+#define Set_Property_Invoke AniketosUI::MonoPropertyCache::SetInvoke
 
 namespace AniketosShell::ShellMenu {
 namespace {
@@ -96,7 +98,7 @@ void release_bound_host(bool remove_managed_nodes) {
     for (const char *name : {kMenuName, kOverlayName, kControlsName,
                              kAnomalyControlsName, kClockDateName})
       remove_named(s_host, name);
-    if (s_clock_layer && !ShellClock::IsWidgetDisposed(s_clock_layer))
+    if (s_clock_layer && !AniketosUI::HomeScene::IsDisposed(s_clock_layer))
       for (MonoObject *widget : {s_widgets.overlay, s_widgets.clock_date,
                                  s_widgets.controls})
         AniketosUI::Pui::Remove(s_pui, widget);
@@ -576,7 +578,7 @@ void HandleInput(uint32_t buttons_down, uint32_t repeated) {
   // still takes the normal dirty path.
   if (!page_transition_active())
     s_dirty = true;
-  if (Profile::g_enabled && !s_stack.empty()) {
+  if (Profile::enabled && !s_stack.empty()) {
     const PageState &now_state = s_stack.back();
     const std::vector<Option> now_options = build_page(now_state.page);
     LOG_INFO("[SHELLMENU:PROFILE] input=0x%x page=%s selected=%zu scroll=%zu "

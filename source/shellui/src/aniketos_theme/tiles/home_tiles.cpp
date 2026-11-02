@@ -165,7 +165,7 @@ void register_layer(MonoObject *widget) {
     return;
   const std::string test_id = Mono_to_String(s_get_test_id(widget));
   SpaceSwitcherLabels::RememberFocusLayer(widget, test_id);
-  SharedUI::ApplyFocusHierarchy(widget, test_id);
+  PanelTint::ApplyFocusHierarchy(widget, test_id);
   MonoObject *settings = s_get_focus_settings(widget);
   SpaceSwitcherLabels::RememberFocusPadding(settings, test_id);
   if (!settings || find_live(s_layers, settings) ||

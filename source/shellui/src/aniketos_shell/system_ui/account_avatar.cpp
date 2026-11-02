@@ -2,7 +2,7 @@
 
 #include "aniketos_shell/system_ui/avatar_codec.h"
 #include "aniketos_shell/system_ui/avatar_image.hpp"
-#include "aniketos_theme/clock/shell_clock.hpp"
+#include "aniketos_ui/home_scene.hpp"
 #include "aniketos_ui/mono_reflect.hpp"
 #include "aniketos_ui/small_file.hpp"
 #include "hooked_funcs.hpp"
@@ -236,7 +236,7 @@ void report_chosen() {
     return;
   const AvatarImage::Info info = AvatarImage::Inspect(
       reinterpret_cast<const uint8_t *>(bytes.data()), bytes.size());
-  const std::string name = FileName(path);
+  const std::string name = AniketosUI::FileName(path);
   LOG_INFO("[AVATAR] '%s' format=%d %dx%d frames=%d", name.c_str(),
            static_cast<int>(info.format), info.width, info.height, info.frames);
   const AvatarImage::Problem problem = AvatarImage::Check(info);
@@ -260,7 +260,7 @@ void report_chosen() {
 }
 
 std::string cache_path_for(const std::string &source) {
-  const std::string name = FileName(source);
+  const std::string name = AniketosUI::FileName(source);
   const size_t dot = name.rfind('.');
   const std::string stem =
       dot == std::string::npos || dot == 0 ? name : name.substr(0, dot);
@@ -451,7 +451,7 @@ bool image_loaded(MonoObject *box) {
 
 void verify_box(TrackedBox &entry, MonoObject *box) {
   entry.frames = 0;
-  if (ShellClock::IsWidgetDisposed(box))
+  if (AniketosUI::HomeScene::IsDisposed(box))
     return;
   if (image_loaded(box)) {
     entry.stage = kLoaded;
@@ -478,7 +478,7 @@ void verify_box(TrackedBox &entry, MonoObject *box) {
              first_time(s_logged_failures, entry.uri)) {
     LOG_INFO("[AVATAR] load failed uri=%s", entry.uri.c_str());
     notify("notify.vsh.account_avatar.load_failed",
-           FileName(entry.path).c_str());
+           AniketosUI::FileName(entry.path).c_str());
   }
 }
 
@@ -579,7 +579,7 @@ const std::vector<std::string> &Files(bool rescan) {
   }
   std::sort(s_files.begin(), s_files.end(),
             [](const std::string &left, const std::string &right) {
-              return lower(FileName(left)) < lower(FileName(right));
+              return lower(AniketosUI::FileName(left)) < lower(AniketosUI::FileName(right));
             });
   s_scanned = true;
   LOG_INFO("[AVATAR] catalog '%s' files=%zu", kDirectory, s_files.size());
@@ -627,7 +627,7 @@ void Refresh() {
   const bool animated = !path.empty() && has_extension(path, kAnimated);
   int reloaded = 0;
   for_each_live_box([&](TrackedBox &entry, MonoObject *box) {
-    if (ShellClock::IsWidgetDisposed(box))
+    if (AniketosUI::HomeScene::IsDisposed(box))
       return;
     MonoObject *action = Reflect::Target(entry.action);
     if (entry.action && !action) {

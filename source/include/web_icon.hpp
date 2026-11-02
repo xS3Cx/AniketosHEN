@@ -4,8 +4,6 @@
  */
 #pragma once
 
-#include "png_encode.hpp" // renames.tsv
-
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -254,7 +252,5 @@ inline std::string ResolveUrl(const std::string &base, std::string_view href) {
   }
   return ValidPageUrl(out) ? out : std::string();
 }
-
-inline constexpr auto &EncodePng = Png::Encode; // renames.tsv
 
 } // namespace WebIcon

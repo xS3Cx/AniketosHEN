@@ -19,9 +19,6 @@
 /* Directory component under /data, /user/data and on USB drives. */
 #define ONION_DIST_DIR_NAME "AniketosHEN"
 
-/* Name the Shell Menu sources use for the data directory component. */
-#define HEN_FOLDER ONION_DIST_DIR_NAME
-
 /* The upstream distribution this tree derives from and migrates from. */
 #define ONION_DIST_LEGACY_NAME "OnionHEN"
 #define ONION_DIST_LEGACY_DIR_NAME "OnionHEN"

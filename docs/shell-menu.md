@@ -38,7 +38,7 @@ Its directories and namespaces are named `aniketos_*`, `AniketosShell` and
 | Hook point | Call |
 |---|---|
 | `prx.cpp` `main()` after the Mono images load | `AniketosShell::Initialize()`; failure only disables the menu |
-| `prx.cpp` `install_hooks()` | `Notifications`, `HomeTiles`, `SharedUI`, `ShellClock` `Install()` |
+| `prx.cpp` `install_hooks()` | `Notifications`, `HomeTiles`, `PanelTint`, `ShellClock` `Install()` |
 | `prx.cpp` after hooks are published | telemetry worker, L1+R3 pad reader, controller manager |
 | `prx_overlay.cpp` `OnRender_Hook` | per-frame ticks; the tile pass runs after the native frame |
 | `hook_boot.cpp` `GetData_hook` | while the menu is open, ShellUI receives no controller input |

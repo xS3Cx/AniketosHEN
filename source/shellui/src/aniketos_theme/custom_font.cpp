@@ -1,5 +1,6 @@
 #include "aniketos_theme/custom_font.hpp"
 
+#include "aniketos_shell/rn_scripts/rn_reload.hpp"
 #include "aniketos_theme/customization.hpp"
 #include "aniketos_ui/mono_reflect.hpp"
 #include "aniketos_ui/monotonic_clock.hpp"

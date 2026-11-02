@@ -95,9 +95,9 @@ void OnEntry(const Entry &entry) {
   add_row(entry, "MENU_ID_TROPHY_UNLOCK_ALL",
           toolbox_i18n::tr("trophy.game_menu"), TrophyTools::kUnlockAllUri);
   add_bookmark_row(entry, title);
-  if (HomeHidden::FilterEnabled() && HomeHidden::Allowed(title))
+  if (HiddenApps::FilterEnabled() && HiddenApps::Allowed(title))
     add_row(entry, "MENU_ID_ANIKETOS_HIDE",
-            toolbox_i18n::tr("hideapp.game_menu"), HomeHidden::kMenuUri);
+            toolbox_i18n::tr("hideapp.game_menu"), HiddenApps::kMenuUri);
   s_block_added = true;
   LOG_INFO("[GAMEMENU] Aniketos block at %s (title %s)", entry.id.c_str(),
            title.c_str());

@@ -30,17 +30,17 @@ namespace BootUri {
 bool Handle(const std::string &uri, bool is_top_nav, int opt) {
   if (HomeBookmark::HandleUri(uri, g_ui.current_menu_tid))
     return true;
-  if (uri == HomeHidden::kMenuUri) {
-    HomeHidden::Hide(g_ui.current_menu_tid);
+  if (uri == HiddenApps::kMenuUri) {
+    HiddenApps::Hide(g_ui.current_menu_tid);
     return true;
   }
   if (uri == TrophyTools::kUnlockAllUri) {
     TrophyTools::RequestUnlockAll(g_ui.current_menu_tid);
     return true;
   }
-  if (HomeMenu::Available() && is_top_nav) {
+  if (HenMenu::Available() && is_top_nav) {
     s_toolbox_boot_opt = opt;
-    HomeMenu::Request();
+    HenMenu::Request();
     return true;
   }
   return false;

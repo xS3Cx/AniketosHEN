@@ -2,8 +2,6 @@
 
 #include <string>
 
-#include "aniketos_shell/system_ui/native_menu.hpp" // renames.tsv
-#include "aniketos_shell/system_ui/popup_menu.hpp"  // renames.tsv
 #include "external_symbols.hpp"
 
 /* ShellUI's own dialogs, opened with our text and buttons.

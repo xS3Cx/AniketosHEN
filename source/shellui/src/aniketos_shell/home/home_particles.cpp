@@ -1,6 +1,6 @@
 #include "aniketos_shell/home/home_particles.hpp"
 
-#include "aniketos_theme/clock/shell_clock.hpp"
+#include "aniketos_ui/home_scene.hpp"
 #include "aniketos_theme/customization.hpp"
 #include "aniketos_ui/mono_reflect.hpp"
 #include "external_symbols.hpp"
@@ -136,7 +136,7 @@ std::vector<std::string> picture_paths() {
 
 void teardown() {
   MonoObject *layer = Reflect::Target(s_layer);
-  if (layer && !ShellClock::IsWidgetDisposed(layer)) {
+  if (layer && !AniketosUI::HomeScene::IsDisposed(layer)) {
     Reflect::Call(layer, "RemoveFromParent", 0);
     Reflect::Call(layer, "Dispose", 0); /* takes its children with it */
   }
@@ -390,10 +390,10 @@ void Tick() {
   }
   MonoObject *layer = Reflect::Target(s_layer);
   if (s_frame % 30 == 0) {
-    MonoObject *root = ShellClock::GetHomeRoot();
-    if (!root || ShellClock::IsWidgetDisposed(root))
+    MonoObject *root = AniketosUI::HomeScene::Root();
+    if (!root || AniketosUI::HomeScene::IsDisposed(root))
       return;
-    if (layer && ShellClock::IsWidgetDisposed(layer)) {
+    if (layer && AniketosUI::HomeScene::IsDisposed(layer)) {
       teardown(); /* Home rebuilt its scene */
       layer = nullptr;
     }

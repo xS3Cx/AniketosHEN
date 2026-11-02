@@ -428,8 +428,7 @@ void update_apparition_menu_widgets() {
       title_right = update_apparition_toggle(visible_index, option, width,
                                              row_y, row, scale) -
                     inset;
-    } else if (option.type == OptionType::Strings ||
-               option.type == OptionType::ThemeChoice) {
+    } else if (option.type == OptionType::Strings) {
       display_value = selector_display_value(option);
     } else if (option.type == OptionType::SliderInt ||
                option.type == OptionType::SliderFloat) {

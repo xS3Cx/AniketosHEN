@@ -7,6 +7,7 @@
 #include "external_symbols.hpp"
 #include "hooked_funcs.hpp"
 
+#include <onion/kbm_engine.hpp>
 #include <onion/log.h>
 
 #include <cstring>
@@ -127,7 +128,7 @@ uint64_t s_deadline_ms = 0;
 uint64_t s_polled_ms = 0;
 int s_logged_events = 0;
 uint32_t s_modifiers = 0; /* ImeKeycodeState modifier bits last seen */
-uint8_t s_down[(kbm::kInputCount + 7) / 8] = {};
+uint8_t s_down[kbm::kInputBytes] = {};
 Result s_result{};
 Input s_candidate = kbm::kInputNone; /* a modifier or Esc, answers on release */
 uint64_t s_candidate_ms = 0;

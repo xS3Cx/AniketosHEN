@@ -97,7 +97,6 @@ enum class OptionType {
   Strings,
   Action,
   Value,
-  ThemeChoice,
   ColorSlider,
 };
 enum class OptionId {

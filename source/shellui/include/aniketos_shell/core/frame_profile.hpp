@@ -32,7 +32,6 @@ enum Section : int {
 };
 
 extern bool enabled;
-inline bool &g_enabled = enabled; // renames.tsv
 
 void Initialize();
 /** Close the frame: publish statistics, feed scripted input. UI thread. */

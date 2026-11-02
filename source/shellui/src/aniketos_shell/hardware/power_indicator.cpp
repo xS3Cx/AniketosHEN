@@ -88,14 +88,6 @@ void Configure(void *boot_done, void *standby, void *standby_boot,
            s_set_brightness ? 1 : 0, s_notify_boot_status ? 1 : 0);
 }
 
-bool SetBrightness(int level) {
-  if (!s_set_brightness || level < 0 || level > 2)
-    return false;
-  const int result = s_set_brightness(level);
-  LOG_INFO("[ANIKETOSHEN:INDICATOR] brightness=%d result=%d", level, result);
-  return result == 0;
-}
-
 bool SetColor(Color color) {
   // The orange preset is not overridden by BootDone directly. Clear the
   // firmware's rest context first, using the same transition as Kura.

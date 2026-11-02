@@ -4,7 +4,6 @@
 #include "ps5/kernel.h"
 
 int libmono_handle = 0;
-extern int g_libmono_handle __attribute__((alias("libmono_handle"))); // renames.tsv
 
 uint32_t (*mono_gchandle_new_weakref)(MonoObject *obj,
                                      int track_resurrection) = nullptr;
@@ -19,11 +18,7 @@ uint32_t (*mono_signature_get_param_count)(MonoMethodSignature* sig) = nullptr;
 MonoType* (*mono_signature_get_params)(MonoMethodSignature* sig, void** iter) = nullptr;
 MonoType* (*mono_signature_get_return_type)(MonoMethodSignature* sig) = nullptr;
 char* (*mono_type_get_name)(MonoType* type) = nullptr;
-MonoClassField* (*mono_class_get_fields)(MonoClass* klass, void** iter) = nullptr;
-const char* (*mono_field_get_name)(MonoClassField* field) = nullptr;
-MonoType* (*mono_field_get_type)(MonoClassField* field) = nullptr;
 int (*mono_field_get_offset)(MonoClassField* field) = nullptr;
-uint32_t (*mono_field_get_flags)(MonoClassField* field) = nullptr;
 void (*mono_field_static_get_value)(MonoVTable* vt, MonoClassField* field,
                                     void* value) = nullptr;
 MonoObject* (*mono_object_clone)(MonoObject* obj) = nullptr;
@@ -50,11 +45,7 @@ void ResolveReflectionSymbols(int libmono) {
   KERNEL_DLSYM(libmono, mono_signature_get_params);
   KERNEL_DLSYM(libmono, mono_signature_get_return_type);
   KERNEL_DLSYM(libmono, mono_type_get_name);
-  KERNEL_DLSYM(libmono, mono_class_get_fields);
-  KERNEL_DLSYM(libmono, mono_field_get_name);
-  KERNEL_DLSYM(libmono, mono_field_get_type);
   KERNEL_DLSYM(libmono, mono_field_get_offset);
-  KERNEL_DLSYM(libmono, mono_field_get_flags);
   KERNEL_DLSYM(libmono, mono_field_static_get_value);
   KERNEL_DLSYM(libmono, mono_object_clone);
   KERNEL_DLSYM(libmono, mono_class_get_parent);

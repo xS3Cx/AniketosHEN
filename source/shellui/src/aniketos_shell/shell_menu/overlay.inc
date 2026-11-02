@@ -7,12 +7,12 @@ void sync_clock_layer() {
     return;
   static MonoObject *refused_root = nullptr;
   MonoObject *root = s_pui_home.label && s_pui_home.panel
-                         ? ShellClock::GetHomeRoot()
+                         ? AniketosUI::HomeScene::Root()
                          : nullptr;
   if (root == refused_root)
     root = nullptr;
   const bool lost =
-      s_clock_layer && ShellClock::IsWidgetDisposed(s_clock_layer);
+      s_clock_layer && AniketosUI::HomeScene::IsDisposed(s_clock_layer);
   if (root == s_clock_layer && !lost)
     return;
   if (s_clock_layer) {
@@ -27,7 +27,7 @@ void sync_clock_layer() {
   }
   s_clock_layer = root;
   if (root)
-    ShellClock::RemoveStaleHomeChildren(root);
+    AniketosUI::HomeScene::RemoveStaleChildren(root);
   s_widgets.clock_date = nullptr;
   create_home_widgets(home_layer());
   if (root && (!s_widgets.overlay || !s_widgets.controls ||
@@ -48,7 +48,7 @@ void sync_clock_layer() {
 }
 
 void debug_home_layer() {
-  if (!Profile::g_enabled || !s_widgets.overlay)
+  if (!Profile::enabled || !s_widgets.overlay)
     return;
   static int countdown = 0;
   static std::string last;
@@ -61,17 +61,17 @@ void debug_home_layer() {
     for (const char *name : {"FinalOpacity", "IsReadyToRenderInternal",
                              "X", "Y", "Width"})
       now += std::string(" ") + name + "=" +
-             ShellClock::DebugPropText(widget, name);
+             AniketosUI::HomeScene::PropertyText(widget, name);
   }
   now += " | legend rdy=" +
-         ShellClock::DebugPropText(s_widgets.control_labels[0],
+         AniketosUI::HomeScene::PropertyText(s_widgets.control_labels[0],
                                    "IsReadyToRenderInternal") +
          " icon=" +
-         ShellClock::DebugPropText(s_widgets.control_icon_l1,
+         AniketosUI::HomeScene::PropertyText(s_widgets.control_icon_l1,
                                    "IsReadyToRenderInternal") +
          " fop=" +
-         ShellClock::DebugPropText(s_widgets.control_labels[0], "FinalOpacity") +
-         " y=" + ShellClock::DebugPropText(s_widgets.controls, "Y");
+         AniketosUI::HomeScene::PropertyText(s_widgets.control_labels[0], "FinalOpacity") +
+         " y=" + AniketosUI::HomeScene::PropertyText(s_widgets.controls, "Y");
   if (now != last) {
     last = now;
     LOG_INFO("[SHELLMENU:PROFILE] osd %s", now.c_str());
@@ -117,7 +117,7 @@ void update_overlay() {
   const Telemetry::Snapshot telemetry = Telemetry::GetSnapshot();
   s_last_overlay_sample = telemetry.sampled_at_ms;
   if (!g_settings.home_osd_enabled) {
-    collapse_label(s_widgets.overlay);
+    clear_label(s_widgets.overlay);
     return;
   }
 
@@ -197,7 +197,7 @@ void update_overlay() {
     lines.push_back(entry("vsh.info.local_ip", telemetry.local_ip));
 
   if (lines.empty()) {
-    collapse_label(s_widgets.overlay);
+    clear_label(s_widgets.overlay);
     return;
   }
 

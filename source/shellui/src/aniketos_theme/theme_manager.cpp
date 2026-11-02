@@ -238,11 +238,6 @@ void Tick() {
 
 void RequestApply() { s_apply_requested = true; }
 
-void RequestImageReload() {
-  forget_applied_image();
-  s_apply_requested = true;
-}
-
 void RequestRestore() {
   s_restore_requested = true;
   s_apply_requested = true;

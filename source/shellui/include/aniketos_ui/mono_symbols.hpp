@@ -25,11 +25,7 @@ extern MonoType* (*mono_signature_get_params)(MonoMethodSignature* sig,
                                               void** iter);
 extern MonoType* (*mono_signature_get_return_type)(MonoMethodSignature* sig);
 extern char* (*mono_type_get_name)(MonoType* type);
-extern MonoClassField* (*mono_class_get_fields)(MonoClass* klass, void** iter);
-extern const char* (*mono_field_get_name)(MonoClassField* field);
-extern MonoType* (*mono_field_get_type)(MonoClassField* field);
 extern int (*mono_field_get_offset)(MonoClassField* field);
-extern uint32_t (*mono_field_get_flags)(MonoClassField* field);
 extern void (*mono_field_static_get_value)(MonoVTable* vt,
                                            MonoClassField* field,
                                            void* value);

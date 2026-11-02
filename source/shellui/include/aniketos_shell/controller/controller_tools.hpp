@@ -19,7 +19,6 @@ void controller_start_animation(ControllerAnimation animation);
 void controller_stop_animation();
 /* Advances the light bar, rumble and player LED animations. */
 void controller_tick();
-inline void controller_handle_buttons(uint32_t) { controller_tick(); } // renames.tsv
 
 /* Rumble tests from the Shell Menu. The strength is the
    controller_vibration_strength setting (percent). */

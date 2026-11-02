@@ -1,7 +1,5 @@
 #pragma once
 
-#include "aniketos_ui/small_file.hpp" // renames.tsv
-
 #include <string>
 #include <vector>
 
@@ -32,7 +30,6 @@ void Tick();
 void Restart();
 /* Full paths of the videos found, sorted by file name. */
 const std::vector<std::string> &Videos(bool rescan = false);
-using AniketosUI::FileName; // renames.tsv
 /* A still image in the same place, shown when no video plays (none chosen,
  * or the chosen one failed or was left off after a crash): the Shell Menu
  * settings home_image_enabled and home_image_path, and the .png/.jpg files

@@ -6,6 +6,7 @@
 #include "aniketos_shell/games/trophy_tools.hpp"
 #include "aniketos_shell/hardware/pad_speaker.hpp"
 #include "aniketos_shell/hardware/telemetry.hpp"
+#include "aniketos_shell/home/control_center_entry.hpp"
 #include "aniketos_shell/home/hen_menu.hpp"
 #include "aniketos_shell/home/home_bookmark.hpp"
 #include "aniketos_shell/home/home_particles.hpp"
@@ -21,7 +22,7 @@
 #include "aniketos_shell/system_ui/account_avatar.hpp"
 #include "aniketos_shell/system_ui/devkit_overlay.hpp"
 #include "aniketos_shell/system_ui/migration_notice.hpp"
-#include "aniketos_shell/system_ui/system_dialogs.hpp"
+#include "aniketos_shell/system_ui/popup_menu.hpp"
 #include "aniketos_shell/toolbox/kbm_toolbox.hpp"
 #include "aniketos_theme/clock/shell_clock.hpp"
 #include "aniketos_theme/custom_font.hpp"
@@ -41,7 +42,7 @@ void Install(MonoImage *react_pui, MonoImage *pui) {
      its managed types by name and stays disabled on its own if they are not
      there; none of them is required for the Toolbox. */
   AniketosTheme::HomeTiles::Install(react_pui, pui);
-  AniketosTheme::SharedUI::Install(pui);
+  AniketosTheme::PanelTint::Install(pui);
   AniketosTheme::ToggleStyles::Install(pui);
   ShellClock::Install(pui);
   SystemDialogs::Install(pui);
@@ -49,7 +50,7 @@ void Install(MonoImage *react_pui, MonoImage *pui) {
   HomeTabs::Install(pui);
   HomeBookmark::Install();
   OskGlyphs::Install();
-  HomeJs::Install(react_pui);
+  ScriptInjector::Install(react_pui);
   AccountAvatar::Install(pui);
   DevkitOverlay::Install();
   AniketosTheme::CustomFont::Install();
@@ -76,7 +77,7 @@ void BeforeNativeFrame() {
     Profile::Scope scope(Profile::kShellClock);
     ShellClock::Tick();
   }
-  HomeMenu::Tick();
+  HenMenu::Tick();
   ControlCenterEntry::Tick();
   MigrationNotice::Tick();
   HomeTabs::Tick();
@@ -92,7 +93,7 @@ void BeforeNativeFrame() {
   PadSpeaker::Tick();
   {
     Profile::Scope scope(Profile::kSharedUi);
-    AniketosTheme::SharedUI::Tick();
+    AniketosTheme::PanelTint::Tick();
   }
   {
     Profile::Scope scope(Profile::kTheme);

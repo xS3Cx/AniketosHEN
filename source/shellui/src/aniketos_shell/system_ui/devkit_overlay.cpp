@@ -1,6 +1,6 @@
 #include "aniketos_shell/system_ui/devkit_overlay.hpp"
 
-#include "aniketos_theme/clock/shell_clock.hpp"
+#include "aniketos_ui/home_scene.hpp"
 #include "aniketos_ui/mono_reflect.hpp"
 #include "aniketos_ui/pui_primitives.hpp"
 #include "aniketos_ui/ui_color.hpp"
@@ -55,7 +55,7 @@ MonoObject *field(MonoObject *object, MonoClassField *which) {
   MonoObject *value = nullptr;
   if (object && which)
     mono_field_get_value(object, which, &value);
-  return value && !ShellClock::IsWidgetDisposed(value) ? value : nullptr;
+  return value && !AniketosUI::HomeScene::IsDisposed(value) ? value : nullptr;
 }
 
 void set_visible(MonoObject *widget, bool visible) {
@@ -85,7 +85,7 @@ void drop() {
          {s_panel_info, s_panel_expired, s_panel_trial})
       if (MonoObject *panel = field(view, which))
         AniketosUI::Pui::Disown(panel);
-    if (!ShellClock::IsWidgetDisposed(view)) {
+    if (!AniketosUI::HomeScene::IsDisposed(view)) {
       Reflect::Call(view, "RemoveFromParent", 0);
       Reflect::Call(view, "Dispose", 0);
     }
@@ -98,10 +98,10 @@ void drop() {
 /* Our widget under Home's root (beside React, never inside it), with the
    panels a DevKit builds. */
 MonoObject *view() {
-  MonoObject *root = ShellClock::GetHomeRoot();
+  MonoObject *root = AniketosUI::HomeScene::Root();
   MonoObject *view = Reflect::Target(s_view);
   if (view &&
-      (ShellClock::IsWidgetDisposed(view) || Reflect::Target(s_root) != root)) {
+      (AniketosUI::HomeScene::IsDisposed(view) || Reflect::Target(s_root) != root)) {
     drop();
     view = nullptr;
   }
@@ -155,7 +155,7 @@ void show_expired(MonoObject *panel, MonoObject *label) {
       text_width <= 0.0f)
     return;
   Reflect::FloatProperty(panel, "get_Width", &width);
-  Reflect::FloatProperty(ShellClock::GetHomeRoot(), "get_Width", &screen);
+  Reflect::FloatProperty(AniketosUI::HomeScene::Root(), "get_Width", &screen);
   float wanted_width = text_width + 2.0f * kExpiredInset;
   if (width != wanted_width) {
     float x = (screen - wanted_width) * 0.5f;

@@ -7,7 +7,7 @@
  * Out of the box the menu uses the Apparition skin and the red global theme:
  * the colour, background, outline, panel and clock defaults below are what
  * the global theme writes for red, 255 10 20 (apply_global_theme() in
- * shell_menu/settings_actions.inc). */
+ * shell_menu/theme_apply.inc). */
 
 ONION_SHELL_SETTING_INT(controller_custom_a_b, 0xff)
 ONION_SHELL_SETTING_INT(controller_custom_a_g, 0x60)

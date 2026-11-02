@@ -15,11 +15,6 @@ const char *slot_name(const char *kind, size_t slot) {
   return name;
 }
 
-void collapse_label(MonoObject *label) {
-  label_text(label, "");
-  label_geometry(label, 0, 0, 0, 0);
-}
-
 MonoObject *create_home_label(MonoObject *parent, const char *name,
                               int horizontal, int lines = 1) {
   AniketosUI::Pui::Runtime runtime = home_runtime();
@@ -240,12 +235,8 @@ void apply_font(float font_size = 0.0f) {
   label_font(s_widgets.counter);
   label_font(s_widgets.overlay);
   apply_control_font();
-  for (size_t i = 0; i < kMaxVisibleOptions; ++i) {
-    label_font(s_widgets.rows[i]);
-    label_font(s_widgets.values[i]);
-    label_font(s_widgets.selector_left[i]);
-    label_font(s_widgets.selector_right[i]);
-  }
+  for (size_t i = 0; i < kMaxVisibleOptions; ++i)
+    option_row_fonts(i);
 }
 
 void horizontal_border_gradient(int line, float y, float width, float border,

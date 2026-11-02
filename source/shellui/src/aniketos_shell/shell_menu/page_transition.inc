@@ -161,7 +161,7 @@ void begin_page_transition(PageTransitionAction action,
     return;
   if (action == PageTransitionAction::Pop && s_stack.size() <= 1)
     return;
-  const uint64_t profile_t0 = Profile::g_enabled ? Profile::NowNs() : 0;
+  const uint64_t profile_t0 = Profile::enabled ? Profile::NowNs() : 0;
 
   // Reconcile the parent page before copying it. This makes the transition
   // path authoritative even if activation came from a redraw rather than the

@@ -1,9 +1,11 @@
 #include "aniketos_shell/rn_scripts/script_injector.hpp"
 
+#include "aniketos_shell/core/embedded_assets.hpp"
 #include "aniketos_shell/games/content_info.hpp"
 #include "aniketos_shell/games/trophy_tools.hpp"
 #include "aniketos_shell/home/hen_menu.hpp"
 #include "aniketos_shell/home/home_bookmark.hpp"
+#include "aniketos_shell/home/home_rows.hpp"
 #include "aniketos_shell/home/home_tabs.hpp"
 #include "aniketos_shell/home/web_tiles.hpp"
 #include "aniketos_shell/rn_scripts/js_string.hpp"
@@ -151,7 +153,7 @@ void console_log_hook(MonoString *message, int level, void *a, void *b) {
     }
     /* the top-bar icon the script added was pressed */
     if (text.starts_with("ANIKETOS:menu"))
-      HomeMenu::Request();
+      HenMenu::Request();
     /* a choice in the Trophies app's options menu */
     if (text.starts_with("ANIKETOS:trophy|"))
       TrophyTools::HandleScriptMessage(text.substr(16));
@@ -214,7 +216,7 @@ std::string home_script_config(bool home, bool emulators, bool bookmark) {
          ", emulators: " + (emulators ? "true" : "false") + ", caption: " +
          JsString(caption) + ", label: " +
          JsString(toolbox_i18n::tr("home_tabs.emulators")) + ", limit: " +
-         std::to_string(HomeTabs::kEmulatorsContentLimit) +
+         std::to_string(HomeRows::kEmulatorsContentLimit) +
          /* the top-bar icon, for a Home the byte patch has no profile for;
             taken back once that is known */
          ", icon: " + JsString(home ? AniketosIconPath() : "") +
@@ -285,7 +287,7 @@ void run_script_hook(MonoObject *executor, MonoObject *bundle) {
      holds a game */
   const bool emulators = home && g_settings.home_tab_emulators;
   const bool bookmark = home && HomeBookmark::Shown();
-  if (scripts_allowed() && ((home && HomeTabs::Ready()) || control_center)) {
+  if (scripts_allowed() && ((home && HomeRows::Ready()) || control_center)) {
     /* this start counted, and the pause to follow should it fail too */
     Unconfirmed next = s_unconfirmed;
     ++next.count;
@@ -308,7 +310,7 @@ void run_script_hook(MonoObject *executor, MonoObject *bundle) {
      games moved to the bookmark, leave the Games row only for a tab of
      their own. */
   if (home) {
-    HomeTabs::SetEmulatorsTabShown(injected && emulators);
+    HomeRows::SetEmulatorsTabShown(injected && emulators);
     HomeBookmark::SetHome(injected, injected && bookmark);
   }
   /* The web browser's card: full screen and the Home tile row. */

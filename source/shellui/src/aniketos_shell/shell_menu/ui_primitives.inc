@@ -39,8 +39,10 @@ std::string s_color_track_image[kMaxVisibleOptions];
 
 void release_widgets() {
   if (mono_gchandle_free) {
-    for (uint32_t handle : s_widget_handles)
+    for (uint32_t handle : s_widget_handles) {
+      AniketosUI::Pui::Disown(AniketosUI::Reflect::Target(handle));
       mono_gchandle_free(handle);
+    }
   }
   s_widget_handles.clear();
   AniketosUI::Pui::ForgetAll();

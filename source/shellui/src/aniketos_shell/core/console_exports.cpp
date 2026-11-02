@@ -3,10 +3,13 @@
 #include "aniketos_shell/hardware/power_indicator.hpp"
 #include "aniketos_shell/hardware/shell_buzzer.hpp"
 #include "defs.h"
-#include "proc.h"
 #include "ps5/kernel.h"
 
 #include <onion/log.h>
+
+extern "C" {
+#include <onion/proc.h>
+}
 
 int (*sceKernelGetHwModelName)(char *name) = nullptr;
 int (*sceKernelGetHwSerialNumber)(char *serial) = nullptr;
@@ -24,10 +27,8 @@ namespace {
 void *sceKernelIccSetBuzzer = nullptr;
 void *sceKernelIccSetBuzzerDimSetting = nullptr;
 void *sceKernelIccIndicatorBootDone = nullptr;
-void *sceKernelIccIndicatorShutdown = nullptr;
 void *sceKernelIccIndicatorStandby = nullptr;
 void *sceKernelIccIndicatorStandbyBoot = nullptr;
-void *sceKernelIccIndicatorStandbyShutdown = nullptr;
 void *sceKernelIccNotifyBootStatus = nullptr;
 void *sceKernelIccSetDynamicLedDimSetting = nullptr;
 
@@ -47,19 +48,16 @@ void Resolve(pid_t pid) {
   KERNEL_DLSYM(libkernel, sceKernelIccSetBuzzer);
   KERNEL_DLSYM(libkernel, sceKernelIccSetBuzzerDimSetting);
   KERNEL_DLSYM(libkernel, sceKernelIccIndicatorBootDone);
-  KERNEL_DLSYM(libkernel, sceKernelIccIndicatorShutdown);
   KERNEL_DLSYM(libkernel, sceKernelIccIndicatorStandby);
   KERNEL_DLSYM(libkernel, sceKernelIccIndicatorStandbyBoot);
-  KERNEL_DLSYM(libkernel, sceKernelIccIndicatorStandbyShutdown);
   KERNEL_DLSYM(libkernel, sceKernelIccNotifyBootStatus);
   KERNEL_DLSYM(libkernel, sceKernelIccSetDynamicLedDimSetting);
 
   AniketosShell::Buzzer::Configure(sceKernelIccSetBuzzer,
                                    sceKernelIccSetBuzzerDimSetting);
   AniketosShell::PowerIndicator::Configure(
-      sceKernelIccIndicatorBootDone, sceKernelIccIndicatorShutdown,
-      sceKernelIccIndicatorStandby, sceKernelIccIndicatorStandbyBoot,
-      sceKernelIccIndicatorStandbyShutdown, sceKernelIccSetDynamicLedDimSetting,
+      sceKernelIccIndicatorBootDone, sceKernelIccIndicatorStandby,
+      sceKernelIccIndicatorStandbyBoot, sceKernelIccSetDynamicLedDimSetting,
       sceKernelIccNotifyBootStatus);
 }
 

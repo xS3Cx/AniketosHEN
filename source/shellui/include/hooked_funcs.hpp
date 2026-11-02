@@ -173,7 +173,6 @@ void settings_commit(bool reload_main = false, bool reload_util = false);
  * onion_ready files (those are daemon/process handshake only).
  */
 void shellui_request_home_reload(void);
-#include "aniketos_shell/rn_scripts/rn_reload.hpp" // renames.tsv
 /** Drain the one-shot Home reload; call only from UI thread after hooks ready. */
 void shellui_poll_home_reload(void);
 

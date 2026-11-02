@@ -40,10 +40,6 @@ bool ShowPopupMenu(const std::vector<MenuEntry> &entries,
                    const std::string &header, std::string *failure = nullptr,
                    MonoObject *scene = nullptr, bool stay_open = false,
                    int focus = 0);
-/* Gives the menu on screen other entries, in place. */
-bool UpdatePopupMenu(const std::vector<MenuEntry> &entries,
-                     const std::string &header, int focus = 0,
-                     std::string *failure = nullptr);
 /* True once, when a stay-open menu has been backed out of by the user. */
 bool PopupMenuDismissed();
 void ClosePopupMenu();

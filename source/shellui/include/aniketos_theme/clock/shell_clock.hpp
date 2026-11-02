@@ -1,6 +1,5 @@
 #pragma once
 
-#include "aniketos_ui/home_scene.hpp" // renames.tsv
 #include "monodef.h"
 
 #include <cstddef>
@@ -53,10 +52,5 @@ std::string ScriptConfig();
 void DebugSnapshot(char *out, size_t out_size);
 void DebugDumpProperties(const char *tag);
 void DebugDumpPuiImage(const char *path);
-
-inline MonoObject *GetHomeRoot() { return AniketosUI::HomeScene::Root(); } // renames.tsv
-inline bool IsWidgetDisposed(MonoObject *widget) { return AniketosUI::HomeScene::IsDisposed(widget); } // renames.tsv
-inline void RemoveStaleHomeChildren(MonoObject *root) { AniketosUI::HomeScene::RemoveStaleChildren(root); } // renames.tsv
-inline std::string DebugPropText(MonoObject *object, const char *name) { return AniketosUI::HomeScene::PropertyText(object, name); } // renames.tsv
 
 } // namespace ShellClock

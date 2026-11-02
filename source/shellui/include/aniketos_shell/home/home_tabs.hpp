@@ -1,6 +1,5 @@
 #pragma once
 
-#include "aniketos_shell/home/home_rows.hpp" // renames.tsv
 #include "external_symbols.hpp"
 
 #include <string>
@@ -24,7 +23,6 @@ namespace HomeTabs {
 inline constexpr char kGamesGlyph[] = "\xEE\xBF\x8E";
 inline constexpr char kMediaGlyph[] = "\xEF\xA1\xB1";
 inline constexpr char kEmulatorsGlyph[] = "\xEE\xBE\xB1";
-using HomeRows::kEmulatorsContentLimit; // renames.tsv
 
 /* Home's own tabs, the ones that can be renamed. */
 enum class StockTab { Games, Media };
@@ -46,8 +44,6 @@ void ScriptCaption(StockTab tab, std::string *name, std::string *glyph);
 void Install(MonoImage *pui);
 /* UI thread, once a frame. */
 void Tick();
-using HomeRows::Ready; // renames.tsv
-using HomeRows::SetEmulatorsTabShown; // renames.tsv
 /* What the text hook is to show in a label it is giving the glyph of a
  * stock tab (UI thread), `stock` being the system's caption it was handed:
  * the glyph and the user's name for a label known to be in the tab bar, or

@@ -173,7 +173,8 @@ Color mix(Color left, Color right, float t, float alpha) {
 }
 
 /* One of `count` equal slices across `width`, and where its middle falls on
-   the gradient. */
+   the gradient. Both edges come from the index: a +1 px overlap doubled the
+   alpha at every seam, which showed as banding. */
 struct GradientSlice {
   float x;
   float width;

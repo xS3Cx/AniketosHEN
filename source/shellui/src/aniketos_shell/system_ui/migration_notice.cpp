@@ -2,6 +2,7 @@
 
 #include "aniketos_shell/system_ui/system_dialogs.hpp"
 #include "aniketos_theme/clock/shell_clock.hpp"
+#include "aniketos_ui/home_scene.hpp"
 #include "toolbox_i18n.hpp"
 
 #include <onion/distribution.h>
@@ -53,7 +54,7 @@ void Tick() {
     /* Not during boot: wait until Home has been on screen for a few seconds,
        so the pop-up opens on a scene that is there to be seen. */
     float opacity = 0.0f;
-    const bool home_visible = ShellClock::GetHomeRoot() &&
+    const bool home_visible = AniketosUI::HomeScene::Root() &&
                               ShellClock::GetNativeClockOpacity(&opacity) &&
                               opacity > 0.95f;
     s_home_frames = home_visible ? s_home_frames + 1 : 0;

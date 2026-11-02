@@ -3,6 +3,7 @@
 #include "aniketos_shell/core/host_scene.hpp"
 #include "aniketos_shell/games/cheats_list.hpp"
 #include "aniketos_shell/input/pad_reader.hpp"
+#include "aniketos_shell/system_ui/native_menu.hpp"
 #include "aniketos_shell/system_ui/system_dialogs.hpp"
 #include "aniketos_ui/mono_reflect.hpp"
 #include "aniketos_ui/monotonic_clock.hpp"

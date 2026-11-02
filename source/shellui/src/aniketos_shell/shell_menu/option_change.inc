@@ -243,8 +243,7 @@ void change_list_option(const Option &option, int direction) {
     break;
   case OptionId::PowerIndicatorColor:
     (void)PowerIndicator::SetColor(static_cast<PowerIndicator::Color>(target));
-    g_settings.vsh_power_indicator_animation =
-        static_cast<int>(PowerIndicator::Animation::Normal);
+    g_settings.vsh_power_indicator_animation = 0;
     break;
   case OptionId::HomePresenceDot:
     shellui_request_presence_reload(1500, true);
