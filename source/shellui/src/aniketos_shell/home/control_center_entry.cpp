@@ -3,6 +3,7 @@
 #include "aniketos_shell/core/embedded_assets.hpp"
 #include "aniketos_shell/home/hen_menu.hpp"
 #include "aniketos_ui/home_scene.hpp"
+#include "aniketos_ui/mono_property_cache.hpp"
 #include "aniketos_ui/mono_reflect.hpp"
 #include "hooked_funcs.hpp"
 
@@ -41,6 +42,7 @@ uint32_t s_inverted_icon_shown_handle = 0;
 uint32_t s_button_handle = 0;
 uint32_t s_label_holder_handle = 0;
 uint32_t s_scene_handle = 0;
+int s_scene_searches = 0; /* searches made in the scene held */
 int s_search_countdown = 0;
 int s_hidden_frames = 0;
 
@@ -221,10 +223,20 @@ MonoObject *search_button() {
   if (--s_search_countdown > 0)
     return nullptr;
   s_search_countdown = 60;
-  MonoObject *scene = control_center_scene();
-  Reflect::Hold(s_scene_handle, scene);
+  /* The scene found last is looked in again while its tree is alive (the
+     button is rebuilt inside it); the scene tree is walked anew, with a
+     ToString per scene, once its root is gone, or every tenth time in case
+     React made another scene and left this one. */
+  MonoObject *scene = Reflect::Target(s_scene_handle);
+  MonoObject *root = Reflect::FieldValue(scene, "rootWidget");
+  if (!root || HomeScene::IsDisposed(root) || ++s_scene_searches >= 10) {
+    scene = control_center_scene();
+    Reflect::Hold(s_scene_handle, scene);
+    root = Reflect::FieldValue(scene, "rootWidget");
+    s_scene_searches = 0;
+  }
   int budget = 600;
-  find_widgets(Reflect::FieldValue(scene, "rootWidget"), 0, budget);
+  find_widgets(root, 0, budget);
   MonoObject *button = Reflect::Target(s_button_handle);
   if (button)
     LOG_INFO("[CCENTRY] button found %p", static_cast<void *>(button));
@@ -301,9 +313,13 @@ void Tick() {
   /* Focus stays where it was when the Control Center closes, so it only
      counts while the button is really on screen. Otherwise presses made in
      Home or anywhere else would be taken for presses on our button. */
-  const bool shown = flag(button, "get_IsFinallyShown");
-  const float opacity =
-      shown ? Reflect::FloatProperty(button, "get_FinalOpacity") : 0.0f;
+  /* compiled getters: plain reads, no boxing, every frame for good */
+  MonoClass *button_class = mono_object_get_class(button);
+  const bool shown = AniketosUI::MonoPropertyCache::Get<bool>(
+      button_class, button, "IsFinallyShown");
+  const float opacity = shown ? AniketosUI::MonoPropertyCache::Get<float>(
+                                    button_class, button, "FinalOpacity")
+                              : 0.0f;
   s_button_focused.store(opacity > 0.5f && button_has_focus(button),
                          std::memory_order_relaxed);
   /* Out of sight (the Control Center closed, most of the time) the icon and

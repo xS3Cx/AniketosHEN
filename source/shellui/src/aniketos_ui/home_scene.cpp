@@ -160,9 +160,15 @@ MonoObject *Parent(MonoObject *widget) {
   MonoMethod *getters[8];
   const int count = parent_getters(mono_object_get_class(widget), getters);
   for (int index = 0; index < count; ++index) {
+    /* Plain field reads, called direct: the clock's probe walks a dozen
+       parents 30 times a second. */
+    MonoObject *(*getter)(MonoObject *) = reinterpret_cast<decltype(getter)>(
+        Reflect::Compiled(getters[index]));
     MonoObject *exception = nullptr;
     MonoObject *parent =
-        mono_runtime_invoke(getters[index], widget, nullptr, &exception);
+        getter ? getter(widget)
+               : mono_runtime_invoke(getters[index], widget, nullptr,
+                                     &exception);
     if (!exception && parent)
       return parent;
   }

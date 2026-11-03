@@ -50,7 +50,15 @@ void apply_button_setter(size_t index, MonoObject *object, UIColor color) {
   if (index >= s_buttons.count)
     return;
   ColorSetter original = s_buttons.originals[index];
-  if (!original || !object || object_disposed(object))
+  if (!original || !object)
+    return;
+  /* Off: Sony's setter and nothing else. What is on screen when the option
+     comes on is found by RequestApply's scene scan. */
+  if (!feature_on()) {
+    original(object, color);
+    return;
+  }
+  if (object_disposed(object))
     return;
   if (keeps_own_colours(object)) {
     leave_untinted(object);
@@ -74,7 +82,13 @@ void apply_image_setter(size_t index, MonoObject *object, UIColor color) {
   if (index >= s_images.count)
     return;
   ColorSetter original = s_images.originals[index];
-  if (!original || !object || object_disposed(object))
+  if (!original || !object)
+    return;
+  if (!feature_on()) {
+    original(object, color);
+    return;
+  }
+  if (object_disposed(object))
     return;
   const bool target = widget_should_tint(object);
   if (target)
@@ -97,15 +111,17 @@ constexpr ColorSetter kImageHooks[kMaxColorSetters] = {
    `active` lets that call through untouched. */
 void set_then_tint(ObjectSetter original, bool &active, MonoObject *object,
                    MonoObject *value, void (*tint)(MonoObject *)) {
-  if (!original || !object || object_disposed(object))
+  if (!original || !object)
     return;
-  if (active) {
+  if (active || !feature_on()) {
     original(object, value);
     return;
   }
+  if (object_disposed(object))
+    return;
   active = true;
   original(object, value);
-  if (feature_on() && !object_disposed(object))
+  if (!object_disposed(object))
     tint(object);
   active = false;
 }

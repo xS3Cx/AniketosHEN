@@ -159,7 +159,7 @@ int main(void) {
     onion::cheats::CheatService::instance().ensureDir();
 
     for (;;) {
-        sleep(1);
+        pause(); /* nothing to do here: the IPC and worker threads run */
     }
 
     return 0;

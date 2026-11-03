@@ -45,21 +45,30 @@ void scan_images() {
 }
 
 /* The picture to show now, or nothing; `video_shown` when the video is on
-   screen or about to be. */
+   screen or about to be. The disk is asked on a slow tick or when a setting
+   changed (see HomeVideo::wanted). */
 std::string wanted_image(bool video_shown) {
-  if (!(AniketosTheme::CustomizationOn() && g_settings.home_image_enabled) ||
-      video_shown || if_exists(kKillSwitch))
-    return {};
-  if (!g_settings.home_image_path.empty() &&
-      if_exists(g_settings.home_image_path.c_str()))
-    return g_settings.home_image_path;
+  static std::string answer;
+  static bool on = false;
+  static std::string chosen;
+  const bool on_now = AniketosTheme::CustomizationOn() &&
+                      g_settings.home_image_enabled && !video_shown;
+  if (!slow_tick && on == on_now && chosen == g_settings.home_image_path)
+    return answer;
+  on = on_now;
+  chosen = g_settings.home_image_path;
+  answer.clear();
+  if (!on || if_exists(kKillSwitch))
+    return answer;
+  if (!chosen.empty() && if_exists(chosen.c_str()))
+    return answer = chosen;
   if (!s_images_scanned ||
       (stage_wanted() && frame_count - s_images_scanned_frame >= 300))
     scan_images();
   for (const std::string &path : s_images)
     if (if_exists(path.c_str()))
-      return path;
-  return {};
+      return answer = path;
+  return answer;
 }
 
 void drop_image() {
@@ -116,7 +125,7 @@ void tick_image(bool video_shown) {
     s_image_current = file;
     return;
   }
-  if (!widget)
+  if (!widget || !slow_tick)
     return;
   /* follows the screen it belongs to, as the video does */
   MonoObject *root = stage();

@@ -4,12 +4,16 @@
 #include <onion/platform.h>
 #include <cstdint>
 #include <mutex>
+#include <unistd.h>
 
 extern "C" {
 int sceKernelOpenEventFlag(intptr_t *event_flag, const char *name);
 int sceKernelPollEventFlag(intptr_t event_flag, uint64_t bits,
                            unsigned int wait_mode, uint64_t *result);
 int sceKernelCloseEventFlag(intptr_t event_flag);
+int sceKernelWaitEventFlag(intptr_t event_flag, uint64_t bits,
+                           unsigned int wait_mode, uint64_t *result,
+                           unsigned int *timeout_us);
 }
 
 namespace {
@@ -97,6 +101,27 @@ DaemonPowerState daemon_power_state_get() {
     g_last_reported_state = state;
   }
   return state;
+}
+
+void daemon_power_state_wait_change(unsigned int timeout_us) {
+  intptr_t flag = -1;
+  uint64_t pattern = 0;
+  {
+    std::lock_guard<std::mutex> lock(g_power_state_mutex);
+    if (ensure_event_flag_locked() &&
+        sceKernelPollEventFlag(g_state_event_flag, UINT64_MAX, kWaitModeOr,
+                               &pattern) == 0)
+      flag = g_state_event_flag;
+  }
+  if (flag < 0) {
+    usleep(timeout_us);
+    return;
+  }
+  /* Not under the lock: readers must not wait behind this. The kernel sets
+     the new state's bits, so any bit outside the current pattern is a change. */
+  uint64_t result = 0;
+  unsigned int timeout = timeout_us;
+  (void)sceKernelWaitEventFlag(flag, ~pattern, kWaitModeOr, &result, &timeout);
 }
 
 bool daemon_power_state_is_sleeping(DaemonPowerState state) {

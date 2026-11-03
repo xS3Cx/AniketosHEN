@@ -28,6 +28,12 @@ enum Section : int {
   kMenuOverlay,
   kMenuAnimations,
   kHomeTiles,
+  kHomeFeatures,
+  kParticles,
+  kInput,
+  kOsdBar,
+  kPolls,
+  kNativeFrame,
   kSectionCount,
 };
 

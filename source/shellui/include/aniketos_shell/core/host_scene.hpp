@@ -35,7 +35,16 @@ private:
  * layer that is none of these (the Control Center's, say); Unknown means the
  * field or one of these layers was not found on this firmware. UI thread. */
 enum class FocusLayer { Unknown, Game, TopMenu, ShellApp, Other };
+/* Samples the focus layer for the frame: first thing in the render hook, so
+ * every tick of the frame reads the one sample. Before the first sample the
+ * field is read on each call. */
+void BeginFrame();
 FocusLayer CurrentFocusLayer();
+/* Home itself is on screen: the TopMenu layer has the focus. Without the
+ * field (Unknown) it is Home's own FinalOpacity, read once per frame. False
+ * in Settings, the Control Center and a game: for ticks that only matter
+ * while Home is drawn (tabs, particles, Home tiles...). */
+bool HomeInSight();
 /* Whether the game has the screen. Needs only the field and Game, so it still
  * answers on a firmware without TopMenu or ShellApp; with neither, true. UI
  * thread. */

@@ -204,7 +204,11 @@ void register_layer(MonoObject *widget) {
   if (!widget || !s_get_test_id || !s_get_focus_settings ||
       seen_lately(widget))
     return;
-  const std::string test_id = Mono_to_String(s_get_test_id(widget));
+  /* most layers carry no test id: those are tracked without a copy */
+  MonoString *managed_id = s_get_test_id(widget);
+  const std::string test_id =
+      managed_id && managed_id->length > 0 ? Mono_to_String(managed_id)
+                                           : std::string();
   if (s_seen_count < std::size(s_seen_layers))
     s_seen_layers[s_seen_count++] = {widget,
                                      test_id.rfind("fc-list-item-", 0) == 0};

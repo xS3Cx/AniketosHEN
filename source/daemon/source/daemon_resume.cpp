@@ -69,7 +69,8 @@ void *resume_recovery_thread(void *args) noexcept {
       /* NOTE_EXEC remains authoritative; this is only compensation. */
       toolbox_on_resume();
     }
-    usleep(100 * 1000);
+    /* a state change wakes this at once; otherwise one check a second */
+    daemon_power_state_wait_change(1000 * 1000);
   }
   return nullptr;
 }

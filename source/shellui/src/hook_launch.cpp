@@ -46,7 +46,7 @@ int LaunchApp(MonoString* titleId, uint64_t* args, int argsSize, LaunchAppParam 
 #if SHELL_DEBUG == 1
   LOG_DEBUG("LaunchApp called with titleId: %s, argsSize: %d, param->size: %d", mono_string_to_utf8(titleId), argsSize, param->size);
 #endif
-  notify("notify.app.launching", mono_string_to_utf8(titleId));
+  notify("notify.app.launching", Mono_to_String(titleId).c_str());
 
   unsigned int ret = LaunchApp_orig(titleId, args, argsSize, param);
   if (ret < 0) {

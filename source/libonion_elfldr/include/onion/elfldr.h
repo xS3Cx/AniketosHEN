@@ -22,7 +22,12 @@ intptr_t elfldr_payload_args(pid_t pid);
 /** Basic ELF bounds/magic validation. Returns 0 when valid. */
 int elfldr_sanity_check(uint8_t *elf, size_t elf_size);
 
-/** Read a raw ELF payload from a socket. mallocs @elf; caller frees it. */
+/** A buffer for a payload image, mapped so freeing it returns the pages. */
+void *elfldr_buf_alloc(size_t size);
+void elfldr_buf_free(void *p, size_t size);
+
+/** Read a raw ELF payload from a socket into an elfldr_buf_alloc buffer of
+    @elf_size bytes; the caller frees it with elfldr_buf_free. */
 int elfldr_read(int fd, uint8_t **elf, size_t *elf_size);
 
 /** Execute an ELF in an already stopped/attached process. */

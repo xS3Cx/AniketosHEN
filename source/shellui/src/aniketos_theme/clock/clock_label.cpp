@@ -127,6 +127,59 @@ void clear_alias(NativeClockAlias &alias) {
   alias = {};
 }
 
+/* Shown, as far as this one node says. */
+bool node_shown(MonoObject *node) {
+  if (HomeScene::IsDisposed(node))
+    return false;
+  if (MonoClass *klass = property_class(node, "IsFinallyShown")) {
+    if (!Get_Property<bool>(klass, node, "IsFinallyShown"))
+      return false;
+  }
+  if (MonoClass *klass = property_class(node, "IsFinalOpacityVisible")) {
+    if (!Get_Property<bool>(klass, node, "IsFinalOpacityVisible"))
+      return false;
+  }
+  if (MonoClass *klass = property_class(node, "FinalOpacity")) {
+    if (Get_Property<float>(klass, node, "FinalOpacity") <= 0.001f)
+      return false;
+  } else if (MonoClass *klass = property_class(node, "Opacity")) {
+    if (Get_Property<float>(klass, node, "Opacity") <= 0.001f)
+      return false;
+  }
+  return true;
+}
+
+constexpr int kParentChainDepth = 12;
+constexpr uint64_t kParentChainMs = 250;
+
+/* The parent chain of the clock we follow, as weak handles. The probe asks
+   thirty times a second whether the clock is shown, and the chain only
+   changes with a scene swap: it is walked again (get_Parent per node) every
+   quarter second, when the label changes or when a node of it is collected;
+   in between only the nodes' own flags are read. */
+struct ParentChain {
+  uint32_t label = 0;
+  uint32_t nodes[kParentChainDepth] = {};
+  int count = 0;
+  uint64_t walked_ms = 0;
+};
+ParentChain s_chain;
+
+void walk_parent_chain(MonoObject *label, uint64_t now) {
+  Reflect::Hold(s_chain.label, label);
+  s_chain.count = 0;
+  MonoObject *node = label;
+  for (int depth = 0; node && depth < kParentChainDepth; ++depth) {
+    Reflect::Hold(s_chain.nodes[depth], node);
+    s_chain.count = depth + 1;
+    MonoObject *parent = HomeScene::Parent(node);
+    if (!parent || parent == node)
+      break;
+    node = parent;
+  }
+  s_chain.walked_ms = now;
+}
+
 bool native_clock_visible(MonoObject *label) {
   if (!label)
     return false;
@@ -137,29 +190,29 @@ bool native_clock_visible(MonoObject *label) {
   // was never selected.  Check the bounded native-parent chain as well as the
   // label itself; HomeScene::Parent() resolves the getter at runtime for firmware
   // portability and safely stops where a parent API is unavailable.
-  MonoObject *node = label;
-  for (int depth = 0; node && depth < 12; ++depth) {
-    if (HomeScene::IsDisposed(node))
+  if (label != clock_target()) {
+    MonoObject *node = label;
+    for (int depth = 0; node && depth < kParentChainDepth; ++depth) {
+      if (!node_shown(node))
+        return false;
+      MonoObject *parent = HomeScene::Parent(node);
+      if (!parent || parent == node)
+        break;
+      node = parent;
+    }
+    return true;
+  }
+  const uint64_t now = MonotonicMs();
+  bool fresh = Reflect::Target(s_chain.label) == label &&
+               now - s_chain.walked_ms < kParentChainMs;
+  for (int i = 0; fresh && i < s_chain.count; ++i)
+    fresh = Reflect::Target(s_chain.nodes[i]) != nullptr;
+  if (!fresh)
+    walk_parent_chain(label, now);
+  for (int i = 0; i < s_chain.count; ++i) {
+    MonoObject *node = Reflect::Target(s_chain.nodes[i]);
+    if (!node || !node_shown(node))
       return false;
-    if (MonoClass *klass = property_class(node, "IsFinallyShown")) {
-      if (!Get_Property<bool>(klass, node, "IsFinallyShown"))
-        return false;
-    }
-    if (MonoClass *klass = property_class(node, "IsFinalOpacityVisible")) {
-      if (!Get_Property<bool>(klass, node, "IsFinalOpacityVisible"))
-        return false;
-    }
-    if (MonoClass *klass = property_class(node, "FinalOpacity")) {
-      if (Get_Property<float>(klass, node, "FinalOpacity") <= 0.001f)
-        return false;
-    } else if (MonoClass *klass = property_class(node, "Opacity")) {
-      if (Get_Property<float>(klass, node, "Opacity") <= 0.001f)
-        return false;
-    }
-    MonoObject *parent = HomeScene::Parent(node);
-    if (!parent || parent == node)
-      break;
-    node = parent;
   }
   return true;
 }

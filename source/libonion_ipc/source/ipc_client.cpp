@@ -272,7 +272,7 @@ bool IPC_Client::IPCSendCommand(DaemonCommands cmd, std::string &ipc_msg1,
 
   IPC_Ret error = static_cast<IPC_Ret>(IPCReceiveData(msg, ipc_msg1));
   if (error == IPC_Ret::NO_ERROR) {
-    LOG_ERROR("[Daemon] Daemon returned NO ERROR");
+    LOG_DEBUG("[Daemon] Daemon returned NO ERROR");
     return true;
   }
   LOG_ERROR("[Daemon] Daemon returned an ERROR");

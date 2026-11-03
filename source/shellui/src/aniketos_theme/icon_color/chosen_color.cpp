@@ -51,8 +51,10 @@ UIColor current_color() {
 
 void restart_rainbow() { s_rainbow_started_ms = 0; }
 
-bool TintToken(const std::string &key, float *r, float *g, float *b) {
-  if (!r || !g || !b || !feature_on() || !token_is_icon(key))
+bool TokenIsIcon(const std::string &key) { return token_is_icon(key); }
+
+bool TintIconToken(float *r, float *g, float *b) {
+  if (!r || !g || !b || !feature_on())
     return false;
   const UIColor color = current_color();
   *r = color.r;

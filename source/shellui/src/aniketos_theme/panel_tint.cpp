@@ -8,6 +8,7 @@
 #include "aniketos_theme/panel_tint.hpp"
 
 #include "aniketos_theme/icon_color.hpp"
+#include "aniketos_theme/mono_text.hpp"
 
 #include "external_symbols.hpp"
 #include "hooked_funcs.hpp"
@@ -59,7 +60,6 @@ TryTokenColor s_try_token_color_original = nullptr;
 std::vector<Tracked<UIColor>> s_panels;
 // PanelBasemat keeps its glass/gradation opacity outside BackgroundColor.
 std::vector<Tracked<float>> s_basemat_opacities;
-std::vector<std::string> s_logged_token_keys;
 uint64_t s_animation_started_ms = 0;
 uint64_t s_last_frame_ms = 0;
 uint64_t s_last_config = 0;
@@ -101,16 +101,40 @@ bool surface_token(const std::string &key) {
                                "disabled", "progress", "slider"});
 }
 
-void log_token_once(const std::string &key, const UIColor &color,
-                    bool selected) {
-  if (key.empty() || s_logged_token_keys.size() >= kMaxLoggedTokenKeys ||
-      std::find(s_logged_token_keys.begin(), s_logged_token_keys.end(), key) !=
-          s_logged_token_keys.end())
-    return;
-  s_logged_token_keys.push_back(key);
-  LOG_INFO("[SHELL-UI:TOKEN] key='%s' rgba=(%.3f,%.3f,%.3f,%.3f) "
-           "surface=%d",
-           key.c_str(), color.r, color.g, color.b, color.a, selected ? 1 : 0);
+/* What a style token's key names, decided (and logged) the first time the
+   key is seen; after that the key's UTF-16 hash is enough, with no copy. */
+struct TokenFacts {
+  uint64_t hash;
+  bool surface;
+  bool icon;
+};
+
+const TokenFacts &token_facts(MonoString *managed_key, const UIColor &color) {
+  static TokenFacts table[kMaxLoggedTokenKeys] = {};
+  static const TokenFacts none = {0, false, false};
+  static TokenFacts scratch;
+  const uint64_t hash = MonoText::Hash(managed_key);
+  if (!hash)
+    return none;
+  const size_t start = static_cast<size_t>(hash % kMaxLoggedTokenKeys);
+  TokenFacts *entry = &scratch;
+  for (size_t probe = 0; probe < kMaxLoggedTokenKeys; ++probe) {
+    TokenFacts &slot = table[(start + probe) % kMaxLoggedTokenKeys];
+    if (slot.hash == hash)
+      return slot;
+    if (!slot.hash) {
+      entry = &slot;
+      break;
+    }
+  }
+  const std::string key = Mono_to_String(managed_key);
+  *entry = {hash, surface_token(key), IconColor::TokenIsIcon(key)};
+  if (entry != &scratch)
+    LOG_INFO("[SHELL-UI:TOKEN] key='%s' rgba=(%.3f,%.3f,%.3f,%.3f) "
+             "surface=%d",
+             key.c_str(), color.r, color.g, color.b, color.a,
+             entry->surface ? 1 : 0);
+  return *entry;
 }
 
 const char *object_class_name(MonoObject *object) {
@@ -143,14 +167,12 @@ bool excluded_panel(MonoObject *object) {
     return true;
   if (!std::strstr(name, "FocusLayer") || !s_get_test_id)
     return false;
-  MonoString *managed = s_get_test_id(object);
-  const std::string test_id = managed ? Mono_to_String(managed) : std::string();
-  const bool notification = test_id.find("toast") != std::string::npos ||
-                            test_id.find("notification") != std::string::npos ||
-                            test_id.find("banner") != std::string::npos;
-  const bool tile = test_id == "tile-item-focus-layer";
-  const bool viewport = test_id.find("overlay-screen") != std::string::npos;
-  return notification || tile || viewport;
+  const MonoString *test_id = s_get_test_id(object);
+  return MonoText::ContainsAscii(test_id, "toast") ||
+         MonoText::ContainsAscii(test_id, "notification") ||
+         MonoText::ContainsAscii(test_id, "banner") ||
+         MonoText::EqualsAscii(test_id, "tile-item-focus-layer") ||
+         MonoText::ContainsAscii(test_id, "overlay-screen");
 }
 
 template <typename Value> MonoObject *target_of(const Tracked<Value> &entry) {
@@ -309,12 +331,10 @@ bool try_token_color_hook(MonoObject *manager, MonoString *managed_key,
   /* both tints below need the customization on; the key is not read without */
   if (!found || !color || !CustomizationOn())
     return found;
-  const std::string key = managed_key ? Mono_to_String(managed_key)
-                                      : std::string();
-  const bool selected = surface_token(key);
-  log_token_once(key, *color, selected);
-  (void)IconColor::TintToken(key, &color->r, &color->g, &color->b);
-  if (selected && panels_on())
+  const TokenFacts &facts = token_facts(managed_key, *color);
+  if (facts.icon)
+    (void)IconColor::TintIconToken(&color->r, &color->g, &color->b);
+  if (facts.surface && panels_on())
     *color = tint(*color, animated_theme_color(MonotonicMs()));
   return found;
 }

@@ -5,6 +5,7 @@
 #include "aniketos_shell/home/home_rows.hpp"
 #include "aniketos_shell/system_ui/system_dialogs.hpp"
 #include "aniketos_ui/home_scene.hpp"
+#include "aniketos_ui/mono_property_cache.hpp"
 #include "aniketos_ui/mono_reflect.hpp"
 #include "hooked_funcs.hpp"
 #include "toolbox_i18n.hpp"
@@ -59,6 +60,14 @@ int s_panel_frames = 0; /* frames until the bar's labels are looked at */
 /* The system's captions as last seen: what the rename prompt starts with
    while a tab has no name of the user's. */
 std::string s_stock_names[2];
+/* What the stock tabs show (caption_of), made again when a name, the icons
+   setting or a stock caption changed, not every frame. */
+std::string s_captions[2];
+std::string s_seen_names[2];
+bool s_seen_icons = false;
+bool s_captions_stale = true;
+/* A label was given text: the bar is fitted again on the next frame. */
+bool s_fit_dirty = true;
 
 std::mutex s_request_mutex;
 int s_rename_request = -1; /* the tab a prompt is asked for */
@@ -291,6 +300,7 @@ void show_caption(MonoObject *label, StockTab tab,
   int32_t no_trimming = 0;
   set(label, "set_TextTrimming", &no_trimming);
   set(label, "set_Text", mono_string_new(mono_domain_get(), caption.c_str()));
+  s_fit_dirty = true;
   static int shown_logs = 0;
   if (shown_logs++ < 32)
     LOG_INFO("[HOMETABS] %s tab shows '%s' label=%p",
@@ -333,9 +343,6 @@ void name_tab_labels(const std::string (&captions)[2]) {
 /* The same for the bar's own labels, twice a second, should one have been
    missed or set back: a language the text hook has no word for. */
 void name_tab_panels(const std::string (&captions)[2]) {
-  if (--s_panel_frames > 0)
-    return;
-  s_panel_frames = 30;
   for (const TabPanel &tab : s_tab_panels) {
     StockTab stock = StockTab::Games;
     if (!stock_tab_of(tab.name, &stock) || captions[index_of(stock)].empty())
@@ -345,6 +352,24 @@ void name_tab_panels(const std::string (&captions)[2]) {
     if (label && is_label(label))
       show_caption(label, stock, captions[index_of(stock)]);
   }
+}
+
+/* React laid the bar out again: a panel is not where fit_tab_panels left it.
+   Compiled getters, no boxing: this is asked every frame. */
+bool panels_moved() {
+  for (const TabPanel &tab : s_tab_panels) {
+    MonoObject *panel = Reflect::Target(tab.handle);
+    if (!panel)
+      continue;
+    MonoClass *klass = mono_object_get_class(panel);
+    if (std::fabs(AniketosUI::MonoPropertyCache::Get<float>(klass, panel, "X") -
+                  tab.written_x) > 0.5f ||
+        std::fabs(AniketosUI::MonoPropertyCache::Get<float>(klass, panel,
+                                                            "Width") -
+                  tab.written_width) > 0.5f)
+      return true;
+  }
+  return false;
 }
 
 void open_rename_prompt(StockTab tab) {
@@ -486,7 +511,10 @@ std::string TabLabelText(MonoObject *label, StockTab tab,
                          const std::string &stock) {
   if (!label)
     return {};
-  s_stock_names[index_of(tab)] = stock;
+  if (s_stock_names[index_of(tab)] != stock) {
+    s_stock_names[index_of(tab)] = stock;
+    s_captions_stale = true;
+  }
   StockTab named = tab;
   if (named_tab(label, &named))
     return caption_of(named);
@@ -561,13 +589,22 @@ void Tick() {
   if (!s_installed)
     return;
   rename_tick();
-  remember_tab_names();
+  if (s_captions_stale || s_seen_icons != IconsShown() ||
+      s_seen_names[0] != g_settings.home_tab_games_name ||
+      s_seen_names[1] != g_settings.home_tab_media_name) {
+    s_captions_stale = false;
+    s_seen_icons = IconsShown();
+    s_seen_names[0] = g_settings.home_tab_games_name;
+    s_seen_names[1] = g_settings.home_tab_media_name;
+    s_captions[0] = caption_of(StockTab::Games);
+    s_captions[1] = caption_of(StockTab::Media);
+    s_fit_dirty = true;
+    remember_tab_names();
+  }
   /* The tab bar is Home's: nothing of it shows while a game has the screen. */
   if (AniketosShell::CurrentFocusLayer() == AniketosShell::FocusLayer::Game)
     return;
-  const std::string captions[2] = {caption_of(StockTab::Games),
-                                   caption_of(StockTab::Media)};
-  name_tab_labels(captions);
+  name_tab_labels(s_captions);
   MonoObject *switcher = Reflect::Target(s_switcher);
   if (!switcher || AniketosUI::HomeScene::IsDisposed(switcher)) {
     if (--s_search_countdown > 0)
@@ -575,10 +612,21 @@ void Tick() {
     s_search_countdown = 90;
     if (!find_tab_bar())
       return;
+    s_fit_dirty = true;
   }
-  name_tab_panels(captions);
-  fit_tab_panels(captions);
-  emulators_tab_tick();
+  /* Twice a second the bar is looked over; every frame only when React laid
+     it out again or a caption of ours went in, so a frame is all a fix is late. */
+  const bool slow = --s_panel_frames <= 0;
+  if (slow)
+    s_panel_frames = 30;
+  if (slow)
+    name_tab_panels(s_captions);
+  if (slow || s_fit_dirty || panels_moved()) {
+    s_fit_dirty = false;
+    fit_tab_panels(s_captions);
+  }
+  if (slow)
+    emulators_tab_tick();
 }
 
 } // namespace HomeTabs

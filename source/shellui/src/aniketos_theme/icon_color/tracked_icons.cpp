@@ -23,6 +23,7 @@ constexpr UIColor kWhite{1.0f, 1.0f, 1.0f, 1.0f, 0};
 
 struct TrackedIcon {
   uint32_t handle = 0; /* weak */
+  MonoObject *object = nullptr; /* its target when tracked: compared first */
   MonoMethod *setter = nullptr;
   UIColor restore{}; /* as the system last set it */
 };
@@ -47,7 +48,7 @@ bool s_tint_shown = false;
 
 TrackedIcon *find_tracked(MonoObject *object) {
   for (TrackedIcon &entry : s_tracked) {
-    if (Reflect::Target(entry.handle) == object)
+    if (entry.object == object && Reflect::Target(entry.handle) == object)
       return &entry;
   }
   return nullptr;
@@ -115,22 +116,23 @@ void apply_all(const UIColor &color) {
            count.skipped);
 }
 
-/* Hidden icons too: this runs once, so nothing comes back to them later. */
+/* Hidden icons too: this runs once, so nothing comes back to them later.
+   The list is let go: off, the setter hooks track nothing, so what is kept
+   would only go stale. */
 void restore_tracked() {
   prune_tracked();
   size_t restored = 0;
-  std::vector<size_t> drop;
   /* By index: a setter can track more icons, which moves the list. */
   for (size_t i = 0; i < s_tracked.size(); ++i) {
     MonoObject *object = Reflect::Target(s_tracked[i].handle);
-    if (!object || object_disposed(object))
-      continue;
-    if (set_color(s_tracked[i].setter, object, s_tracked[i].restore))
+    if (object && !object_disposed(object) &&
+        set_color(s_tracked[i].setter, object, s_tracked[i].restore))
       ++restored;
-    else
-      drop.push_back(i);
   }
-  erase_tracked(drop);
+  for (TrackedIcon &entry : s_tracked)
+    Reflect::Release(entry.handle);
+  s_tracked.clear();
+  s_prune_at = kMinPruneAt;
   LOG_INFO("[ICONCOLOR] system colours back count=%zu", restored);
 }
 
@@ -148,6 +150,7 @@ void track_object(MonoObject *object, MonoMethod *setter,
     return;
   }
   TrackedIcon entry{};
+  entry.object = object;
   entry.setter = setter;
   entry.restore = restore;
   Reflect::Hold(entry.handle, object);

@@ -407,13 +407,16 @@ void ImageGeometry(const Runtime &runtime, MonoObject *image, float x, float y,
                    float width, float height, bool visible) {
   if (!image || !runtime.image_box)
     return;
+  /* Opacity is not shadowed: a theme writes it directly (the header glyph). */
+  Set(runtime.image_box, image, "Opacity", visible ? 1.0f : 0.0f);
+  width = visible ? std::max(width, 0.0f) : 0.0f;
+  height = visible ? std::max(height, 0.0f) : 0.0f;
+  if (geometry_unchanged(image, x, y, width, height))
+    return;
   Set(runtime.image_box, image, "X", x);
   Set(runtime.image_box, image, "Y", y);
-  Set(runtime.image_box, image, "Width",
-                visible ? std::max(width, 0.0f) : 0.0f);
-  Set(runtime.image_box, image, "Height",
-                visible ? std::max(height, 0.0f) : 0.0f);
-  Set(runtime.image_box, image, "Opacity", visible ? 1.0f : 0.0f);
+  Set(runtime.image_box, image, "Width", width);
+  Set(runtime.image_box, image, "Height", height);
 }
 
 void LabelText(const Runtime &runtime, MonoObject *label,

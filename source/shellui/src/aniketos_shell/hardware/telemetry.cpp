@@ -10,7 +10,9 @@
 #include <onion/platform.h>
 
 #include <atomic>
+#include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstdio>
 #include <cstring>
 #include <mutex>
@@ -60,6 +62,18 @@ std::atomic<uint64_t> s_snapshot_reads{0};
 std::atomic<uint64_t> s_sampled_at_ms{0};
 std::mutex s_snapshot_mutex;
 Snapshot s_snapshot{};
+/* The worker sleeps on this: a period change bumps the generation; a read
+   while it idles (s_worker_idle) wakes it for a fresh sample. */
+std::mutex s_wake_mutex;
+std::condition_variable s_wake;
+uint64_t s_wake_generation = 0;
+std::atomic<bool> s_worker_idle{false};
+
+void wake_worker() {
+  std::lock_guard<std::mutex> lock(s_wake_mutex);
+  ++s_wake_generation;
+  s_wake.notify_one();
+}
 
 bool valid_temperature(int value) {
   return value >= kMinimumTemperature && value <= kMaximumTemperature;
@@ -341,21 +355,27 @@ void *worker(void *) {
   bool idle = false;
   bool logged = false;
   for (;;) {
-    /* Sleep in short slices so a change of interval (or a live page being
-       opened) takes effect at once instead of after the current period;
-       while idle, the first read again samples at once. */
-    for (uint64_t slept_ms = 0;;) {
+    /* One period, cut short by a change of interval (a live page opened);
+       while idle (nobody read the last sample: a game is in front, the OSD
+       is off) sleep until the first read, which samples at once. */
+    {
+      std::unique_lock<std::mutex> lock(s_wake_mutex);
+      const uint64_t generation = s_wake_generation;
       const uint64_t period_ms =
           s_live_view.load(std::memory_order_acquire)
               ? 500
               : static_cast<uint64_t>(
                     s_refresh_seconds.load(std::memory_order_acquire)) * 1000;
-      if (slept_ms >= period_ms ||
-          (idle && s_snapshot_reads.load(std::memory_order_relaxed) != reads_seen))
-        break;
-      const timespec delay{0, 100 * 1000 * 1000};
-      nanosleep(&delay, nullptr);
-      slept_ms += 100;
+      const auto woken = [&] {
+        return s_wake_generation != generation ||
+               (idle && s_snapshot_reads.load() != reads_seen);
+      };
+      s_worker_idle.store(idle);
+      if (idle)
+        s_wake.wait(lock, woken);
+      else
+        s_wake.wait_for(lock, std::chrono::milliseconds(period_ms), woken);
+      s_worker_idle.store(false);
     }
 
     const uint64_t now_ms = AniketosUI::MonotonicMs();
@@ -424,7 +444,8 @@ void ReportShellFrame() {
 }
 
 void SetLiveView(bool live) {
-  s_live_view.store(live, std::memory_order_release);
+  if (s_live_view.exchange(live, std::memory_order_acq_rel) != live)
+    wake_worker();
 }
 
 void SetRefreshSeconds(int seconds) {
@@ -432,11 +453,16 @@ void SetRefreshSeconds(int seconds) {
     seconds = 1;
   if (seconds > 10)
     seconds = 10;
-  s_refresh_seconds.store(seconds, std::memory_order_release);
+  if (s_refresh_seconds.exchange(seconds, std::memory_order_acq_rel) != seconds)
+    wake_worker();
 }
 
 Snapshot GetSnapshot() {
-  s_snapshot_reads.fetch_add(1, std::memory_order_relaxed);
+  s_snapshot_reads.fetch_add(1);
+  if (s_worker_idle.exchange(false)) { /* only the first read after idling */
+    std::lock_guard<std::mutex> lock(s_wake_mutex);
+    s_wake.notify_one();
+  }
   std::lock_guard<std::mutex> lock(s_snapshot_mutex);
   return s_snapshot;
 }

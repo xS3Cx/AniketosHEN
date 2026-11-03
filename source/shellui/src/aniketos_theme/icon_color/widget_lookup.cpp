@@ -6,6 +6,7 @@
 
 #include <onion/distribution.h>
 
+#include <iterator>
 #include <unordered_map>
 
 namespace AniketosTheme::IconColor {
@@ -87,6 +88,28 @@ bool hierarchy_name_contains(MonoClass *klass, const char *needle) {
   return false;
 }
 
+/* Whether a class or a base of it is named after icons or Settings never
+   changes: asked once per class, not (with a lowercase copy of every name up
+   the chain) on every colour or picture a hooked setter is given. */
+struct ClassFacts {
+  MonoClass *klass;
+  bool icon;
+  bool settings;
+};
+
+const ClassFacts &class_facts(MonoClass *klass) {
+  static ClassFacts cache[64] = {};
+  static size_t next = 0;
+  for (const ClassFacts &known : cache)
+    if (known.klass == klass)
+      return known;
+  ClassFacts &entry = cache[next];
+  next = (next + 1) % std::size(cache);
+  entry = {klass, hierarchy_name_contains(klass, "icon"),
+           hierarchy_name_contains(klass, "settings")};
+  return entry;
+}
+
 /* The URIs of what the widget shows: a row's or button's icon, an image's
    picture. */
 std::string picture_uris(MonoObject *object) {
@@ -106,14 +129,14 @@ bool own_colours(const std::string &uris) {
 }
 
 bool inside_settings(MonoObject *object) {
-  if (hierarchy_name_contains(mono_object_get_class(object), "settings"))
+  if (class_facts(mono_object_get_class(object)).settings)
     return true;
   MonoObject *parent = object;
   for (int depth = 0; depth < kMaxSettingsParents; ++depth) {
-    parent = HomeScene::PropertyObject(parent, "Parent");
+    parent = HomeScene::Parent(parent);
     if (!parent)
       return false;
-    if (hierarchy_name_contains(mono_object_get_class(parent), "settings"))
+    if (class_facts(mono_object_get_class(parent)).settings)
       return true;
   }
   return false;
@@ -195,10 +218,13 @@ bool read_color(MonoMethod *getter, MonoObject *object, UIColor *color) {
 bool object_disposed(MonoObject *object) {
   if (!object)
     return false;
+  MonoMethod *getter = disposed_getter(mono_object_get_class(object));
+  /* IsDisposed is a field read that cannot throw: called direct, no box */
+  if (bool (*direct)(MonoObject *) =
+          reinterpret_cast<decltype(direct)>(Reflect::Compiled(getter)))
+    return direct(object);
   bool disposed = false;
-  return invoke_bool(disposed_getter(mono_object_get_class(object)), object,
-                     &disposed) &&
-         disposed;
+  return invoke_bool(getter, object, &disposed) && disposed;
 }
 
 bool object_visible(MonoObject *object) {
@@ -233,7 +259,7 @@ bool widget_should_tint(MonoObject *object) {
     return false;
   /* a system icon by its picture (cxml://.../iconid_*), whatever the widget
      is called: React's images have no name */
-  return hierarchy_name_contains(klass, "icon") || contains(text, "icon") ||
+  return class_facts(klass).icon || contains(text, "icon") ||
          contains(pictures, "/iconid_") || inside_settings(object);
 }
 

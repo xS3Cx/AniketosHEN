@@ -326,7 +326,7 @@ static int path_read(const char *path, uint8_t **content, size_t *content_size) 
     return -1;
   }
 
-  buf = (uint8_t *)malloc((size_t)st.st_size);
+  buf = (uint8_t *)elfldr_buf_alloc((size_t)st.st_size);
   if(!buf) {
     close(fd);
     return -1;
@@ -336,7 +336,7 @@ static int path_read(const char *path, uint8_t **content, size_t *content_size) 
   while(off < (size_t)st.st_size) {
     ssize_t n = read(fd, buf + off, (size_t)st.st_size - off);
     if(n <= 0) {
-      free(buf);
+      elfldr_buf_free(buf, (size_t)st.st_size);
       close(fd);
       return -1;
     }
@@ -345,7 +345,7 @@ static int path_read(const char *path, uint8_t **content, size_t *content_size) 
   close(fd);
 
   if(elfldr_sanity_check(buf, (size_t)st.st_size)) {
-    free(buf);
+    elfldr_buf_free(buf, (size_t)st.st_size);
     errno = ENOEXEC;
     return -1;
   }
@@ -447,7 +447,7 @@ static void on_connection(int fd) {
 
   free(filename);
   free(args);
-  free(buf);
+  elfldr_buf_free(buf, len);
 }
 
 static int serve_elfldr(uint16_t port) {
@@ -493,7 +493,7 @@ static int serve_elfldr(uint16_t port) {
     pfd.fd = srvfd;
     pfd.events = POLLIN;
 
-    const int pr = poll(&pfd, 1, 1000);
+    const int pr = poll(&pfd, 1, -1); /* nothing to check on a timeout */
     if (pr < 0) {
       if (errno == EINTR)
         continue;

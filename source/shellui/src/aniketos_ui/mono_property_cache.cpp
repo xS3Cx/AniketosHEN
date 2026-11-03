@@ -13,6 +13,8 @@ constexpr size_t kSlots = 2048;
 constexpr size_t kNameCapacity = 40;
 /* Kinds from here up are methods, by arity; below are the accessor Kinds. */
 constexpr int kMethodKind = 8;
+/* The key is the MonoMethod itself (in the klass slot) with an empty name. */
+constexpr int kCompiledKind = 3;
 
 struct Slot {
   MonoClass *klass;
@@ -73,6 +75,13 @@ void *resolve_method(MonoClass *klass, const char *name, int kind_id) {
   return nullptr;
 }
 
+void *resolve_compiled(MonoClass *method, const char *, int) {
+  return mono_compile_method
+             ? reinterpret_cast<void *>(
+                   mono_compile_method(reinterpret_cast<MonoMethod *>(method)))
+             : nullptr;
+}
+
 void *cached(MonoClass *klass, const char *property, int kind_id,
              void *(*resolve)(MonoClass *, const char *, int)) {
   if (!klass || !property)
@@ -125,6 +134,11 @@ void *Accessor(MonoClass *klass, const char *property, Kind kind) {
 MonoMethod *Method(MonoClass *klass, const char *name, int parameters) {
   return static_cast<MonoMethod *>(
       cached(klass, name, kMethodKind + parameters, resolve_method));
+}
+
+void *CompiledMethod(MonoMethod *method) {
+  return cached(reinterpret_cast<MonoClass *>(method), "", kCompiledKind,
+                resolve_compiled);
 }
 
 MonoObject *ScratchColor(float r, float g, float b, float a) {

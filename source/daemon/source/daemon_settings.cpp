@@ -27,15 +27,15 @@ ConfigState config_state;
 onion::SettingsStore g_settings;
 
 bool LoadSettings(bool force) {
-  const onion::Settings previous = g_settings.snapshot();
-  const time_t newest = onion::settings_config_newest_mtime();
-
   // Skip disk I/O when neither twin is newer than the last applied snapshot.
   if (!force && config_state.ever_loaded &&
       !onion::settings_config_is_newer_than(config_state.last_modified)) {
     return true;
   }
 
+  /* after the gate: the fps thread asks every second, a copy there is waste */
+  const bool previous_fan_hold = g_settings.snapshot().enable_fan_speed;
+  const time_t newest = onion::settings_config_newest_mtime();
   if (newest == 0) {
     LOG_ERROR("[Daemon] Config file not found. Creating default schema...");
     if (onion::settings_ensure_default()) {
@@ -43,7 +43,7 @@ bool LoadSettings(bool force) {
     }
   }
 
-  LOG_INFO("[Daemon] Loading Settings from shared schema...");
+  LOG_DEBUG("[Daemon] Loading Settings from shared schema...");
   onion::Settings s{};
   const bool from_file = onion::settings_load(&s);
   if (!from_file && newest != 0) {
@@ -51,11 +51,14 @@ bool LoadSettings(bool force) {
     return false;
   }
 
-  if (from_file) {
+  if (!from_file) {
+    LOG_INFO("[Daemon] Using default settings (no config file)");
+  } else if (config_state.ever_loaded) { /* a reload: quiet at info */
+    LOG_DEBUG("[Daemon] Reading Settings from %s",
+              onion::settings_last_loaded_path());
+  } else {
     LOG_INFO("[Daemon] Reading Settings from %s",
              onion::settings_last_loaded_path());
-  } else {
-    LOG_INFO("[Daemon] Using default settings (no config file)");
   }
   LOG_DEBUG("fan_threshold: %d", s.fan_threshold);
   LOG_DEBUG("enable_fan_speed: %d", s.enable_fan_speed ? 1 : 0);
@@ -76,7 +79,7 @@ bool LoadSettings(bool force) {
      the threshold so firmware cannot silently restore its own curve. */
   if (s.enable_fan_speed) {
     (void)set_fan_threshold(s.fan_threshold);
-  } else if (config_state.ever_loaded && previous.enable_fan_speed) {
+  } else if (config_state.ever_loaded && previous_fan_hold) {
     (void)restore_automatic_fan();
   }
 

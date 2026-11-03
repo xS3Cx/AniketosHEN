@@ -4,6 +4,7 @@
 
 #include <stdatomic.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <string.h>
 
 /* Generated from source/i18n locale catalogs at build time. */
@@ -157,7 +158,7 @@ const char *onion_notify_tr(const char *key) {
 
   for (i = 0; i < sizeof(kTranslations) / sizeof(kTranslations[0]); ++i) {
     if (strcmp(kTranslations[i].key, key) == 0)
-      return kTranslations[i].text[idx];
+      return kI18nText[idx] + kTranslations[i].text[idx];
   }
   return key;
 }

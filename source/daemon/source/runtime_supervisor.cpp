@@ -47,7 +47,9 @@ constexpr int kUtilReadyWaitMs = 15000;
  * so :9020 can actually recover instead of deferring forever. */
 constexpr uint64_t kLoaderBusyGraceSeconds = 150;
 constexpr useconds_t kPollUs = 200 * 1000;
-constexpr unsigned kHealthySleepSeconds = 3;
+/* each check pings :9020 (wakes onion_elfldr) and reads the ready file:
+   a util crash is rare, 10 s to notice it is fine */
+constexpr unsigned kHealthySleepSeconds = 10;
 constexpr unsigned kMaxBackoffSeconds = 30;
 
 enum class RecoveryResult {

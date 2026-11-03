@@ -114,6 +114,14 @@ PluginDirectoryWatcher &watcher() {
 void log_report(const char *operation, const plugin::ReconcileReport &report) {
   for (const plugin::DiscoveryIssue &issue : report.issues)
     LOG_WARN("[plugins] %s: %s", issue.path.c_str(), issue.message.c_str());
+  /* the watcher's 30 s fallback reconcile is a no-op nearly always: a line
+     only when the counts differ from the last one (issues still warn) */
+  static size_t last[4] = {~size_t{0}, 0, 0, 0};
+  const size_t now[4] = {report.discovered, report.running, report.started,
+                         report.failed};
+  if (std::memcmp(last, now, sizeof(now)) == 0)
+    return;
+  std::memcpy(last, now, sizeof(now));
   LOG_INFO("[plugins] %s: discovered=%zu running=%zu started=%zu failed=%zu",
            operation, report.discovered, report.running, report.started,
            report.failed);

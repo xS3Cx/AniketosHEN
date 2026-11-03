@@ -329,6 +329,19 @@ class SceSysCoreAppLifecycleCollector {
 public:
   bool has_tracked() const { return !big_apps_.empty(); }
 
+  /* The running Big App is one already published: two SystemService calls
+     instead of consider()'s scan of every process with GetAppInfo. */
+  bool running_app_tracked() const {
+    std::string title_id;
+    int app_id = -1;
+    if (big_apps_.empty() || !Get_Running_App_TID(title_id, app_id))
+      return false;
+    for (const auto &[pid, app] : big_apps_)
+      if (app.app_id == static_cast<uint32_t>(app_id))
+        return true;
+    return false;
+  }
+
   bool consider(const char *source, pid_t exec_pid, const ExecIdentity *id) {
     std::string current_title_id;
     int current_app_id = -1;
@@ -561,6 +574,10 @@ private:
   }
 
   void handle_reconcile_timer(const struct kevent &event) {
+    /* the 2 s safety net only has work when a start was missed */
+    if (event.ident == kReconcileFallbackTimerIdent &&
+        collector_.running_app_tracked())
+      return;
     if (collector_.consider("timer", -1, nullptr)) {
       disarm_burst_timer();
       return;
@@ -709,8 +726,10 @@ private:
         jb_listener_enabled.load(std::memory_order_acquire) &&
         settings_.app_jailbreak_enabled;
 
-    LOG_INFO("[JB] runtime active: PID/vnode monitoring, jailbreak=%s",
-             jb_enabled ? "on" : "off");
+    if (logged_jb_enabled_ != static_cast<int>(jb_enabled))
+      LOG_INFO("[JB] runtime active: PID/vnode monitoring, jailbreak=%s",
+               jb_enabled ? "on" : "off");
+    logged_jb_enabled_ = jb_enabled;
     return true;
   }
 
@@ -1286,6 +1305,7 @@ private:
 
   int control_read_fd_ = -1;
   int kq_ = -1;
+  int logged_jb_enabled_ = -1; /* every settings reload rebuilds: log on change */
   onion::Settings settings_ {};
   std::map<int, VnodeWatch> vnode_watches_;
   std::map<std::string, int> path_to_fd_;

@@ -58,7 +58,7 @@ void *ip_thread(void *arg) {
 
   while (true) {
     check_addr_change();
-    sleep(2);
+    sleep(10); /* a toast about a new address can wait this long */
   }
 }
 

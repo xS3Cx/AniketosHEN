@@ -2,6 +2,7 @@
 
 #include "aniketos_shell/controller/controller_manager.hpp"
 #include "aniketos_shell/core/frame_profile.hpp"
+#include "aniketos_shell/core/host_scene.hpp"
 #include "aniketos_shell/core/menu_host.hpp"
 #include "aniketos_shell/games/trophy_tools.hpp"
 #include "aniketos_shell/hardware/pad_speaker.hpp"
@@ -70,8 +71,16 @@ void StartWorkers() {
 }
 
 void BeforeNativeFrame() {
-  shellui_poll_presence_reload();
-  AniketosTheme::ToggleStyles::Tick();
+  /* Who has the screen, once for the frame: every tick below asks. */
+  AniketosShell::BeginFrame();
+  {
+    Profile::Scope scope(Profile::kPolls);
+    shellui_poll_presence_reload();
+  }
+  {
+    Profile::Scope scope(Profile::kSharedUi);
+    AniketosTheme::ToggleStyles::Tick();
+  }
   /* Shell appearance (clock, panels, background) then the Shell Menu itself:
      resolve its host, drain controller input, animate. All are no-ops until
      their Install()/Initialize() has succeeded. */
@@ -79,20 +88,35 @@ void BeforeNativeFrame() {
     Profile::Scope scope(Profile::kShellClock);
     ShellClock::Tick();
   }
-  HenMenu::Tick();
-  ControlCenterEntry::Tick();
-  MigrationNotice::Tick();
-  HomeTabs::Tick();
-  HomeBookmark::Tick();
-  WebTiles::Tick();
-  OskGlyphs::Tick();
-  HomeVideo::Tick();
-  AccountAvatar::Tick();
-  DevkitOverlay::Tick();
-  HomeParticles::Tick();
-  TrophyTools::Tick();
-  AniketosTheme::CustomFont::Tick();
-  PadSpeaker::Tick();
+  {
+    Profile::Scope scope(Profile::kHomeFeatures);
+    HenMenu::Tick();
+    ControlCenterEntry::Tick();
+    MigrationNotice::Tick();
+    HomeTabs::Tick();
+    HomeBookmark::Tick();
+    WebTiles::Tick();
+  }
+  {
+    Profile::Scope scope(Profile::kInput);
+    OskGlyphs::Tick();
+  }
+  {
+    Profile::Scope scope(Profile::kHomeFeatures);
+    HomeVideo::Tick();
+    AccountAvatar::Tick();
+    DevkitOverlay::Tick();
+  }
+  {
+    Profile::Scope scope(Profile::kParticles);
+    HomeParticles::Tick();
+  }
+  {
+    Profile::Scope scope(Profile::kHomeFeatures);
+    TrophyTools::Tick();
+    AniketosTheme::CustomFont::Tick();
+    PadSpeaker::Tick();
+  }
   {
     Profile::Scope scope(Profile::kSharedUi);
     AniketosTheme::PanelTint::Tick();
@@ -106,6 +130,7 @@ void BeforeNativeFrame() {
     Profile::Scope scope(Profile::kShellManager);
     AniketosShell::Tick();
   }
+  Profile::Scope scope(Profile::kInput);
   KbmCapture::Tick();
   kbm_toolbox::Tick();
   MouseControl::Tick();

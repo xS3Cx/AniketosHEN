@@ -214,6 +214,7 @@ def generate(catalog: str, locales: list[dict[str, Any]]) -> str:
     ids = [locale["id"] for locale in locales]
     lines = [
         "// Generated from source/i18n locale catalogs. Do not edit.",
+        "// Needs <stdint.h> included before it (it is included inside a namespace).",
         f"#define I18N_LOCALE_COUNT {len(locales)}",
         "static const char *const kI18nLocaleIds[I18N_LOCALE_COUNT] = {",
         "    " + ", ".join(cpp_string(locale_id) for locale_id in ids) + ",",
@@ -221,30 +222,54 @@ def generate(catalog: str, locales: list[dict[str, Any]]) -> str:
         "static const int kI18nLocaleFallback = 0;",
         "",
     ]
+    section = "toolbox" if catalog == "toolbox" else "notifications"
+    keys = list(locales[0][section])
+    # One NUL-separated blob per locale, addressed by offset: only the active
+    # locale's text is ever touched, and the table carries no pointer
+    # relocations (a const char * per locale per key is resident for the
+    # process's life, written by the loader).
+    offsets: list[list[int]] = []
+    for i, locale in enumerate(locales):
+        lines.append(f"static const char kI18nText{i}[] =")
+        at = 0
+        column = []
+        for key in keys:
+            text = locale[section][key]
+            column.append(at)
+            lines.append(f'  {cpp_string(text)} "\\0"')
+            at += len(text.encode("utf-8")) + 1
+        offsets.append(column)
+        lines.append(";")
+    lines.extend(
+        [
+            "static const char *const kI18nText[I18N_LOCALE_COUNT] = {",
+            "    " + ", ".join(f"kI18nText{i}" for i in range(len(locales))) + ",",
+            "};",
+            "",
+        ]
+    )
     if catalog == "toolbox":
         lines.extend(
             [
                 "struct Entry {",
                 "  const char *key;",
-                "  const char *text[I18N_LOCALE_COUNT];",
+                "  uint32_t text[I18N_LOCALE_COUNT]; /* into kI18nText[locale] */",
                 "};",
                 "constexpr Entry kTable[] = {",
             ]
         )
-        section = "toolbox"
     else:
         lines.extend(
             [
                 "typedef struct {",
                 "  const char *key;",
-                "  const char *text[I18N_LOCALE_COUNT];",
+                "  uint32_t text[I18N_LOCALE_COUNT]; /* into kI18nText[locale] */",
                 "} notify_translation_t;",
                 "static const notify_translation_t kTranslations[] = {",
             ]
         )
-        section = "notifications"
-    for key in locales[0][section]:
-        texts = ", ".join(cpp_string(locale[section][key]) for locale in locales)
+    for n, key in enumerate(keys):
+        texts = ", ".join(str(column[n]) for column in offsets)
         lines.append(f"  {{{cpp_string(key)}, {{{texts}}}}},")
     lines.extend(["};", ""])
     return "\n".join(lines)

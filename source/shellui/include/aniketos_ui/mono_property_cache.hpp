@@ -23,6 +23,8 @@ void *Accessor(MonoClass *klass, const char *property, Kind kind);
 /** The method of that name and arity on `klass` or the first parent that has
  * one (Reflect::MethodOf), kept the same way. Null if absent. */
 MonoMethod *Method(MonoClass *klass, const char *name, int parameters);
+/** mono_compile_method(method), kept per method (Reflect::Compiled). */
+void *CompiledMethod(MonoMethod *method);
 
 template <typename Result>
 Result Get(MonoClass *klass, MonoObject *instance, const char *property) {

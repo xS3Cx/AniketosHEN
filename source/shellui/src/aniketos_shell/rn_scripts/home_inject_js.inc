@@ -26,10 +26,10 @@ R"JS((function () {
                                            : 'ANIKETOS ' + message);
     } catch (e) {}
   }
+  /* listed once in the alive line, not a log line each */
   function once(name, id) {
     if (A.patched[name]) return false;
     A.patched[name] = id;
-    log('patched ' + name + ' in module ' + id);
     return true;
   }
 
@@ -580,7 +580,6 @@ R"JS((function () {
         if (typeof table[name] === 'number' && table[name] > 0 &&
             name.indexOf('5X') < 0)
           CK.sizes.push(table[name]);
-      log('clock: font sizes ' + JSON.stringify(CK.sizes));
     }
     var best = 0;
     for (var i = 0; i < CK.sizes.length; i++)
@@ -649,10 +648,7 @@ R"JS((function () {
         text.props.testID !== props.testID + '-text' ||
         typeof text.props.children !== 'string')
       return element;
-    if (!CK.told) {
-      CK.told = true;
-      log('clock: drawn in Sony\'s clock (' + props.testID + ')');
-    }
+    CK.told = true; /* reported in the alive line */
     if (!c || !c.on) return element;
     var now = new Date(), key;
     var own = {};
@@ -900,8 +896,9 @@ R"JS((function () {
      unconfirmed. */
   setTimeout(function () {
     log('alive app=' + cfg.app + ' patched=' + JSON.stringify(A.patched) +
-        ' errors=' + A.errors +
-        ' hooked=' + hooked + ' spaces=' + JSON.stringify(A.spaceIds || null));
+        ' errors=' + A.errors + ' hooked=' + hooked +
+        ' clock=' + (CK.failed ? 'failed' : CK.told ? 'drawn' : 'stock') +
+        ' spaces=' + JSON.stringify(A.spaceIds || null));
   }, 8000);
   log('installed for space ' + SPACE);
 })();)JS"

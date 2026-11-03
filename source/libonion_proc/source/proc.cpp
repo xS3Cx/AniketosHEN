@@ -133,6 +133,7 @@ module_info_t* get_module_info(pid_t pid, const char* module_name)
             syscall(SYS_dl_get_info_2, pid, 1, handles[i], mod_info);
             if (!strcmp(mod_info->filename, module_name))
             {
+                free(handles);
                 return mod_info;
             }
         }
@@ -148,7 +149,9 @@ module_info_t* get_module_info(pid_t pid, const char* module_name)
 int get_module_handle(pid_t pid, const char* module_name)
 {
     module_info_t* mod_info = get_module_info(pid, module_name);
-    return mod_info ? mod_info->handle : 0; 
+    const int handle = mod_info ? mod_info->handle : 0;
+    free(mod_info);
+    return handle;
 }
 
 

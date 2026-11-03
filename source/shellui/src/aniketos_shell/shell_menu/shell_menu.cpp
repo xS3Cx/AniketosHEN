@@ -213,12 +213,28 @@ void move_menu_with_stick(uint64_t now) {
   }
 }
 
-/* Re-assert every widget value a few times a minute while the menu is on
-   screen, so anything PUI changed behind the write-skipping shadow (a skin
-   re-applied to a label, for instance) cannot stay wrong. */
+/* The rows as last painted, against the rows a page would be built with. */
+bool same_rows(const std::vector<Option> &built,
+               const std::vector<Option> &painted) {
+  if (built.size() != painted.size())
+    return false;
+  for (size_t i = 0; i < built.size(); ++i) {
+    if (built[i].type != painted[i].type ||
+        built[i].string_index != painted[i].string_index ||
+        built[i].title != painted[i].title ||
+        built[i].value != painted[i].value)
+      return false;
+  }
+  return true;
+}
+
+/* Re-assert every widget value now and then while the menu is on screen,
+   so anything PUI changed behind the write-skipping shadow (a skin
+   re-applied to a label, for instance) cannot stay wrong. A full repaint
+   (hundreds of setters): every 20 s, not 5. */
 void reassert_widgets(uint64_t now) {
   static uint64_t s_last_reassert_ms = 0;
-  if (IsVisible() && now - s_last_reassert_ms >= 5000 &&
+  if (IsVisible() && now - s_last_reassert_ms >= 20000 &&
       s_page_transition == PageTransitionState::Idle) {
     s_last_reassert_ms = now;
     forget_written_values();
@@ -496,7 +512,9 @@ void Tick() {
   if (live_page && sampled_at_ms != s_last_live_sample &&
       s_page_transition == PageTransitionState::Idle) {
     s_last_live_sample = sampled_at_ms;
-    s_dirty = true;
+    /* a sample that changes no row is no repaint */
+    if (!same_rows(build_page(s_stack.back().page), s_painted_options))
+      s_dirty = true;
   }
   const bool overlay_dirty = s_overlay_dirty ||
       sampled_at_ms != s_last_overlay_sample;

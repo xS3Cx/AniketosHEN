@@ -60,6 +60,9 @@ bool s_resolved = false;
 std::atomic<bool> s_running{false};
 std::atomic<bool> s_stop{false};
 time_t s_retry_at = 0;
+/* "part of the mix" is a property of this ShellUI: retried slowly, said once */
+std::atomic<int> s_retry_seconds{5};
+bool s_warned_mixed = false;
 
 /* libkernel's description of a loaded module (sceKernelGetModuleInfo). */
 struct ModuleInfo {
@@ -258,7 +261,10 @@ void *thread_main(void *) {
   int result = s_api.capture(kCapturePadSpeaker, &pad_ring, &pad_ring_size);
   if (result == 0 && pad_ring) {
     munmap(pad_ring, pad_ring_size);
-    LOG_WARN("[PADSPK] the pad speaker is part of the mix here: not relaying");
+    s_retry_seconds.store(60, std::memory_order_relaxed);
+    if (!s_warned_mixed)
+      LOG_WARN("[PADSPK] the pad speaker is part of the mix here: not relaying");
+    s_warned_mixed = true;
   } else if ((result = s_api.capture(kCaptureFull, &ring, &ring_size)) != 0 ||
              !ring) {
     LOG_WARN("[PADSPK] no capture ring: 0x%x", result);
@@ -303,7 +309,7 @@ void Tick() {
   const time_t now = std::time(nullptr);
   if (now < s_retry_at)
     return;
-  s_retry_at = now + 5;
+  s_retry_at = now + s_retry_seconds.load(std::memory_order_relaxed);
   s_stop.store(false, std::memory_order_relaxed);
   s_running.store(true, std::memory_order_release);
   pthread_t thread{};

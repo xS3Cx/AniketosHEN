@@ -27,7 +27,8 @@ constexpr int kScriptStepFrames = 12;
 
 constexpr const char *kNames[kSectionCount] = {
     "clock", "shared_ui", "theme", "shell_mgr", "running_app", "menu_input", "menu_tick",
-    "menu_widgets", "menu_overlay", "menu_anim", "home_tiles"};
+    "menu_widgets", "menu_overlay", "menu_anim", "home_tiles", "home",
+    "particles", "input", "osd_bar", "polls", "native"};
 
 uint64_t s_total_ns[kSectionCount];
 uint64_t s_max_ns[kSectionCount];

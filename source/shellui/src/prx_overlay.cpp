@@ -1,7 +1,10 @@
 /* Copyright (C) 2025 OnionHEN / LightningMods — P0 split. */
 
 
+#include "aniketos_shell/core/frame_profile.hpp"
 #include "aniketos_shell/core/shell_features.hpp"
+#include "aniketos_ui/mono_property_cache.hpp"
+#include "aniketos_ui/mono_reflect.hpp"
 #include "hooked_funcs.hpp"
 #include "ipc.hpp"
 #include "external_symbols.hpp"
@@ -71,7 +74,6 @@ float Average_Usage;
 Memory RAM;
 Memory VRAM;
 
-Proc_Stats Stat_Data[3072];
 thread_usages gThread_Data[2];
 
 
@@ -114,7 +116,7 @@ void calc_usage(unsigned int idle_tid[8], thread_usages* cur, thread_usages* pre
     {
         Proc_Stats* Cur;
         Proc_Stats* Prev;
-    }Data[8];
+    }Data[8] = {};
 
     for (int i = 0; i < cur->Thread_Count; i++)
     {
@@ -137,6 +139,11 @@ void calc_usage(unsigned int idle_tid[8], thread_usages* cur, thread_usages* pre
     //Here we loop through each core to calculate the total usage time as its split into user/sustem
     for (int i = 0; i < 8; i++)
     {
+        /* an idle thread not found in a sample: no usage to compute for it */
+        if (!Data[i].Prev || !Data[i].Cur) {
+            usage_out[i] = 0.0f;
+            continue;
+        }
         float Prev_Usage_Time = (Data[i].Prev->system_cpu_usage_time.tv_sec + (Data[i].Prev->system_cpu_usage_time.tv_nsec / 1000000.0f));
         Prev_Usage_Time += (Data[i].Prev->user_cpu_usage_time.tv_sec + (Data[i].Prev->user_cpu_usage_time.tv_nsec / 1000000.0f));
 
@@ -170,29 +177,40 @@ constexpr int kVmSystem = 1;
 constexpr int kPageTableRam = 1;
 constexpr int kPageTableVram = 2;
 
+/* The bar is laid out 20 times a second: classes, accessors and the widget
+   search are resolved once and called direct (MonoPropertyCache, Reflect),
+   not looked up by name on every call as Get_Property/Set_Property/Invoke do.
+   The classes are read on the first call, after the images are loaded. */
+MonoClass *ui2_class(const char *name) {
+  return mono_class_from_name(pui_img, "Sce.PlayStation.PUI.UI2", name);
+}
+
+using AniketosUI::MonoPropertyCache::Set;
+
 MonoObject *find_label(const char *widget_name) {
-  MonoObject *root = Get_Property<MonoObject *>(
-      pui_img, "Sce.PlayStation.PUI.UI2", "Scene", Game, "RootWidget");
-  MonoClass *widget_cls =
-      mono_class_from_name(pui_img, "Sce.PlayStation.PUI.UI2", "Widget");
-  return Invoke<MonoObject *>(pui_img, widget_cls, root, "FindWidgetByName",
-                              mono_string_new(Root_Domain, widget_name));
+  static MonoClass *scene_cls = ui2_class("Scene");
+  static MonoClass *widget_cls = ui2_class("Widget");
+  MonoObject *root = AniketosUI::MonoPropertyCache::Get<MonoObject *>(
+      scene_cls, Game, "RootWidget");
+  MonoObject *(*find)(MonoObject *, MonoString *) =
+      reinterpret_cast<decltype(find)>(
+          AniketosUI::Reflect::Thunk(widget_cls, "FindWidgetByName", 1));
+  if (!root || !find)
+    return nullptr;
+  return find(root, mono_string_new(Root_Domain, widget_name));
 }
 
 void set_label_text(const char *widget_name, const char *text) {
-  MonoClass *label_cls =
-      mono_class_from_name(pui_img, "Sce.PlayStation.PUI.UI2", "Label");
+  static MonoClass *label_cls = ui2_class("Label");
   MonoObject *label = find_label(widget_name);
   if (label)
-    Set_Property(label_cls, label, "Text", mono_string_new(Root_Domain, text));
+    Set(label_cls, label, "Text", mono_string_new(Root_Domain, text));
 }
 
 void set_label_layout(const char *widget_name, float margin_left,
                       float margin_top, float width) {
-  MonoClass *label_cls =
-      mono_class_from_name(pui_img, "Sce.PlayStation.PUI.UI2", "Label");
-  MonoClass *panel_cls =
-      mono_class_from_name(pui_img, "Sce.PlayStation.PUI.UI2", "Panel");
+  static MonoClass *label_cls = ui2_class("Label");
+  static MonoClass *panel_cls = ui2_class("Panel");
   MonoObject *label = find_label(widget_name);
   if (!label)
     return;
@@ -201,21 +219,21 @@ void set_label_layout(const char *widget_name, float margin_left,
   std::snprintf(cell_name, sizeof(cell_name), "%s_cell", widget_name);
   MonoObject *cell = find_label(cell_name);
   if (cell) {
-    Set_Property(panel_cls, cell, "X", margin_left);
-    Set_Property(panel_cls, cell, "Y", g_overlay_layout.bar_y);
-    Set_Property(panel_cls, cell, "Width", width);
-    Set_Property(panel_cls, cell, "Height", g_overlay_layout.bar_h);
+    Set(panel_cls, cell, "X", margin_left);
+    Set(panel_cls, cell, "Y", g_overlay_layout.bar_y);
+    Set(panel_cls, cell, "Width", width);
+    Set(panel_cls, cell, "Height", g_overlay_layout.bar_h);
   }
 
-  Set_Property(label_cls, label, "PositionType", 1);
-  Set_Property(label_cls, label, "MarginLeft", 0.0f);
-  Set_Property(label_cls, label, "MarginTop", margin_top);
-  Set_Property(label_cls, label, "Width", width);
-  Set_Property(label_cls, label, "HorizontalAlignment", 0);
-  Set_Property(label_cls, label, "VerticalAlignment", 0);
-  Set_Property(label_cls, label, "FitWidthToText", false);
-  Set_Property(label_cls, label, "FitHeightToText", true);
-  Set_Property(label_cls, label, "NumberOfLines", 1);
+  Set(label_cls, label, "PositionType", 1);
+  Set(label_cls, label, "MarginLeft", 0.0f);
+  Set(label_cls, label, "MarginTop", margin_top);
+  Set(label_cls, label, "Width", width);
+  Set(label_cls, label, "HorizontalAlignment", 0);
+  Set(label_cls, label, "VerticalAlignment", 0);
+  Set(label_cls, label, "FitWidthToText", false);
+  Set(label_cls, label, "FitHeightToText", true);
+  Set(label_cls, label, "NumberOfLines", 1);
 }
 
 struct PlacedLabel {
@@ -437,18 +455,20 @@ void layout_bar_labels(const char *fps_str, const char *cpu_temp,
 }
 
 void discover_idle_thread_ids(unsigned int idle_tid[kCpuCores]) {
+  /* Once, before sampling starts: the first sample bank serves as the buffer
+     (a third 120 KB thread table is not needed). */
+  Proc_Stats *stats = gThread_Data[0].Threads;
   int count = kMaxProcThreads;
-  if (sceKernelGetCpuUsage(reinterpret_cast<Proc_Stats*>(&Stat_Data), &count) ||
-      count <= 0)
+  if (sceKernelGetCpuUsage(stats, &count) || count <= 0)
     return;
 
   char thread_name[0x40];
   int core = 0;
   for (int i = 0; i < count; i++) {
-    if (!sceKernelGetThreadName(Stat_Data[i].td_tid, thread_name) &&
+    if (!sceKernelGetThreadName(stats[i].td_tid, thread_name) &&
         sscanf(thread_name, "SceIdleCpu%d", &core) == 1 && core >= 0 &&
         core < kCpuCores) {
-      idle_tid[core] = Stat_Data[i].td_tid;
+      idle_tid[core] = stats[i].td_tid;
     }
   }
 }
@@ -638,8 +658,12 @@ void OnRender_Hook(MonoObject* instance) {
     return;
   }
 
+  namespace Profile = AniketosShell::Profile;
   /* UI thread: one NPXS40002 reload covers display TIDs and top-nav patch. */
-  shellui_poll_home_reload();
+  {
+    Profile::Scope scope(Profile::kPolls);
+    shellui_poll_home_reload();
+  }
   ShellFeatures::BeforeNativeFrame();
   ShellFeatures::AfterNativeFrame after_native_frame;
 
@@ -670,6 +694,8 @@ void OnRender_Hook(MonoObject* instance) {
     }
   }
 
+  {
+  Profile::Scope osd_scope(Profile::kOsdBar);
   if (frames_until_update <= 0) {
     update_overlay_metrics(idle_thread_id, current_bank, cpu_temp,
                            sizeof(cpu_temp), cpu_usage, sizeof(cpu_usage),
@@ -705,14 +731,19 @@ void OnRender_Hook(MonoObject* instance) {
   } else {
     frames_until_fps--;
   }
+  }
 
-  OnRender_orig(instance);
+  {
+    Profile::Scope scope(Profile::kNativeFrame);
+    OnRender_orig(instance);
+  }
 
   /*
    * Legacy's own UpdateProgressPanel lifecycle runs inside OnRender_orig and
    * can restore its default Progress=1.0. Apply our value after that update so
    * the final value committed for this frame is the daemon state.
    */
+  Profile::Scope poll_scope(Profile::kPolls);
   shellui_poll_cheat_progress();
   shellui_poll_plugin_progress();
 }

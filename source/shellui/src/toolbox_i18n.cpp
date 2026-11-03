@@ -11,6 +11,7 @@ extern "C" int sceSystemServiceParamGetInt(int param_id, int *value);
 #include "external_symbols.hpp"
 #endif
 
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 
@@ -292,7 +293,8 @@ const char *tr(const char *key) {
   const Entry *e = find_entry(key);
   if (!e)
     return key ? key : "";
-  return e->text[locale_index_for_lang(active_lang())];
+  const int idx = locale_index_for_lang(active_lang());
+  return kI18nText[idx] + e->text[idx];
 }
 
 std::string formatv(const char *key, va_list ap) {

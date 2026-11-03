@@ -162,8 +162,9 @@ static int test_overlay_metric_page(void) {
       resolve_resource(make_in(cfg_res("overlay_ram.xml"))).page == Page::None);
   TEST_ASSERT_TRUE(
       resolve_resource(make_in(cfg_res("overlay_.xml"))).page == Page::None);
-  TEST_ASSERT_STREQ("overlay_cpu.xml",
-                    overlay_metric_xml("cpu").c_str());
+  /* a temporary's c_str() dies at the ';' before the macro compares it */
+  const std::string cpu_xml = overlay_metric_xml("cpu");
+  TEST_ASSERT_STREQ("overlay_cpu.xml", cpu_xml.c_str());
   return 0;
 }
 

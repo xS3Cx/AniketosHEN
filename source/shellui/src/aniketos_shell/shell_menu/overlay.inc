@@ -6,13 +6,20 @@ void sync_clock_layer() {
   if (!s_widgets.master)
     return;
   static MonoObject *refused_root = nullptr;
+  const bool lost =
+      s_clock_layer && AniketosUI::HomeScene::IsDisposed(s_clock_layer);
+  /* A root that is gone is noticed on the frame; a new one is looked for
+     four times a second (OwnRoot walks the scene tree no more often). */
+  static uint64_t next_root_ms = 0;
+  const uint64_t now = MonotonicMs();
+  if (!lost && now < next_root_ms)
+    return;
+  next_root_ms = now + 250;
   MonoObject *root = s_pui_home.label && s_pui_home.panel
                          ? AniketosUI::HomeScene::Root()
                          : nullptr;
   if (root == refused_root)
     root = nullptr;
-  const bool lost =
-      s_clock_layer && AniketosUI::HomeScene::IsDisposed(s_clock_layer);
   if (root == s_clock_layer && !lost)
     return;
   if (s_clock_layer) {

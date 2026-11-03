@@ -2,7 +2,9 @@
 
 #include "aniketos_shell/core/host_scene.hpp"
 #include "aniketos_shell/home/home_tabs.hpp"
+#include "aniketos_theme/mono_text.hpp"
 #include "aniketos_theme/tiles/space_switcher_labels.hpp"
+#include "aniketos_ui/pui_primitives.hpp"
 #include "clock_internal.hpp"
 
 #include <onion/detour.h>
@@ -81,7 +83,23 @@ void bind_native_clock(MonoObject *label, const std::string &stock) {
 }
 
 void native_label_set_text_hook(MonoObject *label, MonoString *text) {
-  const std::string stock = label ? Mono_to_String(text) : std::string();
+  /* Our own UI3 labels (the OSD, the date, the legend) are never a clock or
+     a tab caption; nor is any label that shows no time and is no clock of
+     ours, which goes to the captions without a copy of its text. */
+  if (!label || AniketosUI::Pui::IsOwn(label)) {
+    write_label_text(label, text);
+    return;
+  }
+  if (!AniketosTheme::MonoText::TimeShape(text) && clock_target() != label &&
+      find_clock_alias(label) < 0) {
+    MonoString *display_text =
+        AniketosTheme::SpaceSwitcherLabels::Decorate(label, text);
+    if (display_text != text)
+      prepare_space_tab_label(label, Mono_to_String(text));
+    write_label_text(label, display_text ? display_text : text);
+    return;
+  }
+  const std::string stock = Mono_to_String(text);
   const bool clock_like = looks_like_stock_clock(label, stock.c_str());
   if (!clock_like)
     let_go_of_label(label, stock);
@@ -267,6 +285,11 @@ using SetSpannable = void (*)(MonoObject *, MonoObject *);
 SetSpannable s_set_spannable_original = nullptr;
 
 void set_spannable_hook(MonoObject *label, MonoObject *spannable) {
+  if (label && AniketosUI::Pui::IsOwn(label)) {
+    if (s_set_spannable_original)
+      s_set_spannable_original(label, spannable);
+    return;
+  }
   std::string stock;
   if (label && spannable && mono_object_to_string) {
     MonoObject *exception = nullptr;

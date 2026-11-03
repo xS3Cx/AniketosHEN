@@ -1,5 +1,7 @@
 #include "aniketos_shell/core/host_scene.hpp"
 
+#include "aniketos_ui/home_scene.hpp"
+#include "aniketos_ui/mono_property_cache.hpp"
 #include "aniketos_ui/mono_reflect.hpp"
 #include "hooked_funcs.hpp"
 
@@ -118,8 +120,10 @@ MonoObject *HostScene::FindScene(const char *path, MonoObject **exception) {
 }
 
 MonoObject *HostScene::GetRoot(MonoObject *scene) {
+  /* twice a second at Home: the accessor is kept, not looked up each time */
   return scene && scene_class_
-             ? Get_Property<MonoObject *>(scene_class_, scene, "RootWidget")
+             ? AniketosUI::MonoPropertyCache::Get<MonoObject *>(
+                   scene_class_, scene, "RootWidget")
              : nullptr;
 }
 
@@ -176,7 +180,9 @@ bool HostScene::Resolve(HostSnapshot &out) {
   return false;
 }
 
-FocusLayer CurrentFocusLayer() {
+namespace {
+
+FocusLayer read_focus_layer() {
   ensure_focus_resolved();
   if (!s_focus_vtable)
     return FocusLayer::Unknown;
@@ -189,6 +195,37 @@ FocusLayer CurrentFocusLayer() {
   if (value == s_focus_game)
     return FocusLayer::Game;
   return FocusLayer::Other;
+}
+
+bool s_frame_sampled = false;
+FocusLayer s_frame_focus = FocusLayer::Unknown;
+int s_frame_home = -1; /* HomeInSight for the frame: -1 not yet asked */
+
+} // namespace
+
+void BeginFrame() {
+  s_frame_focus = read_focus_layer();
+  s_frame_sampled = true;
+  s_frame_home = -1;
+}
+
+FocusLayer CurrentFocusLayer() {
+  return s_frame_sampled ? s_frame_focus : read_focus_layer();
+}
+
+bool HomeInSight() {
+  if (s_frame_home < 0) {
+    const FocusLayer focus = CurrentFocusLayer();
+    float opacity = 1.0f;
+    s_frame_home =
+        focus == FocusLayer::TopMenu ||
+        (focus == FocusLayer::Unknown &&
+         AniketosUI::HomeScene::Root() &&
+         (!AniketosUI::Reflect::FloatProperty(AniketosUI::HomeScene::Root(),
+                                              "get_FinalOpacity", &opacity) ||
+          opacity > 0.05f));
+  }
+  return s_frame_home > 0;
 }
 
 bool GameLayerFocused() {

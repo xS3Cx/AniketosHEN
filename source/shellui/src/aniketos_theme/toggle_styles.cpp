@@ -1,5 +1,6 @@
 #include "aniketos_theme/toggle_styles.hpp"
 #include "aniketos_theme/customization.hpp"
+#include "aniketos_theme/mono_text.hpp"
 #include "aniketos_ui/mono_reflect.hpp"
 #include "aniketos_ui/monotonic_clock.hpp"
 #include "aniketos_ui/ui_color.hpp"
@@ -560,10 +561,13 @@ bool OnPanelBackground(MonoObject *panel, UIColor &color) {
     return false;
   ++s_own_calls;
   bool styled = false;
-  const std::string name =
-      Mono_to_String(reinterpret_cast<MonoString *>(call(panel, "get_Name")));
-  const bool frame = name == "CheckBoxFrame";
-  if (frame || name == "CheckBoxFill") {
+  /* every Panel colour set in ShellUI passes here: the name is read direct
+     and compared in place */
+  MonoString *name = nullptr;
+  if (!Reflect::Read(panel, "get_Name", &name))
+    name = reinterpret_cast<MonoString *>(call(panel, "get_Name"));
+  const bool frame = MonoText::EqualsAscii(name, "CheckBoxFrame");
+  if (frame || MonoText::EqualsAscii(name, "CheckBoxFill")) {
     MonoObject *owner = switch_of(panel);
     if (Tracked *entry = owner ? tracked_switch(owner) : nullptr) {
       /* the system's two panels turn invisible; the style's own, on the
@@ -604,10 +608,15 @@ void Tick() {
     if (entry.style != wanted_style() || entry.pieces.empty())
       continue;
     MonoObject *frame = Reflect::Target(entry.frame);
-    MonoObject *owner = frame ? call(frame, "get_Parent") : nullptr;
+    /* a frame, every frame: both are plain reads, called direct */
+    MonoObject *owner = nullptr;
+    if (frame && !Reflect::Read(frame, "get_Parent", &owner))
+      owner = call(frame, "get_Parent");
     if (!owner)
       continue;
-    const bool on = boolean(owner, "get_Checked", entry.on);
+    bool on = entry.on;
+    if (!Reflect::Read(owner, "get_Checked", &on))
+      on = boolean(owner, "get_Checked", entry.on);
     if (on != entry.on) {
       entry.on = on;
       entry.changed_ms = now;

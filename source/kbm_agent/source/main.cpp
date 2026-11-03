@@ -70,7 +70,7 @@ int main() {
      profiles and modules loaded later, and steps aside for a newer agent */
   while (!hooks::Superseded()) {
     hooks::Service();
-    usleep(50000);
+    usleep(200000); /* a saved profile reaches the game within this */
   }
   Log("replaced by a newer agent; stopping");
   agent::InputStop(); /* frees the mouse and keyboard for it */

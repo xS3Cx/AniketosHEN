@@ -25,10 +25,10 @@ R"JS((function () {
   function log(message) {
     try { console.log('ANIKETOS web ' + message); } catch (e) {}
   }
+  /* listed once in the alive line, not a log line each */
   function once(name) {
     if (B.seen[name]) return false;
     B.seen[name] = true;
-    log('patched ' + name);
     return true;
   }
   function own(o, name) {

@@ -22,6 +22,7 @@
 namespace HomeVideo {
 
 int frame_count = 0;
+bool slow_tick = false;
 
 namespace {
 
@@ -382,8 +383,8 @@ void watch(MonoObject *root) {
     rebuild_soon();
     return;
   }
-  if (object_property(view, "get_Parent") != root ||
-      object_property(root, "get_FirstChild") != view)
+  if (slow_tick && (object_property(view, "get_Parent") != root ||
+                    object_property(root, "get_FirstChild") != view))
     put_first(root, view);
 
   if (s_sound_applied != g_settings.home_video_sound ||
@@ -511,14 +512,24 @@ void scan() {
 
 /* The file to play now, or nothing when the feature is off or has nothing
    to show. The chosen file wins; without one (or when it has gone, a USB
-   drive pulled out for instance) the first one in the list is used. */
+   drive pulled out for instance) the first one in the list is used. The
+   disk is asked on a slow tick or when a setting changed; between, the last
+   answer stands. */
 std::string wanted() {
-  if (!(AniketosTheme::CustomizationOn() && g_settings.home_video_enabled) ||
-      if_exists(kKillSwitch))
-    return {};
-  if (!g_settings.home_video_path.empty() &&
-      if_exists(g_settings.home_video_path.c_str()))
-    return g_settings.home_video_path;
+  static std::string answer;
+  static bool on = false;
+  static std::string chosen;
+  const bool on_now =
+      AniketosTheme::CustomizationOn() && g_settings.home_video_enabled;
+  if (!slow_tick && on == on_now && chosen == g_settings.home_video_path)
+    return answer;
+  on = on_now;
+  chosen = g_settings.home_video_path;
+  answer.clear();
+  if (!on || if_exists(kKillSwitch))
+    return answer;
+  if (!chosen.empty() && if_exists(chosen.c_str()))
+    return answer = chosen;
   /* look for files now and then while the stage shows, so dropping one in is
      enough */
   if (!s_videos_scanned ||
@@ -526,8 +537,8 @@ std::string wanted() {
     scan();
   for (const std::string &path : s_videos)
     if (if_exists(path.c_str()))
-      return path;
-  return {};
+      return answer = path;
+  return answer;
 }
 
 /* Whether the video is on screen or on its way there. Not once it failed for
@@ -665,6 +676,7 @@ void Tick() {
   /* twice a second is plenty for everything below */
   if (frame_count % 30 != 0)
     return;
+  slow_tick = frame_count % 300 == 0;
   tick_playback();
   MonoObject *base =
       s_state == State::Playing ? Reflect::Target(s_view) : nullptr;

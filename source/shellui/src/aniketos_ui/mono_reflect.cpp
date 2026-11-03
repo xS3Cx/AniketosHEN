@@ -82,11 +82,27 @@ bool Call(MonoObject *object, const char *name, int parameters,
 }
 
 bool FloatProperty(MonoObject *object, const char *getter, float *out) {
+  /* Direct first: a float getter cannot throw. Invoke if it has no entry. */
+  if (object && Read(object, getter, out))
+    return true;
   MonoObject *value = nullptr;
   if (!Call(object, getter, 0, nullptr, &value) || !value)
     return false;
   *out = *static_cast<float *>(mono_object_unbox(value));
   return true;
+}
+
+void *Compiled(MonoMethod *method) {
+  return method ? MonoPropertyCache::CompiledMethod(method) : nullptr;
+}
+
+void *Thunk(MonoClass *klass, const char *name, int parameters) {
+  return Compiled(MethodOf(klass, name, parameters));
+}
+
+void *Thunk(MonoObject *object, const char *name, int parameters) {
+  return object ? Thunk(mono_object_get_class(object), name, parameters)
+                : nullptr;
 }
 
 float FloatProperty(MonoObject *object, const char *getter) {

@@ -6,7 +6,7 @@
 #include <string>
 
 void ReloadApp(MonoString *str) {
-  std::string tid = mono_string_to_utf8(str);
+  std::string tid = Mono_to_String(str);
   LOG_DEBUG("Reloading %s scenes", tid.c_str());
   notify("notify.app.reload_scenes", tid.c_str());
   Orig_ReloadApp(str);

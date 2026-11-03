@@ -53,4 +53,43 @@ bool FloatProperty(MonoObject *object, const char *getter, float *out);
 /* The same, for a caller with no default: 0 on failure. */
 float FloatProperty(MonoObject *object, const char *getter);
 
+/* Direct calls, for per-frame code.
+ *
+ * mono_runtime_invoke boxes every value it returns, walks the arguments and
+ * sets up an exception frame: the entry of the compiled method called like a
+ * C function (the instance first, then the arguments, by value) costs a
+ * fraction of that and allocates nothing. The address is kept per method, so
+ * a call after the first is a cache probe and the call itself.
+ *
+ * No managed exception can be caught through it, so only methods that cannot
+ * throw belong here: property getters, and setters of plain values (X, Y,
+ * Opacity, Visible, ...). Anything that may throw keeps Call. The method must
+ * be looked up on the object's own class (MethodOf), never on a base class
+ * cast, so an override is what runs. */
+void *Compiled(MonoMethod *method);
+void *Thunk(MonoClass *klass, const char *name, int parameters);
+void *Thunk(MonoObject *object, const char *name, int parameters);
+
+/* A no-argument getter; false (and *out untouched) when it is not there. */
+template <typename Result>
+bool Read(MonoObject *object, const char *getter, Result *out) {
+  Result (*method)(MonoObject *) =
+      reinterpret_cast<decltype(method)>(Thunk(object, getter, 0));
+  if (!method)
+    return false;
+  *out = method(object);
+  return true;
+}
+
+/* A one-argument setter of a value or an object; false when not there. */
+template <typename Param>
+bool Write(MonoObject *object, const char *setter, Param value) {
+  void (*method)(MonoObject *, Param) =
+      reinterpret_cast<decltype(method)>(Thunk(object, setter, 1));
+  if (!method)
+    return false;
+  method(object, value);
+  return true;
+}
+
 } // namespace AniketosUI::Reflect

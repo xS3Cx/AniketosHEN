@@ -286,6 +286,9 @@ uint8_t s_mouse_buttons;
 uint64_t s_mouse_retry_us, s_mouse_seen_us;
 int s_ime_user = -1, s_ime_error;
 bool s_ime_lost;
+/* IME connection events, or a first key from one that sent none; while no
+   device is known the reader idles (see Reader's sleep) */
+bool s_keyboard_connected;
 bool s_closed_game_keyboard; /* only ever once: never fight the game */
 int s_ime_busy_count;
 uint64_t s_ime_retry_us;
@@ -328,6 +331,7 @@ void OnImeEvent(void *, const ImeEvent *e) {
   case kImeKeyDown:
   case kImeKeyUp:
   case kImeKeyRepeat: {
+    s_keyboard_connected = true;
     /* modifiers ride on every key event: pressed alone they may bring none */
     const uint32_t mods = (e->param.keycode.status >> 8) & 0xff;
     for (int bit = 0; bit < 8; ++bit)
@@ -342,6 +346,7 @@ void OnImeEvent(void *, const ImeEvent *e) {
   case kImeDisconnection:
   case kImeAbort:
     memset(s_keys, 0, sizeof(s_keys));
+    s_keyboard_connected = e->id == kImeConnection;
     Log("keyboard %s", e->id == kImeConnection      ? "connected"
                        : e->id == kImeDisconnection ? "disconnected"
                                                     : "taken away (abort)");
@@ -361,6 +366,7 @@ void CloseMouse() {
   }
   s_mouse = -1;
   s_mouse_buttons = 0;
+  s_mouse_connected = false;
   SetStatus(kStatusMouseOpen, false);
 }
 
@@ -440,6 +446,7 @@ void ReadMouse(uint64_t now) {
 void Disown() {
   s_owned.store(false, std::memory_order_release);
   s_ime_user = -1;
+  s_keyboard_connected = false;
   SetStatus(kStatusKeyboardOpen, false);
 }
 
@@ -571,20 +578,22 @@ void *Reader(void *) {
     s_alive_us.store(NowUs(), std::memory_order_release);
     if (s_control)
       __atomic_fetch_add(&s_control->heartbeat, 1u, __ATOMIC_RELAXED);
-    if (now - stats_at >= 10000000) {
-      Log("10 s: mouse samples %d, key presses %d (user 0x%x, mouse %d, "
-          "keyboard %s)",
-          s_samples, s_key_events, static_cast<unsigned>(s_user), s_mouse,
-          s_ime_user >= 0 ? "open" : "closed");
+    if (now - stats_at >= 60000000) {
+      if (s_samples || s_key_events) /* quiet while nothing is used */
+        Log("60 s: mouse samples %d, key presses %d (user 0x%x, mouse %d, "
+            "keyboard %s)",
+            s_samples, s_key_events, static_cast<unsigned>(s_user), s_mouse,
+            s_ime_user >= 0 ? "open" : "closed");
       s_samples = s_key_events = 0;
       stats_at = now;
     }
-    /* profile off: nothing reads the devices but the game's own IME, which
-       is pumped at about its frame rate */
-    const bool reading = s_mouse >= 0 || s_ime_user >= 0;
-    usleep(reading && hooks::ProfileEnabled() ? 4000
-           : s_ime_user >= 0                  ? 16000
-                                              : 50000);
+    /* 4 ms only while a device is plugged in and the profile maps it; the
+       game's own IME is pumped at about its frame rate; otherwise idle (a
+       mouse plugged in or a first key shows up within the 50 ms) */
+    const bool device = s_mouse_connected || s_keyboard_connected;
+    usleep(device && hooks::ProfileEnabled()       ? 4000
+           : s_keyboard_connected && s_ime_user >= 0 ? 16000
+                                                     : 50000);
   }
   UnhookGameIme();
   if (s_mouse >= 0)

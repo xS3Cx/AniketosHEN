@@ -23,6 +23,10 @@ inline constexpr const char *kKillSwitch =
 
 /* Frames since the start; Tick counts them. */
 extern int frame_count;
+/* This tick (one in 300 frames) re-reads the disk and the widget tree too:
+   files come and go, and a widget could be moved under us. The ticks between
+   go by what was last seen. */
+extern bool slow_tick;
 
 /* home_video_server.cpp */
 bool start_server();

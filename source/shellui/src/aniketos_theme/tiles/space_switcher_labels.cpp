@@ -6,6 +6,7 @@
 
 #include "aniketos_shell/home/home_bookmark.hpp"
 #include "aniketos_shell/home/home_tabs.hpp"
+#include "aniketos_theme/mono_text.hpp"
 #include "external_symbols.hpp"
 #include "hooked_funcs.hpp"
 
@@ -158,9 +159,14 @@ std::string space_switcher_ancestor(MonoObject *object) {
     if (find_live(s_root_handles, object))
       return kSharedFocusLayerId;
     if (derives_from(object, s_pui_widget_class) && s_get_test_id) {
-      const std::string test_id = Mono_to_String(s_get_test_id(object));
-      if (is_home_space_switcher(test_id))
-        return test_id;
+      /* every label set in ShellUI walks up through here: the id is only
+         copied when it can be a switcher's (all three carry "switcher") */
+      MonoString *managed_id = s_get_test_id(object);
+      if (MonoText::ContainsAscii(managed_id, "switcher")) {
+        const std::string test_id = Mono_to_String(managed_id);
+        if (is_home_space_switcher(test_id))
+          return test_id;
+      }
     }
     MonoObject *parent = parent_of(object);
     if (!parent || parent == object)

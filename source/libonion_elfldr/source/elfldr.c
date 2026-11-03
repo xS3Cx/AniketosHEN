@@ -41,6 +41,24 @@ along with this program; see the file COPYING. If not, see
 #include <onion/pt.h>
 
 
+/* Payload images and their relocated mirrors are megabytes that live for one
+   spawn; libc's heap never gives such blocks back (the loader sat at 22 MB
+   RSS with a 130 KB image), a mapping does. */
+void*
+elfldr_buf_alloc(size_t size) {
+  void* p = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS,
+                 -1, 0);
+  return p == MAP_FAILED ? NULL : p;
+}
+
+void
+elfldr_buf_free(void* p, size_t size) {
+  if(p) {
+    munmap(p, size);
+  }
+}
+
+
 #ifndef IPV6_2292PKTOPTIONS
 #define IPV6_2292PKTOPTIONS 25
 #endif
@@ -245,8 +263,8 @@ elfldr_load(pid_t pid, uint8_t *elf) {
     return 0;
   }
 
-  if(!(ctx.base_mirror=malloc(ctx.base_size))) {
-    LOG_PERROR("malloc");
+  if(!(ctx.base_mirror=elfldr_buf_alloc(ctx.base_size))) {
+    LOG_PERROR("mmap");
     return 0;
   }
 
@@ -254,7 +272,7 @@ elfldr_load(pid_t pid, uint8_t *elf) {
   if((ctx.base_addr=pt_mmap(pid, ctx.base_addr, ctx.base_size, prot,
 			    flags, -1, 0)) == -1) {
     LOG_PT_PERROR(pid, "pt_mmap");
-    free(ctx.base_mirror);
+    elfldr_buf_free(ctx.base_mirror, ctx.base_size);
     return 0;
   }
 
@@ -316,7 +334,7 @@ elfldr_load(pid_t pid, uint8_t *elf) {
     error = 1;
   }
 
-  free(ctx.base_mirror);
+  elfldr_buf_free(ctx.base_mirror, ctx.base_size);
 
   if(error) {
     pt_munmap(pid, ctx.base_addr, ctx.base_size);
@@ -778,14 +796,14 @@ elfldr_read(int fd, uint8_t** elf, size_t* elf_size) {
   }
   size = table_size;
 
-  if(!(buf=(uint8_t*)malloc(size))) {
+  if(!(buf=(uint8_t*)elfldr_buf_alloc(size))) {
     return -1;
   }
 
   memcpy(buf, &ehdr, sizeof(ehdr));
   rem = size - sizeof(ehdr);
   if(recv(fd, buf + sizeof(ehdr), rem, MSG_WAITALL) != (ssize_t)rem) {
-    free(buf);
+    elfldr_buf_free(buf, size);
     return -1;
   }
 
@@ -797,7 +815,7 @@ elfldr_read(int fd, uint8_t** elf, size_t* elf_size) {
     }
     size_t end = 0;
     if(range_end_overflow(shdr[i].sh_offset, shdr[i].sh_size, &end)) {
-      free(buf);
+      elfldr_buf_free(buf, size);
       errno = ENOEXEC;
       return -1;
     }
@@ -813,19 +831,21 @@ elfldr_read(int fd, uint8_t** elf, size_t* elf_size) {
   }
 
   bak = buf;
-  if(!(buf=(uint8_t*)realloc(buf, shend))) {
-    free(bak);
+  if(!(buf=(uint8_t*)elfldr_buf_alloc(shend))) {
+    elfldr_buf_free(bak, size);
     return -1;
   }
+  memcpy(buf, bak, size);
+  elfldr_buf_free(bak, size);
 
   rem = shend - size;
   if(recv(fd, buf + size, rem, MSG_WAITALL) != (ssize_t)rem) {
-    free(buf);
+    elfldr_buf_free(buf, shend);
     return -1;
   }
 
   if(elfldr_sanity_check(buf, shend)) {
-    free(buf);
+    elfldr_buf_free(buf, shend);
     errno = ENOEXEC;
     return -1;
   }

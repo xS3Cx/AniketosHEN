@@ -41,6 +41,10 @@ void update_highlight_motion(uint64_t now) {
 void update_animations() {
   if (!s_widgets.master)
     return;
+  /* closed and at rest, its opacity already 0: nothing moves */
+  if (s_animation == AnimationState::Hidden && !page_transition_active() &&
+      !s_highlight_started_ms && s_menu_reveal_applied == 0.0f)
+    return;
   const uint64_t now = MonotonicMs();
   const bool apparition = active_menu_theme() == 5;
   const bool anomaly = active_menu_theme() == 2;

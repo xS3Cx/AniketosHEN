@@ -119,12 +119,16 @@ void place_above(MonoObject *root, MonoObject *below, MonoObject *widget) {
 void raise_effects() { s_raise_effects = true; }
 
 /* Twice a second: a layer for each effect turned up, in order right above
-   `base`, the video or the picture; none without one. */
+   `base`, the video or the picture; none without one. The layers are put in
+   place when one is new, the base is another, they are to be raised, or on
+   a slow tick; between, they stay where they were put. */
 void tick_effects(MonoObject *base) {
+  static MonoObject *placed_above = nullptr;
   MonoObject *root = base ? object_property(base, "get_Parent") : nullptr;
   const bool shown = base && root && !HomeScene::IsDisposed(root) &&
-                     !HomeScene::IsDisposed(base) &&
-                     object_property(base, "get_Parent") == root;
+                     !HomeScene::IsDisposed(base);
+  bool place = slow_tick || s_raise_effects || base != placed_above;
+  placed_above = base;
   MonoObject *below = base;
   for (int effect = 0; effect < kEffectCount; ++effect) {
     EffectLayer &layer = s_effect_layers[effect];
@@ -154,6 +158,7 @@ void tick_effects(MonoObject *base) {
         layer.failed = strength;
         continue;
       }
+      place = true;
     }
     if (layer.applied != strength) {
       apply_effect(widget, effect, strength);
@@ -162,7 +167,8 @@ void tick_effects(MonoObject *base) {
     }
     if (s_raise_effects && object_property(widget, "get_Parent"))
       call(widget, "RemoveFromParent", 0);
-    place_above(root, below, widget);
+    if (place)
+      place_above(root, below, widget);
     below = widget;
   }
   if (s_raise_effects)

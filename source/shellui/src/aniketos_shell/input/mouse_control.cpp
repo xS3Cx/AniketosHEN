@@ -57,6 +57,7 @@ bool s_api_ready = false;
 int s_handle = -1;
 int s_handle_user = -1;
 int s_reopen_frames = 0;
+int s_absent_frames = 0; /* the last read said no mouse: read every 30th frame */
 int s_last_error = 0;
 bool s_game_had_focus = false; /* at the last read */
 
@@ -483,6 +484,8 @@ void Tick() {
   }
   if (s_handle < 0)
     return;
+  if (s_absent_frames > 0 && --s_absent_frames > 0)
+    return;
 
   MouseData samples[64];
   const int count = s_api.read(s_handle, samples, 64);
@@ -515,6 +518,7 @@ void Tick() {
   const uint64_t now = AniketosUI::MonotonicMs();
   const bool coming_back = s_game_had_focus;
   s_game_had_focus = game;
+  s_absent_frames = count > 0 && !connected ? 30 : 0;
   if (intercepted || (count > 0 && !connected) || game || coming_back) {
     if (s_active)
       stand_down();
