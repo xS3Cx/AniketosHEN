@@ -1,6 +1,5 @@
 #include "icon_color_internal.hpp"
 
-#include "aniketos_shell/core/host_scene.hpp"
 #include "aniketos_theme/color.hpp"
 #include "aniketos_theme/customization.hpp"
 #include "aniketos_theme/icon_color.hpp"
@@ -214,14 +213,12 @@ void Tick() {
   s_tint_shown = true;
   if (g_settings.system_icon_color_animation != 1 || s_tracked.empty())
     return;
-  /* The rainbow steps at the rate of the other theme animations, waits while
-     a game has the screen and skips a step that changes no byte. */
+  /* The rainbow steps at the rate of the other theme animations and skips a
+     step that changes no byte. */
   const uint64_t now = AniketosUI::MonotonicMs();
   if (now - s_last_frame_ms < kFrameIntervalMs)
     return;
   s_last_frame_ms = now;
-  if (AniketosShell::CurrentFocusLayer() == AniketosShell::FocusLayer::Game)
-    return;
   const UIColor color = current_color();
   const uint32_t bytes = RGBBytes({color.r, color.g, color.b});
   if (s_has_last_rainbow && bytes == s_last_rainbow)

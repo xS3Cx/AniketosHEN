@@ -1,6 +1,5 @@
 /* Copyright (C) 2026 AniketosHEN — shared native PS5 UI background theming. */
 
-#include "aniketos_shell/core/host_scene.hpp"
 #include "aniketos_shell/system_ui/devkit_overlay.hpp"
 #include "aniketos_ui/monotonic_clock.hpp"
 #include "aniketos_ui/pui_primitives.hpp"
@@ -465,11 +464,9 @@ void Tick() {
   if (!animated && !config_changed)
     return;
   s_last_frame_ms = now;
-  /* A moving colour waits while a game has the screen, and a step that
-     changes no byte of it is not drawn. */
-  if (!config_changed &&
-      AniketosShell::CurrentFocusLayer() == AniketosShell::FocusLayer::Game)
-    return;
+  /* A step that changes no byte of a moving colour is not drawn. The focus
+     layer stays on a game under our menus and cards, so it is no reason to
+     wait. */
   const RGB theme = animated_theme_color(now);
   const uint32_t theme_bytes = RGBBytes(theme);
   if (!config_changed && theme_bytes == s_last_theme_bytes)
