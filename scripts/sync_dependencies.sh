@@ -18,13 +18,18 @@ STUB_MISSING=0
 INIT_SUBMODULES=0
 FORCE_DOWNLOAD=0
 
-# kstuff-lite v1.11 supports firmware 1.00-13.60 (PS4 fpkg up to 11.60, per
-# its release notes). Keep kKstuffMaxFirmware in
-# source/bootstrapper/source/bootstrap_safety.cpp in step with this version.
-KSTUFF_VERSION="v1.11"
-KSTUFF_URL="https://github.com/EchoStretch/kstuff-lite/releases/download/${KSTUFF_VERSION}/kstuff.elf"
+# kstuff-lite at commit aaf921e: v1.11, which supports firmware 1.00-13.60
+# (PS4 fpkg up to 11.60, per its release notes), plus the 13.60 fix that keeps
+# PS4-format homebrew from showing "isn't playable on PS5". Keep
+# ONION_KSTUFF_MAX_FIRMWARE in source/bootstrapper/source/launch_pipeline.c in
+# step with this version.
+# shortcut: no release has this commit, so kstuff comes from the submodule, go
+# back to a release download with its SHA-256 once kstuff-lite publishes one.
+KSTUFF_VERSION="aaf921e"
+KSTUFF_URL=""
 # Pinned: an upstream file that changed after review is refused, not embedded.
-KSTUFF_SHA256="ab9a6cb4d3b1daf139d4d646e402b1cf569071acd64599c936d7a3a6164dc779"
+# This is the x86-64 build of the submodule made with ci-ps5-kstuff-ldr.sh.
+KSTUFF_SHA256="fcf9b733bf4d5c3ce93992bf686e71d802d2670dc8148499586fc3a6b1c50ab3"
 KSTUFF_SOURCE_DIR="${TP}/kstuff-lite"
 # Real release blob is hundreds of KB+; stubs are tiny markers.
 KSTUFF_MIN_BYTES=65536
@@ -164,7 +169,7 @@ sync_kstuff() {
     return 0
   fi
 
-  if [[ "${FROM_SOURCE}" -eq 0 ]]; then
+  if [[ "${FROM_SOURCE}" -eq 0 && -n "${KSTUFF_URL}" ]]; then
     log "kstuff: download kstuff-lite ${KSTUFF_VERSION}"
     if download_verified "${KSTUFF_URL}" "${dest}" "${KSTUFF_SHA256}"; then
       ok "kstuff.elf (kstuff-lite ${KSTUFF_VERSION}, sha256 verified)"
@@ -185,6 +190,8 @@ sync_kstuff() {
     found="$(find "${KSTUFF_SOURCE_DIR}" -name 'kstuff.elf' 2>/dev/null | head -1 || true)"
     if [[ -n "${found}" ]]; then
       place "${found}" "${dest}"
+      [[ "$(file_sha256 "${dest}")" == "${KSTUFF_SHA256}" ]] ||
+        warn "kstuff.elf built here differs from the pinned build"
       return 0
     fi
   fi

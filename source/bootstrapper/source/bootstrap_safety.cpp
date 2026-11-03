@@ -14,7 +14,7 @@
 
 namespace {
 
-/* Newest firmware the built-in kstuff knows (kstuff-lite v1.11: 1.00-13.60;
+/* Newest firmware the built-in kstuff knows (kstuff-lite aaf921e: 1.00-13.60;
  * see KSTUFF_VERSION in scripts/sync_dependencies.sh). Firmware words keep
  * major.minor in the top 16 bits, e.g. 0x13600000 for 13.60. On a newer
  * firmware the built-in kstuff is not loaded: it would patch the kernel at
