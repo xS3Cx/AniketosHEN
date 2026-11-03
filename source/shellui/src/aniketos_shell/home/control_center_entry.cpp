@@ -34,6 +34,9 @@ std::atomic<bool> s_pressed{false};
 
 uint32_t s_icon_handle = 0; /* our ImageAsset, kept alive */
 std::string s_icon_for;     /* the picture it was made of */
+/* what the button showed right after our last set of each image */
+uint32_t s_icon_shown_handle = 0;
+uint32_t s_inverted_icon_shown_handle = 0;
 
 uint32_t s_button_handle = 0;
 uint32_t s_label_holder_handle = 0;
@@ -186,6 +189,17 @@ void set_object(MonoObject *object, const char *setter, MonoObject *value) {
   Reflect::Call(object, setter, 1, args);
 }
 
+/* Sets `asset` through `setter` unless the button still shows what our last
+   set left there (`shown`). */
+void apply_icon(MonoObject *button, const char *getter, const char *setter,
+                MonoObject *asset, uint32_t &shown) {
+  MonoObject *current = get(button, getter);
+  if (current == asset || (current && current == Reflect::Target(shown)))
+    return;
+  set_object(button, setter, asset);
+  Reflect::Hold(shown, get(button, getter));
+}
+
 /* The button we hold, dropped once React has disposed of it. */
 MonoObject *current_button() {
   MonoObject *button = Reflect::Target(s_button_handle);
@@ -293,12 +307,15 @@ void Tick() {
   if (opacity <= 0.0f && !found_now && ++s_hidden_frames % 15 != 0)
     return;
 
-  /* React puts its own image back whenever it re-renders the button. */
+  /* React puts its own image back whenever it re-renders the button. The
+     button keeps its own copy of what it is given, so the copy read back
+     after our set is what tells ours from React's: setting it every frame
+     cost a texture swap and an icon-colour pass, twice a frame. */
   if (MonoObject *asset = icon_asset()) {
-    if (get(button, "get_IconImage") != asset)
-      set_object(button, "set_IconImage", asset);
-    if (get(button, "get_InvertedIconImage") != asset)
-      set_object(button, "set_InvertedIconImage", asset);
+    apply_icon(button, "get_IconImage", "set_IconImage", asset,
+               s_icon_shown_handle);
+    apply_icon(button, "get_InvertedIconImage", "set_InvertedIconImage",
+               asset, s_inverted_icon_shown_handle);
   }
 
   show_label();

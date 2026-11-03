@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -170,10 +171,43 @@ void apply_radius(MonoObject *settings) {
 
 // ReactFocusLayer directly derives from Sce.PlayStation.PUI.UI3.FocusLayer,
 // so the hooked instance itself is the native PUI Widget.
+/* Focus layers update every frame (57 a frame on Home); one seen lately
+   was registered already, so only the list-item wash, which is applied on
+   every update, runs again. Forgotten every 4096 updates (about a second) so
+   a new widget at a reused address is registered soon. */
+struct SeenLayer {
+  MonoObject *widget;
+  bool list_item;
+};
+SeenLayer s_seen_layers[64];
+size_t s_seen_count = 0;
+unsigned s_updates_since_forget = 0;
+
+bool seen_lately(MonoObject *widget) {
+  if (++s_updates_since_forget >= 4096) {
+    s_updates_since_forget = 0;
+    s_seen_count = 0;
+  }
+  for (size_t i = 0; i < s_seen_count; ++i) {
+    if (s_seen_layers[i].widget != widget)
+      continue;
+    if (s_seen_layers[i].list_item) {
+      static const std::string kListItem = "fc-list-item-";
+      PanelTint::ApplyFocusHierarchy(widget, kListItem);
+    }
+    return true;
+  }
+  return false;
+}
+
 void register_layer(MonoObject *widget) {
-  if (!widget || !s_get_test_id || !s_get_focus_settings)
+  if (!widget || !s_get_test_id || !s_get_focus_settings ||
+      seen_lately(widget))
     return;
   const std::string test_id = Mono_to_String(s_get_test_id(widget));
+  if (s_seen_count < std::size(s_seen_layers))
+    s_seen_layers[s_seen_count++] = {widget,
+                                     test_id.rfind("fc-list-item-", 0) == 0};
   SpaceSwitcherLabels::RememberFocusLayer(widget, test_id);
   PanelTint::ApplyFocusHierarchy(widget, test_id);
   MonoObject *settings = s_get_focus_settings(widget);
