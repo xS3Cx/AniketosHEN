@@ -449,6 +449,9 @@ void follow_buttons(uint32_t held, uint32_t went_down) {
    back is no new click. */
 void stand_down() {
   release_all();
+  /* FilterPad sends the release now: a press it never took would land alone,
+     with no release, when the pointer is back */
+  s_pad_down = 0;
   s_active = false;
   draw_pointer(s_x, s_y, false, s_drawn_hand);
 }
