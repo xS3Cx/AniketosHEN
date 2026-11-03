@@ -207,6 +207,8 @@ bool &toggle_target(OptionId id) {
   case OptionId::ShellClockYear: return g_settings.shell_clock_show_year;
   case OptionId::ShellUIPanelsEnabled:
     return g_settings.shell_ui_panels_enabled;
+  case OptionId::IconColorEnabled:
+    return g_settings.system_icon_color_enabled;
   case OptionId::MenuControls: return g_settings.vsh_show_controls;
   case OptionId::CustomizationEnabled:
     return g_settings.shell_customization_enabled;
@@ -304,6 +306,10 @@ int &int_target(OptionId id) {
     return g_settings.shell_ui_panels_strength;
   case OptionId::ShellUIPanelsOpacity:
     return g_settings.shell_ui_panels_opacity;
+  case OptionId::IconColorAnimation:
+    return g_settings.system_icon_color_animation;
+  case OptionId::IconColorAnimationSpeed:
+    return g_settings.system_icon_color_animation_speed;
   case OptionId::ShellGlowIntensity:
     return g_settings.shell_background_glow_intensity;
   case OptionId::ShellTilesCornerRadius:
@@ -418,6 +424,18 @@ bool is_shell_ui_panel_option(OptionId id) {
   case OptionId::ColorPanels:
   case OptionId::ShellUIPanelsStrength:
   case OptionId::ShellUIPanelsOpacity:
+    return true;
+  default:
+    return false;
+  }
+}
+
+bool is_icon_color_option(OptionId id) {
+  switch (id) {
+  case OptionId::IconColorEnabled:
+  case OptionId::IconColorAnimation:
+  case OptionId::IconColorAnimationSpeed:
+  case OptionId::ColorIcon:
     return true;
   default:
     return false;
@@ -562,6 +580,10 @@ void set_color(OptionId id, int position) {
   case OptionId::ColorPanels:
     put(g_settings.shell_ui_panels_r, g_settings.shell_ui_panels_g,
         g_settings.shell_ui_panels_b, r, g, b);
+    break;
+  case OptionId::ColorIcon:
+    put(g_settings.system_icon_color_r, g_settings.system_icon_color_g,
+        g_settings.system_icon_color_b, r, g, b);
     break;
   case OptionId::ColorClockTime:
     put(g_settings.shell_clock_time_r, g_settings.shell_clock_time_g,
@@ -820,6 +842,8 @@ void change_option(const Option &option, int direction) {
     ShellClock::RequestRefresh();
   if (is_shell_ui_panel_option(option.id))
     g_settings.shell_ui_panels_enabled = true;
+  if (is_icon_color_option(option.id))
+    AniketosTheme::IconColor::RequestApply();
   if (g_settings.vsh_global_theme_enabled &&
       is_global_theme_owned_option(option.id)) {
     g_settings.vsh_global_theme_enabled = false;
@@ -875,6 +899,7 @@ void reset_vsh_settings() {
   PowerIndicator::RestoreNormal(g_settings.vsh_power_indicator_brightness);
   reset_highlight_for_theme_change();
   reapply_customization();
+  AniketosTheme::IconColor::RequestApply();
   Telemetry::SetRefreshSeconds(g_settings.overlay_refresh_seconds);
   s_dirty = true;
 }
@@ -917,6 +942,8 @@ void activate(const Option &option) {
     }
     bool &target = toggle_target(option.id);
     target = !target;
+    if (option.id == OptionId::IconColorEnabled)
+      AniketosTheme::IconColor::RequestApply();
     /* the game bar shows the average or every core, not both */
     if (target && option.id == OptionId::PerformanceOverlayCpu)
       g_settings.all_cpu_usage = false;

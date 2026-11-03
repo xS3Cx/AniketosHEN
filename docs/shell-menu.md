@@ -15,7 +15,7 @@ own addition to the OnionHEN tree it is forked from.
   own PUI pop-up menu on the left), colours, gradients, animations, scale and
   position.
 - Shell appearance: native background colour/animation/image, tile focus
-  outline, panel tint, home-screen clock and date.
+  outline, panel tint, system icon colour, home-screen clock and date.
 - A home-screen OSD (on by default), and the settings of the in-game monitor
   bar.
 
@@ -186,6 +186,30 @@ rounded tiles on.
   the 168px focus frame's, scaled by Sony's own factor, and clips the
   artwork to that corner. The focus outline drawn by `home_tiles.cpp` takes
   the same radius.
+
+## System icon colour
+
+**System Customize → Icon color** colours the console's own interface
+icons on Home. It is separate from the Global theme and from the panel tint:
+the colour slider sets the icon colour, the animation is Static or Rainbow,
+and its speed is adjustable. App and game icons, artwork, avatars and
+wallpapers are untouched.
+
+`source/shellui/src/aniketos_theme/icon_color.cpp` finds the PUI type that
+exposes `IconFilterColor`, checks that its setter is `void(UIColor)`, and only
+then installs a detour. The detour replaces the colour and remembers the
+original of each object it sees, so turning the feature off restores them.
+When the same type has `EnableIconFilterColor`, it is switched on with the
+feature. If the setter is never called, the existing
+`StyleManager.TryGetComponentTokenColor` hook is the fallback: component
+tokens whose key contains `icon` take the chosen colour, preserving alpha.
+The diagnostic file `/user/data/AniketosHEN/icon_color.log` records the
+discovery result, the icon token keys and the first applies.
+
+Settings screen icons are not covered yet (TODO). Those rows expose their
+glyph through `MenuListItem.iconElement`, a `Lazy<ImageElement>` whose element
+is a value type; writing into the Lazy is unsafe, so the renderer path
+(`get_Renderers` / `RenderInRow`) still needs a diagnostic prototype.
 
 ## Home tabs
 

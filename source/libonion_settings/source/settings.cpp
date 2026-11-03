@@ -699,6 +699,9 @@ bool apply_parser(IniParser *parser, Settings *out) {
                              out->toolbox_shortcut_opt);
   out->kstuff_autoload =
       parse_bool(ini_get(parser, "kstuff.autoload"), out->kstuff_autoload);
+  out->shadowmount_autoload =
+      parse_bool(ini_get(parser, "shadowmount.autoload"),
+                 out->shadowmount_autoload);
 
   /* [shell_menu]: keys are the field names. A missing or unparsable value
      keeps the default; range checks belong to the code that uses a value. */
@@ -927,6 +930,11 @@ std::string settings_serialize(const Settings &in) {
   b += "# autoload loads kstuff when " ONION_DIST_NAME " starts.\n";
   b += "# Available values: true, false\n";
   b += "autoload=" + bool_text(in.kstuff_autoload) + "\n";
+  b += "\n";
+  b += "[shadowmount]\n";
+  b += "# autoload loads ShadowMountPlus before kstuff when " ONION_DIST_NAME " starts.\n";
+  b += "# Available values: true, false\n";
+  b += "autoload=" + bool_text(in.shadowmount_autoload) + "\n";
   b += "\n";
   b += "[shell_menu]\n";
   b += "# Shell Menu (L1+R3) and shell appearance. Managed from the menu itself;\n";

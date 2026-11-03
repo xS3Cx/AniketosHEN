@@ -29,6 +29,8 @@ extern uint8_t onion_elfldr_start[];
 extern const unsigned int onion_elfldr_size;
 extern uint8_t kstuff_start[];
 extern const unsigned int kstuff_size;
+extern uint8_t shadowmount_start[];
+extern const unsigned int shadowmount_size;
 
 int sceKernelGetProcessName(int pid, char *name);
 int sceKernelMprotect(void *addr, size_t len, int prot);
@@ -170,7 +172,35 @@ static bool launch_util(LaunchContext *context) {
   return true;
 }
 
-static void launch_kstuff(LaunchContext *context, uint32_t firmware_version,
+static void launch_shadowmount(LaunchContext *context,
+                               uint32_t firmware_version, bool autoload) {
+  const bool disabled_by_usb = if_exists("/mnt/usb0/no_shadowmount");
+  if (disabled_by_usb || !autoload) {
+    LOG_DEBUG("shadowmount disabled (%s)",
+              disabled_by_usb ? "usb no_shadowmount"
+                              : "shadowmount.autoload=false");
+    return;
+  }
+  if (firmware_version < 0x3000000) {
+    LOG_DEBUG("shadowmount skipped on firmware %x.%02x",
+              (firmware_version >> 24) & 0xffu,
+              (firmware_version >> 16) & 0xffu);
+    return;
+  }
+  LOG_DEBUG("Loading ShadowMountPlus via %u (after kstuff) ...",
+            context->loader_port);
+  if (!launch_blob(context, shadowmount_start, (size_t)shadowmount_size,
+                   "shadowmount", "shadowmountplus.elf")) {
+    LOG_ERROR("ShadowMountPlus launch failed");
+    bootstrap_notify("notify.payload.load_failed", "shadowmountplus.elf",
+                     "shadowmount");
+    return;
+  }
+  LOG_DEBUG("[SHADOWMOUNT] launched %zu bytes",
+            (size_t)shadowmount_size);
+}
+
+static bool launch_kstuff(LaunchContext *context, uint32_t firmware_version,
                           bool autoload, bool user_override) {
   char probe[100] = {0};
   const bool disabled_by_usb = if_exists("/mnt/usb0/no_kstuff");
@@ -178,18 +208,18 @@ static void launch_kstuff(LaunchContext *context, uint32_t firmware_version,
     LOG_DEBUG("kstuff disabled (%s)",
               disabled_by_usb ? "usb no_kstuff" : "kstuff.autoload=false");
     onion_ready_signal(ONION_READY_KSTUFF);
-    return;
+    return false;
   }
 
   if (firmware_version < 0x3000000) {
     onion_ready_signal(ONION_READY_KSTUFF);
-    return;
+    return false;
   }
 
   if (kstuff_already_running()) {
     LOG_WARN("kstuff already running / mprotect OK -- skip launch");
     onion_ready_signal(ONION_READY_KSTUFF);
-    return;
+    return true;
   }
 
   LOG_DEBUG("Loading kstuff via %u (before daemon/toolbox) ...",
@@ -219,7 +249,7 @@ static void launch_kstuff(LaunchContext *context, uint32_t firmware_version,
                         "will not start.",
                         ONION_NOTIFY_ICON_PATH, "download", "588193135");
     onion_ready_signal(ONION_READY_KSTUFF);
-    return;
+    return false;
   }
 
   const uint8_t *elf = override_elf ? override_elf : kstuff_start;
@@ -229,7 +259,7 @@ static void launch_kstuff(LaunchContext *context, uint32_t firmware_version,
   free(override_elf);
   if (!sent) {
     bootstrap_notify("notify.kstuff.load_elfldr_failed");
-    return;
+    return false;
   }
 
   for (int waited = 0; waited <= 15; ++waited) {
@@ -237,11 +267,12 @@ static void launch_kstuff(LaunchContext *context, uint32_t firmware_version,
       LOG_DEBUG("kstuff mprotect OK -- signal ready");
       onion_ready_signal(ONION_READY_KSTUFF);
       sleep(1);
-      return;
+      return true;
     }
     sleep(1);
   }
   bootstrap_notify("notify.kstuff.load_failed");
+  return false;
 }
 
 static bool launch_daemon(LaunchContext *context) {
@@ -259,7 +290,7 @@ static bool launch_daemon(LaunchContext *context) {
 
 int bootstrap_launch_services(uint32_t firmware_version,
                               const BootstrapLaunchPlan *plan) {
-  const BootstrapLaunchPlan normal = {true, true, true};
+  const BootstrapLaunchPlan normal = {true, true, true, true};
   if (!plan)
     plan = &normal;
   if (!elfldr_remote_available()) {
@@ -279,8 +310,16 @@ int bootstrap_launch_services(uint32_t firmware_version,
   prepare_service_markers();
   if (!launch_util(&context))
     return -2;
-  launch_kstuff(&context, firmware_version, plan->kstuff_autoload,
-                plan->kstuff_user_override);
+  const bool kstuff_ready = launch_kstuff(
+      &context, firmware_version, plan->kstuff_autoload,
+      plan->kstuff_user_override);
+  if (kstuff_ready && plan->shadowmount_autoload) {
+    sleep(2);
+    launch_shadowmount(&context, firmware_version,
+                       plan->shadowmount_autoload);
+  } else if (!kstuff_ready) {
+    LOG_WARN("ShadowMount skipped: kstuff not ready");
+  }
   if (!plan->launch_daemon) {
     LOG_WARN("recovery start: daemon not launched, ShellUI left untouched");
     return 0;

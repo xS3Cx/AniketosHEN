@@ -20,6 +20,7 @@
 #include "aniketos_shell/home_menu.hpp"
 #include "aniketos_shell/frame_profile.hpp"
 #include "aniketos_theme/home_tiles.hpp"
+#include "aniketos_theme/icon_color.hpp"
 #include "aniketos_theme/shared_ui.hpp"
 #include "aniketos_theme/theme_manager.hpp"
 #include "shell_clock.hpp"
@@ -647,6 +648,7 @@ void OnRender_Hook(MonoObject* instance) {
   {
     Profile::Scope scope(Profile::kSharedUi);
     AniketosTheme::SharedUI::Tick();
+    AniketosTheme::IconColor::Tick();
   }
   {
     Profile::Scope scope(Profile::kTheme);
