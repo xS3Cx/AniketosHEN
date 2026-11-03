@@ -59,7 +59,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -gfull -gdwarf-2 -pedantic -pedantic-error
 set(CMAKE_C_FLAGS_RELEASE "-Os -DNDEBUG")
 set(CMAKE_CXX_FLAGS_RELEASE "-Os -DNDEBUG")
 
-target_sources(${PROJECT_NAME} PRIVATE ${SrcFiles} ${AniketosSrc} "${EMBEDDED_ASSETS_ASSEMBLY}")
+target_sources(${PROJECT_NAME} PRIVATE ${SrcFiles} ${AniketosSrc} "${EMBEDDED_ASSETS_ASSEMBLY}" "${PARTICLE_TEXTURES_ASSEMBLY}")
 add_dependencies(${PROJECT_NAME} shellui_i18n_catalog onion_version onion_ipc onion_settings onion_detour onion_proc onion_platform onion_ready onion_plugin_ui onion_plugin_bridge onion_kbm_profile)
 onion_target_debug_define(${PROJECT_NAME})
 target_include_directories(${PROJECT_NAME} PRIVATE

@@ -167,6 +167,7 @@ TEST_CXX_SRCS := \
   test_overlay_layout.cpp \
   test_clock_text.cpp \
   test_avatar_image.cpp \
+  test_particle_sim.cpp \
   test_logo_tint.cpp \
   test_web_icon.cpp \
 	test_fps_formula.cpp \
@@ -244,6 +245,7 @@ PROD_CXX_OBJS += $(BUILD_DIR)/prod/daemon/plugin_host_services.o
 PROD_CXX_OBJS += $(BUILD_DIR)/prod/shellui/dynamic_ui_xml.o
 PROD_CXX_OBJS += $(BUILD_DIR)/prod/shellui/dynamic_ui_runtime.o
 PROD_CXX_OBJS += $(BUILD_DIR)/prod/shellui/progress_auto_return.o
+PROD_CXX_OBJS += $(BUILD_DIR)/prod/shellui/particle_sim.o
 
 TEST_C_OBJS := $(patsubst %.c,$(BUILD_DIR)/tests/%.o,$(TEST_C_SRCS))
 TEST_CXX_OBJS := $(patsubst %.cpp,$(BUILD_DIR)/tests/%.o,$(TEST_CXX_SRCS))
@@ -329,6 +331,10 @@ $(BUILD_DIR)/prod/shellui/dynamic_ui_runtime.o: $(REPO_ROOT)/source/shellui/src/
 	$(HOST_CXX) $(CXXFLAGS) -c -o $@ $<
 
 $(BUILD_DIR)/prod/shellui/progress_auto_return.o: $(REPO_ROOT)/source/shellui/src/progress_auto_return.cpp | $(BUILD_DIR)
+	@mkdir -p $(dir $@)
+	$(HOST_CXX) $(CXXFLAGS) -c -o $@ $<
+
+$(BUILD_DIR)/prod/shellui/particle_sim.o: $(REPO_ROOT)/source/shellui/src/aniketos_shell/home/particle_sim.cpp $(wildcard $(REPO_ROOT)/source/shellui/src/aniketos_shell/home/particle_presets/*.inc) | $(BUILD_DIR)
 	@mkdir -p $(dir $@)
 	$(HOST_CXX) $(CXXFLAGS) -c -o $@ $<
 

@@ -1,7 +1,9 @@
 #include "aniketos_shell/home/home_particles.hpp"
 
 #include "aniketos_shell/core/host_scene.hpp"
+#include "aniketos_shell/home/particle_sim.hpp"
 #include "aniketos_ui/home_scene.hpp"
+#include "aniketos_ui/ui_color.hpp"
 #include "aniketos_theme/customization.hpp"
 #include "aniketos_ui/mono_reflect.hpp"
 #include "external_symbols.hpp"
@@ -31,6 +33,12 @@ EMBEDDED(square)
 EMBEDDED(dot)
 #undef EMBEDDED
 
+#define PARTICLE_TEXTURE(name, symbol)                                         \
+  extern const unsigned char symbol##_start[];                                 \
+  extern const unsigned char symbol##_end[];
+#include "particle_textures.inc"
+#undef PARTICLE_TEXTURE
+
 namespace HomeParticles {
 namespace {
 
@@ -38,9 +46,22 @@ namespace Reflect = AniketosUI::Reflect;
 
 constexpr const char *kDirectory =
     ONION_DIST_USER_DATA_ROOT "/ShellUI/particles";
+constexpr const char *kBuiltinDirectory =
+    ONION_DIST_USER_DATA_ROOT "/ShellUI/particles/builtin";
+
+struct BuiltinTexture {
+  const char *name;
+  const unsigned char *start;
+  const unsigned char *end;
+};
+const BuiltinTexture kBuiltinTextures[] = {
+#define PARTICLE_TEXTURE(name, symbol) {name, symbol##_start, symbol##_end},
+#include "particle_textures.inc"
+#undef PARTICLE_TEXTURE
+};
 constexpr const char *kLayerName = "id_aniketos_home_particles";
 constexpr int kMinCount = 20;
-constexpr int kMaxCount = 300;
+constexpr int kMaxCount = 150; /* each one is a widget moved every frame */
 constexpr size_t kMaxPictures = 16;
 
 struct DefaultPicture {
@@ -65,11 +86,35 @@ struct Particle {
   float age = 0, life = 1;
   float sway = 0, sway_speed = 0; /* a slow sideways wander */
   float shown = -1;    /* the opacity last given to the widget */
+  float put_x = -1e9f, put_y = -1e9f; /* where the widget was last put */
 };
 
 std::vector<Particle> s_particles;
 std::vector<uint32_t> s_assets; /* ImageAsset per picture, strong */
 std::vector<bool> s_asset_is_dot;
+
+/* A built-in style's particle and what its widget was last given. */
+struct Sprite {
+  ParticleSim::Particle state;
+  uint32_t transform = 0; /* strong: moves and turns it */
+  int asset = -1;
+  uint32_t color = 0;
+  float size = -1, angle = 1e9f;
+  float x = -1e9f, y = -1e9f; /* where it was last put */
+};
+std::vector<Sprite> s_sprites; /* s_particles[i].widget is sprite i's */
+const ParticleSim::Preset *s_preset = nullptr;
+int s_layer_assets[3][4]; /* index into s_assets per layer texture, or -1 */
+ParticleSim::Random s_sim_random;
+MonoMethod *s_set_width = nullptr;
+MonoMethod *s_set_height = nullptr;
+MonoMethod *s_set_image = nullptr;
+MonoMethod *s_set_filter_color = nullptr;
+MonoMethod *s_set_angle = nullptr;
+MonoMethod *s_set_translation = nullptr;
+int s_style = -1; /* what the layer was built for */
+int s_hue = 0;    /* the tints' turn the widgets have */
+
 uint32_t s_layer = 0;
 float s_width = 1920.0f, s_height = 1080.0f;
 int s_frame = 0;
@@ -145,6 +190,10 @@ void teardown() {
   for (Particle &particle : s_particles)
     Reflect::Release(particle.widget);
   s_particles.clear();
+  for (Sprite &sprite : s_sprites)
+    Reflect::Release(sprite.transform);
+  s_sprites.clear();
+  s_preset = nullptr;
   for (uint32_t &asset : s_assets)
     Reflect::Release(asset);
   s_assets.clear();
@@ -197,6 +246,11 @@ int wanted_count() {
   return std::clamp(g_settings.home_particles_count, kMinCount, kMaxCount);
 }
 
+int current_style() {
+  return std::clamp(g_settings.home_particles_style, 0,
+                    ParticleSim::PresetCount());
+}
+
 /* ImageAsset(string), among its other one-argument constructors. */
 MonoMethod *find_asset_ctor(MonoClass *asset_class) {
   if (!asset_class)
@@ -219,20 +273,163 @@ MonoMethod *find_asset_ctor(MonoClass *asset_class) {
   return nullptr;
 }
 
+/* The picture at `path` added to s_assets; its index, or -1. */
+int open_asset(const std::string &path, MonoClass *asset_class,
+               MonoMethod *asset_ctor) {
+  MonoObject *asset = mono_object_new(mono_domain_get(), asset_class);
+  void *arguments[1] = {mono_string_new(mono_domain_get(), path.c_str())};
+  MonoObject *exception = nullptr;
+  if (!asset)
+    return -1;
+  mono_runtime_invoke(asset_ctor, asset, arguments, &exception);
+  if (exception) {
+    LOG_ERROR("[PARTICLES] '%s' could not be opened", path.c_str());
+    return -1;
+  }
+  s_assets.push_back(mono_gchandle_new(asset, /*pinned=*/1));
+  s_asset_is_dot.push_back(path.find("dot") != std::string::npos);
+  return static_cast<int>(s_assets.size()) - 1;
+}
+
 void load_assets(MonoClass *asset_class, MonoMethod *asset_ctor) {
-  for (const std::string &path : picture_paths()) {
-    MonoObject *asset = mono_object_new(mono_domain_get(), asset_class);
-    void *arguments[1] = {mono_string_new(mono_domain_get(), path.c_str())};
-    MonoObject *exception = nullptr;
-    if (!asset)
+  for (const std::string &path : picture_paths())
+    (void)open_asset(path, asset_class, asset_ctor);
+}
+
+/* A built-in texture, written out where PUI can open it. shortcut: a file
+   of the same size is taken as current; a redrawn texture of exactly the
+   old size would need its file deleted. */
+int builtin_asset(const char *name, MonoClass *asset_class,
+                  MonoMethod *asset_ctor) {
+  for (const BuiltinTexture &texture : kBuiltinTextures) {
+    if (std::strcmp(texture.name, name))
       continue;
-    mono_runtime_invoke(asset_ctor, asset, arguments, &exception);
-    if (exception) {
-      LOG_ERROR("[PARTICLES] '%s' could not be opened", path.c_str());
-      continue;
+    const std::string path =
+        std::string(kBuiltinDirectory) + "/" + name + ".png";
+    const size_t size = static_cast<size_t>(texture.end - texture.start);
+    struct stat info {};
+    if (stat(path.c_str(), &info) != 0 ||
+        static_cast<size_t>(info.st_size) != size) {
+      (void)mkdir_tree(kBuiltinDirectory);
+      const int fd = open(path.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
+      if (fd < 0)
+        return -1;
+      const bool written =
+          write(fd, texture.start, size) == static_cast<ssize_t>(size);
+      close(fd);
+      if (!written)
+        return -1;
     }
-    s_assets.push_back(mono_gchandle_new(asset, /*pinned=*/1));
-    s_asset_is_dot.push_back(path.find("dot") != std::string::npos);
+    return open_asset(path, asset_class, asset_ctor);
+  }
+  LOG_ERROR("[PARTICLES] no built-in texture '%s'", name);
+  return -1;
+}
+
+/* The textures `preset` uses, once each; false if a layer has none. */
+bool load_preset(const ParticleSim::Preset &preset, MonoClass *asset_class,
+                 MonoMethod *asset_ctor) {
+  std::vector<std::pair<const char *, int>> loaded;
+  for (int layer = 0; layer < 3; ++layer) {
+    bool any = preset.layers[layer].share <= 0;
+    for (int texture = 0; texture < 4; ++texture) {
+      const char *name = preset.layers[layer].textures[texture];
+      int &asset = s_layer_assets[layer][texture];
+      asset = -1;
+      if (!name || preset.layers[layer].share <= 0)
+        continue;
+      for (const auto &[loaded_name, index] : loaded)
+        if (!std::strcmp(loaded_name, name))
+          asset = index;
+      if (asset < 0) {
+        asset = builtin_asset(name, asset_class, asset_ctor);
+        loaded.emplace_back(name, asset);
+      }
+      any |= asset >= 0;
+    }
+    if (!any)
+      return false;
+  }
+  return true;
+}
+
+/* A layer's particles turn when they spin or follow their motion. */
+bool turns(const ParticleSim::Layer &layer) {
+  return layer.spin_min != 0 || layer.spin_max != 0 || layer.rock != 0 ||
+         layer.align;
+}
+
+/* Gives the widget what its particle now has: texture, tint and size. */
+void dress(Sprite &sprite, MonoObject *box) {
+  const ParticleSim::Particle &state = sprite.state;
+  int asset = s_layer_assets[state.layer][state.texture];
+  for (int texture = 0; asset < 0 && texture < 4; ++texture)
+    asset = s_layer_assets[state.layer][texture];
+  MonoObject *exception = nullptr;
+  if (asset >= 0 && asset != sprite.asset && s_set_image) {
+    void *arguments[1] = {Reflect::Target(s_assets[asset])};
+    mono_runtime_invoke(s_set_image, box, arguments, &exception);
+    sprite.asset = asset;
+  }
+  const uint32_t color = ParticleSim::ShiftHue(state.color, s_hue);
+  if (color != sprite.color && s_set_filter_color) {
+    AniketosUI::UIColor tint{((color >> 16) & 255) / 255.0f,
+                             ((color >> 8) & 255) / 255.0f,
+                             (color & 255) / 255.0f, 1.0f, 0};
+    void *arguments[1] = {&tint};
+    mono_runtime_invoke(s_set_filter_color, box, arguments, &exception);
+    sprite.color = color;
+  }
+  if (state.size != sprite.size) {
+    set_float(box, s_set_width, state.size);
+    set_float(box, s_set_height, state.size);
+    sprite.size = state.size;
+  }
+}
+
+/* The widgets of a built-in style, under `layer`. */
+void build_sprites(MonoObject *layer, MonoClass *box_class, MonoMethod *append,
+                   int count) {
+  const ParticleSim::Preset &preset = *s_preset;
+  MonoMethod *set_focusable = Reflect::MethodOf(box_class, "set_Focusable", 1);
+  MonoMethod *set_blend = Reflect::MethodOf(box_class, "set_BlendMode", 1);
+  MonoMethod *get_transform = Reflect::MethodOf(box_class, "get_Transform", 0);
+  bool no = false;
+  uint8_t add = 1; /* BlendMode.Add */
+  s_sprites.resize(static_cast<size_t>(count));
+  s_particles.resize(static_cast<size_t>(count));
+  for (int index = 0; index < count; ++index) {
+    Sprite &sprite = s_sprites[static_cast<size_t>(index)];
+    ParticleSim::Spawn(sprite.state, preset,
+                       ParticleSim::LayerFor(preset, index, count),
+                       s_sim_random, s_width, s_height, true);
+    const ParticleSim::Layer &kind = preset.layers[sprite.state.layer];
+    MonoObject *box = mono_object_new(mono_domain_get(), box_class);
+    if (!box)
+      continue;
+    mono_runtime_object_init(box);
+    s_particles[static_cast<size_t>(index)].widget =
+        mono_gchandle_new(box, /*pinned=*/1);
+    MonoObject *exception = nullptr;
+    void *focus_arguments[1] = {&no};
+    if (set_focusable)
+      mono_runtime_invoke(set_focusable, box, focus_arguments, &exception);
+    if (kind.additive && set_blend) {
+      void *blend_arguments[1] = {&add};
+      mono_runtime_invoke(set_blend, box, blend_arguments, &exception);
+    }
+    if (get_transform) {
+      exception = nullptr;
+      MonoObject *transform =
+          mono_runtime_invoke(get_transform, box, nullptr, &exception);
+      if (transform && !exception)
+        sprite.transform = mono_gchandle_new(transform, /*pinned=*/1);
+    }
+    dress(sprite, box);
+    set_float(box, s_set_opacity, 0.0f);
+    void *child_arguments[1] = {box};
+    if (append)
+      mono_runtime_invoke(append, layer, child_arguments, &exception);
   }
 }
 
@@ -264,12 +461,36 @@ bool build(MonoObject *root) {
     return false;
   }
 
-  write_defaults();
-  load_assets(asset_class, asset_ctor);
+  MonoClass *transform_class =
+      mono_class_from_name(pui, "Sce.PlayStation.PUI", "Transform");
+  s_set_angle = transform_class
+                    ? Reflect::MethodOf(transform_class, "set_AngleZ", 1)
+                    : nullptr;
+  s_set_translation =
+      transform_class ? Reflect::MethodOf(transform_class, "set_Translation", 1)
+                      : nullptr;
+  s_set_filter_color = Reflect::MethodOf(box_class, "set_FilterColor", 1);
+  s_set_image = Reflect::MethodOf(box_class, "set_Image", 1);
+  s_set_width = Reflect::MethodOf(widget_class, "set_Width", 1);
+  s_set_height = Reflect::MethodOf(widget_class, "set_Height", 1);
+
+  const int style = current_style();
+  if (style == 0) {
+    write_defaults();
+    load_assets(asset_class, asset_ctor);
+  } else {
+    s_preset = &ParticleSim::PresetAt(style - 1);
+    if (!load_preset(*s_preset, asset_class, asset_ctor)) {
+      LOG_ERROR("[PARTICLES] style '%s' has a layer without textures",
+                s_preset->key);
+      return false;
+    }
+  }
   if (s_assets.empty()) {
     LOG_ERROR("[PARTICLES] no pictures in %s", kDirectory);
     return false;
   }
+  s_style = style;
 
   Reflect::FloatProperty(root, "get_Width", &s_width);
   Reflect::FloatProperty(root, "get_Height", &s_height);
@@ -284,6 +505,17 @@ bool build(MonoObject *root) {
   MonoMethod *set_height = Reflect::MethodOf(widget_class, "set_Height", 1);
   set_float(layer, set_width, s_width);
   set_float(layer, set_height, s_height);
+
+  if (s_preset) {
+    s_hue = g_settings.home_particles_hue;
+    build_sprites(layer, box_class,
+                  Reflect::MethodOf(widget_class, "AppendChild", 1),
+                  wanted_count());
+    LOG_INFO("[PARTICLES] style '%s': %d particles, %zu textures, %.0fx%.0f",
+             s_preset->key, wanted_count(), s_assets.size(), s_width,
+             s_height);
+    return true;
+  }
 
   /* dots are the bulk of it; the symbols stand out among them */
   std::vector<size_t> dots, symbols;
@@ -367,8 +599,14 @@ void animate(float seconds) {
     particle.sway += particle.sway_speed * seconds;
     particle.x += (particle.vx + std::sin(particle.sway) * 4.0f) * seconds;
     particle.y += particle.vy * seconds;
-    set_float(box, s_set_x, particle.x - particle.size * 0.5f);
-    set_float(box, s_set_y, particle.y - particle.size * 0.5f);
+    /* a step too small to see is not sent: each one lays the widget out */
+    if (std::fabs(particle.x - particle.put_x) >= 0.75f ||
+        std::fabs(particle.y - particle.put_y) >= 0.75f) {
+      particle.put_x = particle.x;
+      particle.put_y = particle.y;
+      set_float(box, s_set_x, particle.x - particle.size * 0.5f);
+      set_float(box, s_set_y, particle.y - particle.size * 0.5f);
+    }
     /* fades in over the first seconds of its life and out over the last */
     const float in = std::min(1.0f, particle.age / 3.0f);
     const float out = std::min(1.0f, (particle.life - particle.age) / 3.0f);
@@ -380,7 +618,75 @@ void animate(float seconds) {
   }
 }
 
+void animate_sprites(float seconds) {
+  for (size_t index = 0; index < s_sprites.size(); ++index) {
+    Sprite &sprite = s_sprites[index];
+    Particle &shown = s_particles[index];
+    MonoObject *box = Reflect::Target(shown.widget);
+    if (!box)
+      continue;
+    ParticleSim::Particle &state = sprite.state;
+    if (!ParticleSim::Step(state, *s_preset, seconds, s_width, s_height)) {
+      ParticleSim::Spawn(state, *s_preset, state.layer, s_sim_random, s_width,
+                         s_height, false);
+      dress(sprite, box);
+    }
+    float opacity = ParticleSim::Opacity(state, *s_preset);
+    if (opacity <= 0.003f)
+      opacity = 0;
+    /* Every call into PUI costs, more so at the low clock ShellUI runs at
+       in the menus: steps too small to see are not sent. */
+    if (std::fabs(opacity - shown.shown) > 0.02f ||
+        (opacity == 0 && shown.shown != 0)) {
+      set_float(box, s_set_opacity, opacity);
+      shown.shown = opacity;
+    }
+    if (opacity == 0)
+      continue; /* unseen: it moves on, its widget need not */
+    MonoObject *transform = Reflect::Target(sprite.transform);
+    if (std::fabs(state.x - sprite.x) >= 0.75f ||
+        std::fabs(state.y - sprite.y) >= 0.75f) {
+      sprite.x = state.x;
+      sprite.y = state.y;
+      /* The transform's translation moves the picture without laying the
+         widget out again, and in one call instead of X and Y. */
+      if (transform && s_set_translation) {
+        float where[3] = {state.x - state.size * 0.5f,
+                          state.y - state.size * 0.5f, 0.0f};
+        void *arguments[1] = {where};
+        MonoObject *exception = nullptr;
+        mono_runtime_invoke(s_set_translation, transform, arguments,
+                            &exception);
+      } else {
+        set_float(box, s_set_x, state.x - state.size * 0.5f);
+        set_float(box, s_set_y, state.y - state.size * 0.5f);
+      }
+    }
+    if (transform && turns(s_preset->layers[state.layer]) &&
+        std::fabs(state.angle - sprite.angle) > 0.75f) {
+      /* Transform.AngleZ is in radians */
+      set_float(transform, s_set_angle, state.angle * 3.14159265f / 180.0f);
+      sprite.angle = state.angle;
+    }
+  }
+}
+
 } // namespace
+
+int StyleCount() { return 1 + ParticleSim::PresetCount(); }
+
+const char *StyleName(int style) {
+  static std::vector<std::string> keys;
+  if (keys.empty()) {
+    keys.emplace_back("vsh.home_particles.style.pictures");
+    for (int index = 0; index < ParticleSim::PresetCount(); ++index)
+      keys.push_back(std::string("vsh.home_particles.style.") +
+                     ParticleSim::PresetAt(index).key);
+  }
+  return keys[static_cast<size_t>(
+                  std::clamp(style, 0, static_cast<int>(keys.size()) - 1))]
+      .c_str();
+}
 
 void Tick() {
   ++s_frame;
@@ -398,15 +704,20 @@ void Tick() {
       teardown(); /* Home rebuilt its scene */
       layer = nullptr;
     }
-    if (layer && static_cast<int>(s_particles.size()) != wanted_count()) {
+    if (layer && (static_cast<int>(s_particles.size()) != wanted_count() ||
+                  s_style != current_style())) {
       teardown();
       layer = nullptr;
     }
     if (!layer) {
+      static int failed_style = -1; /* another style gets its own tries */
+      if (failed_style != current_style())
+        s_failures = 0;
       if (s_failures >= 3)
         return;
       if (!build(root)) {
         teardown();
+        failed_style = current_style();
         ++s_failures;
         return;
       }
@@ -423,7 +734,18 @@ void Tick() {
   if (Reflect::FloatProperty(layer, "get_FinalOpacity", &opacity) &&
       opacity <= 0.02f)
     return;
-  animate(1.0f / 60.0f);
+  if (s_preset && g_settings.home_particles_hue != s_hue) {
+    s_hue = g_settings.home_particles_hue;
+    for (size_t index = 0; index < s_sprites.size(); ++index)
+      if (MonoObject *box = Reflect::Target(s_particles[index].widget))
+        dress(s_sprites[index], box);
+  }
+  const float seconds =
+      std::clamp(g_settings.home_particles_speed, 25, 300) / 100.0f / 60.0f;
+  if (s_preset)
+    animate_sprites(seconds);
+  else
+    animate(seconds);
 }
 
 } // namespace HomeParticles

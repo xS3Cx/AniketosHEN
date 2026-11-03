@@ -306,13 +306,25 @@ void home_pages(Page page, std::vector<Option> &options) {
                           g_settings.home_bg_edges, 0, 100, 5)};
     break;
   case Page::HomeParticles:
-    /* PlayStation shapes floating over the wallpaper or video */
+    /* particles floating over the wallpaper or video: the built-in styles, or
+       the pictures in the particles folder */
     options = {toggle(tr("vsh.home_particles.enable"),
                       OptionId::HomeParticlesEnabled,
                       g_settings.home_particles_enabled),
+               strings(tr("vsh.home_particles.style"),
+                       OptionId::HomeParticlesStyle,
+                       tr(HomeParticles::StyleName(
+                           g_settings.home_particles_style)),
+                       HomeParticles::StyleCount()),
                slider_int(tr("vsh.home_particles.count"),
                           OptionId::HomeParticlesCount,
-                          g_settings.home_particles_count, 20, 300, 10),
+                          g_settings.home_particles_count, 20, 150, 10),
+               slider_int(tr("vsh.home_particles.hue"),
+                          OptionId::HomeParticlesHue,
+                          g_settings.home_particles_hue, 0, 355, 5),
+               slider_int(tr("vsh.home_particles.speed"),
+                          OptionId::HomeParticlesSpeed,
+                          g_settings.home_particles_speed, 25, 300, 25),
                value(tr("vsh.home_particles.folder"),
                      ONION_DIST_DATA_ROOT "/ShellUI/particles")};
     break;

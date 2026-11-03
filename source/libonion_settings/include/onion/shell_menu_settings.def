@@ -179,6 +179,12 @@ ONION_SHELL_SETTING_INT(home_bg_edges, 0)
 /* Drifting particles behind Home (shellui: aniketos_shell/home/home_particles). */
 ONION_SHELL_SETTING_BOOL(home_particles_enabled, false)
 ONION_SHELL_SETTING_INT(home_particles_count, 110)
+/* 0: the pictures in the particles folder; n: built-in style n - 1. */
+ONION_SHELL_SETTING_INT(home_particles_style, 0)
+/* Built-in styles: their tints turned round the colour wheel (degrees, 0 as
+ * designed), and how fast they move (percent). */
+ONION_SHELL_SETTING_INT(home_particles_hue, 0)
+ONION_SHELL_SETTING_INT(home_particles_speed, 100)
 /* The presence dot forced onto avatars in Home while not online: 0 as the
  * system has it, 1 online, 2 busy, 3 appearing offline (shellui:
  * aniketos_shell/rn_scripts/script_injector). */

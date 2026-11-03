@@ -120,7 +120,14 @@ int &int_target(OptionId id) {
     return g_settings.shell_tiles_outline_animation;
   case OptionId::ShellTilesOutlineAnimationSpeed:
     return g_settings.shell_tiles_outline_animation_speed;
-  case OptionId::HomeParticlesCount: return g_settings.home_particles_count;
+  case OptionId::HomeParticlesCount:
+    /* a count saved before the cap of 150, read as the cap */
+    g_settings.home_particles_count =
+        std::clamp(g_settings.home_particles_count, 20, 150);
+    return g_settings.home_particles_count;
+  case OptionId::HomeParticlesStyle: return g_settings.home_particles_style;
+  case OptionId::HomeParticlesHue: return g_settings.home_particles_hue;
+  case OptionId::HomeParticlesSpeed: return g_settings.home_particles_speed;
   case OptionId::HomeVideoVolume: return g_settings.home_video_volume;
   case OptionId::PadSpeakerVolume: return g_settings.pad_speaker_volume;
   case OptionId::HomeBackgroundDim: return g_settings.home_bg_dim;

@@ -42,6 +42,29 @@ set(EMBEDDED_ASSET_FILES
 set_source_files_properties("${EMBEDDED_ASSETS_ASSEMBLY}" PROPERTIES
 	OBJECT_DEPENDS "${EMBEDDED_ASSET_FILES}")
 
+# The textures of the built-in particle styles: every PNG in
+# assets/particles/builtin, embedded with a table of their names
+# (particle_textures.inc: PARTICLE_TEXTURE("name", symbol) per file).
+file(GLOB PARTICLE_TEXTURE_FILES CONFIGURE_DEPENDS "${PARTICLE_ASSETS}/builtin/*.png")
+list(SORT PARTICLE_TEXTURE_FILES)
+set(PARTICLE_TEXTURES_ASSEMBLY "${I18N_GENERATED_DIR}/particle_textures.s")
+set(particle_assembly ".section .rodata\n")
+set(particle_table "")
+set(particle_index 0)
+foreach(texture IN LISTS PARTICLE_TEXTURE_FILES)
+	get_filename_component(texture_name "${texture}" NAME_WE)
+	set(symbol "particle_texture_${particle_index}")
+	string(APPEND particle_assembly
+		".p2align 4\n.global ${symbol}_start\n${symbol}_start:\n"
+		".incbin \"${texture}\"\n.global ${symbol}_end\n${symbol}_end:\n")
+	string(APPEND particle_table "PARTICLE_TEXTURE(\"${texture_name}\", ${symbol})\n")
+	math(EXPR particle_index "${particle_index} + 1")
+endforeach()
+file(CONFIGURE OUTPUT "${PARTICLE_TEXTURES_ASSEMBLY}" CONTENT "${particle_assembly}")
+file(CONFIGURE OUTPUT "${I18N_GENERATED_DIR}/particle_textures.inc" CONTENT "${particle_table}")
+set_source_files_properties("${PARTICLE_TEXTURES_ASSEMBLY}" PROPERTIES
+	OBJECT_DEPENDS "${PARTICLE_TEXTURE_FILES}")
+
 set_source_files_properties("${D_SRC}/aniketos_shell/system_ui/avatar_codec.c" PROPERTIES
 	COMPILE_OPTIONS "-w;-std=gnu17"
 	C_STANDARD 17
