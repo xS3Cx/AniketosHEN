@@ -114,12 +114,13 @@ CaptureFn find_capture(uint32_t module) {
       name = find_bytes(start, info.segments[i].size, "socket_audio_%d", 16);
     }
   }
-  if (!text || !name ||
+  const bool readable =
+      text && name &&
       kernel_mprotect(getpid(), reinterpret_cast<intptr_t>(text), text_size,
-                      PROT_READ | PROT_EXEC) != 0)
-    return nullptr;
+                      PROT_READ | PROT_EXEC) == 0;
   CaptureFn found = nullptr;
-  for (size_t i = 0; !found && i + 7 <= text_size; ++i) {
+  const uint8_t *reference = nullptr;
+  for (size_t i = 0; readable && !found && i + 7 <= text_size; ++i) {
     /* lea reg, [rip + disp32] pointing at the name */
     if ((text[i] & 0xfb) != 0x48 || text[i + 1] != 0x8d ||
         (text[i + 2] & 0xc7) != 0x05)
@@ -128,6 +129,7 @@ CaptureFn find_capture(uint32_t module) {
     std::memcpy(&displacement, text + i + 3, 4);
     if (text + i + 7 + displacement != name)
       continue;
+    reference = text + i;
     for (size_t start = i; start > 0 && i - start < 0x400; --start) {
       if (std::memcmp(text + start, "\x55\x48\x89\xe5", 4) != 0)
         continue;
@@ -136,8 +138,14 @@ CaptureFn find_capture(uint32_t module) {
       break;
     }
   }
-  (void)kernel_mprotect(getpid(), reinterpret_cast<intptr_t>(text), text_size,
-                        text_prot);
+  if (readable)
+    (void)kernel_mprotect(getpid(), reinterpret_cast<intptr_t>(text),
+                          text_size, text_prot);
+  if (!found) /* which step another firmware's library no longer matches */
+    LOG_WARN("[PADSPK] capture request not found: name=%p readable=%d "
+             "reference=%p",
+             static_cast<const void *>(name), readable,
+             static_cast<const void *>(reference));
   return found;
 }
 
@@ -166,19 +174,32 @@ bool resolve() {
   return s_api.capture != nullptr;
 }
 
-void relay(const uint8_t *ring, size_t mapped_size, void *flag, int port) {
+void relay(const uint8_t *ring, size_t mapped_size, void *flag, int port,
+           int user) {
   const uint32_t ring_size = *reinterpret_cast<const volatile uint32_t *>(ring);
   /* +8: timestamp, +0xc: committed write position, stored together */
   const auto *commit = reinterpret_cast<const volatile uint64_t *>(ring + 8);
   uint32_t read = static_cast<uint32_t>(*commit >> 32);
   /* found by pattern, so another firmware's layout can land here */
   if (ring_size > mapped_size || ring_size < kRingHeader + kPeriodBytes ||
-      read < kRingHeader || read >= ring_size)
+      read < kRingHeader || read >= ring_size) {
+    LOG_WARN("[PADSPK] ring layout not understood: size=0x%x write=0x%x",
+             ring_size, read);
     return;
+  }
   const uint32_t data = ring_size - kRingHeader;
   static float out[2][kFrames];
   float in[kFrames * 2];
-  for (unsigned k = 0; !s_stop.load(std::memory_order_relaxed); k ^= 1) {
+  unsigned idle = 0;
+  for (unsigned k = 0, tick = 1; !s_stop.load(std::memory_order_relaxed);
+       k ^= 1, ++tick) {
+    /* about once a second: the port only reaches the controller of the user
+       it was opened for, so another foreground user needs a new port */
+    int foreground = -1;
+    if (tick % 188 == 0 &&
+        (sceUserServiceGetForegroundUser(&foreground) != 0 ||
+         foreground != user))
+      return;
     uint32_t write = 0, available = 0;
     for (int tries = 0;; ++tries) {
       write = static_cast<uint32_t>(*commit >> 32);
@@ -193,8 +214,15 @@ void relay(const uint8_t *ring, size_t mapped_size, void *flag, int port) {
         usleep(1000);
     }
     if (available < kPeriodBytes) {
+      /* the server writes every tick, silence included: a ring left still for
+         seconds is not the one it fills now, so ask for the ring again */
+      if (++idle == 50) {
+        LOG_WARN("[PADSPK] the mix ring is not being written");
+        return;
+      }
       std::memset(out[k], 0, sizeof(out[k])); /* nothing plays: silence */
     } else {
+      idle = 0;
       if (available > 4 * kPeriodBytes) /* fell behind: one tick late at most */
         read = write >= kRingHeader + kPeriodBytes ? write - kPeriodBytes
                                                    : write + data - kPeriodBytes;
@@ -212,8 +240,11 @@ void relay(const uint8_t *ring, size_t mapped_size, void *flag, int port) {
         out[k][i] = gain * (in[2 * i] + in[2 * i + 1]);
     }
     /* blocks until the speaker wants the next tick: this paces the loop */
-    if (s_api.output(port, out[k]) < 0)
+    const int played = s_api.output(port, out[k]);
+    if (played < 0) {
+      LOG_WARN("[PADSPK] speaker output 0x%x", played);
       return;
+    }
   }
 }
 
@@ -224,12 +255,13 @@ void *thread_main(void *) {
   int user = -1, port = -1;
   /* Where the pad speakers are mixed into the final mix, relaying it would
      feed the speaker back into itself. */
-  if (s_api.capture(kCapturePadSpeaker, &pad_ring, &pad_ring_size) == 0 &&
-      pad_ring) {
+  int result = s_api.capture(kCapturePadSpeaker, &pad_ring, &pad_ring_size);
+  if (result == 0 && pad_ring) {
     munmap(pad_ring, pad_ring_size);
     LOG_WARN("[PADSPK] the pad speaker is part of the mix here: not relaying");
-  } else if (s_api.capture(kCaptureFull, &ring, &ring_size) != 0 || !ring) {
-    LOG_WARN("[PADSPK] no capture ring");
+  } else if ((result = s_api.capture(kCaptureFull, &ring, &ring_size)) != 0 ||
+             !ring) {
+    LOG_WARN("[PADSPK] no capture ring: 0x%x", result);
     ring = nullptr;
   } else if (ring_size < kMinimumRingBytes) {
     LOG_WARN("[PADSPK] capture ring too small: %zu", ring_size);
@@ -241,7 +273,7 @@ void *thread_main(void *) {
     if (sceKernelOpenEventFlag(&flag, "/evf_acap.full") != 0)
       flag = nullptr; /* polls every millisecond instead */
     LOG_INFO("[PADSPK] relaying ring=%zu user=0x%x", ring_size, user);
-    relay(static_cast<const uint8_t *>(ring), ring_size, flag, port);
+    relay(static_cast<const uint8_t *>(ring), ring_size, flag, port, user);
     s_api.output(port, nullptr); /* lets the last tick play */
     s_api.close(port);
     if (flag)

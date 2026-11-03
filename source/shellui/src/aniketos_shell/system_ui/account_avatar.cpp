@@ -337,6 +337,13 @@ std::string effective_path() {
   return source;
 }
 
+/* A GIF being fitted is shown still meanwhile: the system decodes an animated
+   picture whole, and this one is past what it is meant to take. */
+bool plays(const std::string &path) {
+  return has_extension(path, kAnimated) &&
+         !(s_fit_running.load() && path == s_fit_desired_source);
+}
+
 void consume_fit() {
   if (!s_fit_done.load())
     return;
@@ -506,7 +513,7 @@ void box_hook(MonoObject *box, MonoString *uri, MonoObject *action,
     s_box_original(box, uri, action, option, set_image);
     return;
   }
-  const bool animated = has_extension(path, kAnimated);
+  const bool animated = plays(path);
   TrackedBox &entry = remember(box);
   if (action)
     Reflect::Hold(entry.action, action);
@@ -639,7 +646,7 @@ void Refresh() {
     return;
   report_chosen();
   const std::string path = effective_path();
-  const bool animated = !path.empty() && has_extension(path, kAnimated);
+  const bool animated = plays(path);
   int reloaded = 0;
   for_each_live_box([&](TrackedBox &entry, MonoObject *box) {
     if (AniketosUI::HomeScene::IsDisposed(box))

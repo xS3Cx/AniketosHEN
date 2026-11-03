@@ -7,6 +7,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STBI_ONLY_GIF
@@ -28,8 +29,16 @@ enum {
   AVATAR_CODEC_MAX_BYTES = 110 * 1024,
   AVATAR_CODEC_MAX_DIMENSION = 4096,
   AVATAR_CODEC_MAX_PIXELS = 16 * 1024 * 1024,
+  AVATAR_CODEC_KEPT_SIDE = 256, /* the largest size encoded */
   AVATAR_CODEC_PATH_SIZE = 4096
 };
+
+/* The frames kept for encoding, their middle square at KEPT_SIDE. */
+typedef struct {
+  unsigned char *pixels[AVATAR_CODEC_MAX_FRAMES];
+  int delay[AVATAR_CODEC_MAX_FRAMES]; /* milliseconds, then centiseconds */
+  int count;
+} Kept;
 
 static void set_error(char *error, unsigned long error_size, const char *text) {
   if (!error || error_size == 0)
@@ -138,40 +147,86 @@ int avatar_codec_cache_valid(const char *source, const char *cache) {
   return meta_matches(cache, source_size, source_mtime);
 }
 
-static MsfGifResult encode_target(const unsigned char *frames, int width,
-                                  int height, int sample_count,
-                                  const int *sample_index,
-                                  const int *sample_delay, int target) {
-  const int side = width < height ? width : height;
-  const int crop_x = (width - side) / 2;
-  const int crop_y = (height - side) / 2;
-  const size_t row_bytes = (size_t)side * 4u;
-  unsigned char *crop = (unsigned char *)malloc(row_bytes * (size_t)side);
+/* stbi_load_gif_from_memory keeps every frame whole (92 MB for 480x480 x 100,
+   about twice that while its buffer grows) and reads a frame that restores
+   the one before from in front of that buffer. Here the frames come one at a
+   time, with a pause after each as this runs beside ShellUI's UI thread; when
+   AVATAR_CODEC_MAX_FRAMES are kept, every second one is dropped and its time
+   given to the one before it. */
+static int decode_kept(const unsigned char *data, size_t size, Kept *kept) {
+  stbi__context context;
+  stbi__gif *gif = (stbi__gif *)calloc(1, sizeof(stbi__gif));
+  int step = 1;
+  int comp = 0;
+  int ok = gif != NULL;
+  stbi__start_mem(&context, data, (int)size);
+  for (int frame = 0; ok; ++frame) {
+    /* the canvas before the last frame is what disposal 3 restores */
+    unsigned char *canvas =
+        stbi__gif_load_next(&context, gif, &comp, 4, gif->background);
+    if (!canvas || canvas == (unsigned char *)&context)
+      break;
+    if (frame / step == AVATAR_CODEC_MAX_FRAMES) {
+      for (int i = 0; i < AVATAR_CODEC_MAX_FRAMES / 2; ++i) {
+        free(kept->pixels[2 * i + 1]);
+        kept->pixels[i] = kept->pixels[2 * i];
+        kept->delay[i] = kept->delay[2 * i] + kept->delay[2 * i + 1];
+      }
+      kept->count = AVATAR_CODEC_MAX_FRAMES / 2;
+      step *= 2;
+    }
+    if (frame % step == 0) {
+      const int side = gif->w < gif->h ? gif->w : gif->h;
+      const size_t corner =
+          ((size_t)((gif->h - side) / 2) * (size_t)gif->w + (gif->w - side) / 2) *
+          4u;
+      unsigned char *pixels = (unsigned char *)malloc(
+          (size_t)AVATAR_CODEC_KEPT_SIDE * AVATAR_CODEC_KEPT_SIDE * 4u);
+      ok = pixels && stbir_resize_uint8_srgb(canvas + corner, side, side,
+                                             gif->w * 4, pixels,
+                                             AVATAR_CODEC_KEPT_SIDE,
+                                             AVATAR_CODEC_KEPT_SIDE, 0,
+                                             STBIR_RGBA);
+      kept->pixels[kept->count] = pixels;
+      kept->delay[kept->count++] = 0;
+    }
+    if (kept->delay[kept->count - 1] < 655350)
+      kept->delay[kept->count - 1] += gif->delay;
+    usleep(1000);
+  }
+  if (gif) {
+    STBI_FREE(gif->out);
+    STBI_FREE(gif->history);
+    STBI_FREE(gif->background);
+  }
+  free(gif);
+  for (int i = 0; i < kept->count; ++i) {
+    const int centiseconds = kept->delay[i] / 10;
+    kept->delay[i] = centiseconds < 2       ? 2
+                     : centiseconds > 65535 ? 65535
+                                            : centiseconds;
+  }
+  return ok && kept->count > 0;
+}
+
+static MsfGifResult encode_target(const Kept *kept, int target) {
   unsigned char *resized =
       (unsigned char *)malloc((size_t)target * (size_t)target * 4u);
   MsfGifState state = {0};
   MsfGifResult result = {0};
   int ok = 1;
   msf_gif_alpha_threshold = 128;
-  if (!crop || !resized || !msf_gif_begin(&state, target, target)) {
-    free(crop);
+  if (!resized || !msf_gif_begin(&state, target, target)) {
     free(resized);
     return result;
   }
-  for (int i = 0; ok && i < sample_count; ++i) {
-    const unsigned char *frame =
-        frames + (size_t)sample_index[i] * (size_t)width * (size_t)height * 4u;
-    for (int y = 0; y < side; ++y) {
-      memcpy(crop + (size_t)y * row_bytes,
-             frame +
-                 ((size_t)(crop_y + y) * (size_t)width + (size_t)crop_x) * 4u,
-             row_bytes);
-    }
-    ok = stbir_resize_uint8_srgb(crop, side, side, 0, resized, target, target,
-                                 0, STBIR_RGBA) &&
-         msf_gif_frame(&state, resized, sample_delay[i], 8, 0);
+  for (int i = 0; ok && i < kept->count; ++i) {
+    ok = stbir_resize_uint8_srgb(kept->pixels[i], AVATAR_CODEC_KEPT_SIDE,
+                                 AVATAR_CODEC_KEPT_SIDE, 0, resized, target,
+                                 target, 0, STBIR_RGBA) &&
+         msf_gif_frame(&state, resized, kept->delay[i], 8, 0);
+    usleep(1000);
   }
-  free(crop);
   free(resized);
   result = msf_gif_end(&state);
   if (!ok || !result.data || result.dataSize == 0) {
@@ -182,15 +237,11 @@ static MsfGifResult encode_target(const unsigned char *frames, int width,
 }
 
 /* The largest size that stays under the limit; no data when none does. */
-static MsfGifResult encode_within_limit(const unsigned char *frames, int width,
-                                        int height, int sample_count,
-                                        const int *sample_index,
-                                        const int *sample_delay) {
-  static const int targets[] = {256, 192, 128};
+static MsfGifResult encode_within_limit(const Kept *kept) {
+  static const int targets[] = {AVATAR_CODEC_KEPT_SIDE, 192, 128};
   MsfGifResult encoded = {0};
   for (size_t i = 0; i < sizeof(targets) / sizeof(targets[0]); ++i) {
-    encoded = encode_target(frames, width, height, sample_count, sample_index,
-                            sample_delay, targets[i]);
+    encoded = encode_target(kept, targets[i]);
     if (encoded.dataSize <= AVATAR_CODEC_MAX_BYTES && encoded.data)
       return encoded;
     msf_gif_free(encoded);
@@ -217,47 +268,16 @@ static int write_meta(const char *source, const char *cache) {
   return save_file(meta_path, text, (size_t)length) ? 0 : -1;
 }
 
-/* Spreads the frames over at most AVATAR_CODEC_MAX_FRAMES samples, each
-   lasting as long as the frames it stands for. */
-static int sample_frames(const int *delays, int frames, int *sample_index,
-                         int *sample_delay) {
-  const int sample_count =
-      frames < AVATAR_CODEC_MAX_FRAMES ? frames : AVATAR_CODEC_MAX_FRAMES;
-  for (int i = 0; i < sample_count; ++i) {
-    const int begin = (int)((long long)i * frames / sample_count);
-    const int end = (int)((long long)(i + 1) * frames / sample_count);
-    long long total = 0;
-    int centiseconds = 0;
-    for (int j = begin; j < end; ++j)
-      total += delays[j];
-    centiseconds = (int)(total / 10);
-    if (centiseconds < 2)
-      centiseconds = 2;
-    if (centiseconds > 65535)
-      centiseconds = 65535;
-    sample_index[i] = begin;
-    sample_delay[i] = centiseconds;
-  }
-  return sample_count;
-}
-
 int avatar_codec_fit(const char *source, const char *cache, char *error,
                      unsigned long error_size) {
   unsigned char *data = NULL;
-  unsigned char *pixels = NULL;
-  int *delays = NULL;
-  int sample_index[AVATAR_CODEC_MAX_FRAMES];
-  int sample_delay[AVATAR_CODEC_MAX_FRAMES];
+  Kept kept = {0};
   MsfGifResult encoded;
   size_t data_size = 0;
-  int width = 0;
-  int height = 0;
-  int frames = 0;
-  int comp = 0;
   int info_width = 0;
   int info_height = 0;
   int info_comp = 0;
-  int sample_count = 0;
+  int decoded = 0;
   int result = -1;
   if (!source || !cache) {
     set_error(error, error_size, "invalid arguments");
@@ -280,22 +300,15 @@ int avatar_codec_fit(const char *source, const char *cache, char *error,
   }
   if (!avatar_codec_decode_fits(data, data_size)) {
     free(data);
-    set_error(error, error_size, "too many frames");
+    set_error(error, error_size, "too big to decode");
     return -1;
   }
-  pixels = stbi_load_gif_from_memory(data, (int)data_size, &delays, &width,
-                                     &height, &frames, &comp, 4);
+  decoded = decode_kept(data, data_size, &kept);
   free(data);
-  if (!pixels || !delays || frames <= 0 || width <= 0 || height <= 0) {
-    stbi_image_free(pixels);
-    free(delays);
+  encoded = decoded ? encode_within_limit(&kept) : (MsfGifResult){0};
+  if (!decoded) {
     set_error(error, error_size, "decode failed");
-    return -1;
-  }
-  sample_count = sample_frames(delays, frames, sample_index, sample_delay);
-  encoded = encode_within_limit(pixels, width, height, sample_count,
-                                sample_index, sample_delay);
-  if (!encoded.data) {
+  } else if (!encoded.data) {
     set_error(error, error_size, "output too large");
   } else if (!save_file(cache, encoded.data, encoded.dataSize)) {
     set_error(error, error_size, "write failed");
@@ -306,7 +319,7 @@ int avatar_codec_fit(const char *source, const char *cache, char *error,
     result = 0;
   }
   msf_gif_free(encoded);
-  stbi_image_free(pixels);
-  free(delays);
+  for (int i = 0; i < kept.count; ++i)
+    free(kept.pixels[i]);
   return result;
 }

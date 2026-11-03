@@ -75,14 +75,10 @@ bool build_image(MonoObject *root, const std::string &path) {
     return false;
   }
   s_image_widget = mono_gchandle_new(box, /*pinned=*/1);
-  MonoObject *asset = image_asset(path.c_str());
-  if (!asset)
-    return false;
   const ScreenSize size = size_of(root);
   /* fill the screen, cropping what does not fit */
   prepare_layer(box, size, kImageWidgetName, "AspectOutside");
-  void *image_arguments[1] = {asset};
-  if (!call(box, "set_Image", 1, image_arguments) || !put_first(root, box))
+  if (!load_image(box, path.c_str()) || !put_first(root, box))
     return false;
   LOG_INFO("[HOMEIMAGE] showing '%s' %.0fx%.0f", path.c_str(), size.width,
            size.height);
@@ -91,27 +87,12 @@ bool build_image(MonoObject *root, const std::string &path) {
 
 } // namespace
 
-/* A PUI picture of the file at `path`, or null. */
-MonoObject *image_asset(const char *path) {
-  MonoImage *pui = getDLLimage("Sce.PlayStation.PUI.dll");
-  MonoClass *asset_class =
-      pui ? mono_class_from_name(pui, "Sce.PlayStation.PUI", "ImageAsset")
-          : nullptr;
-  MonoMethod *asset_ctor =
-      asset_class ? overload_of(asset_class, ".ctor", 1, "String") : nullptr;
-  MonoObject *asset =
-      asset_ctor ? mono_object_new(mono_domain_get(), asset_class) : nullptr;
-  if (!asset) {
-    LOG_ERROR("[HOMEIMAGE] no ImageAsset class=%d ctor=%d",
-              asset_class ? 1 : 0, asset_ctor ? 1 : 0);
-    return nullptr;
-  }
-  void *asset_arguments[1] = {mono_string_new(mono_domain_get(), path)};
-  if (!invoke(asset, asset_ctor, asset_arguments)) {
-    LOG_ERROR("[HOMEIMAGE] '%s' could not be opened", path);
-    return nullptr;
-  }
-  return asset;
+/* The file at `path` into an image box, through the box's own loader. An
+   ImageAsset made from the path stays empty on the stage ("[ImageAsset:
+   null]"): pictures there never showed. */
+bool load_image(MonoObject *box, const char *path) {
+  void *arguments[1] = {mono_string_new(mono_domain_get(), path)};
+  return call(box, "LoadAsync", 1, arguments);
 }
 
 /* Twice a second: the picture on screen is the one wanted, on the stage, under

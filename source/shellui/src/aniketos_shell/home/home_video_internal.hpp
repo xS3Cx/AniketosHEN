@@ -63,7 +63,7 @@ void tick_stage();
 bool stage_wanted();
 
 /* home_picture.cpp */
-MonoObject *image_asset(const char *path);
+bool load_image(MonoObject *box, const char *path);
 void tick_image(bool video_shown);
 MonoObject *picture_widget();
 

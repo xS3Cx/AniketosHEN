@@ -14,8 +14,9 @@ namespace AvatarImage {
    them it refuses the file and the image box shows its error picture. */
 constexpr long kMaxPixels = 90000; /* 300x300 */
 constexpr int kMaxFrames = 150;
-/* The most avatar_codec may decode: stb keeps every frame in one buffer, so a
-   small file can ask for far more than ShellUI has. */
+/* The most avatar_codec may decode inside ShellUI: one frame at a time, but
+   stb holds 9 bytes a pixel of the canvas, and every frame costs time. */
+constexpr long kMaxCanvasPixels = 1920 * 1080;
 constexpr uint64_t kMaxDecodedBytes = 256 * 1024 * 1024;
 
 enum class Format { Unknown, Gif, WebP, Png, Jpeg };
@@ -129,8 +130,9 @@ inline Problem Check(const Info &info) {
 }
 
 inline bool DecodeFits(const Info &info) {
-  return static_cast<uint64_t>(info.width) * info.height * 4 * info.frames <=
-         kMaxDecodedBytes;
+  return static_cast<long>(info.width) * info.height <= kMaxCanvasPixels &&
+         static_cast<uint64_t>(info.width) * info.height * 4 * info.frames <=
+             kMaxDecodedBytes;
 }
 
 } // namespace AvatarImage

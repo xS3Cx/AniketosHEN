@@ -110,13 +110,6 @@ void resolve_host() {
 }
 
 void request_toggle() {
-  std::string running_title;
-  int running_app_id = -1;
-  if (Get_Running_App_TID(running_title, running_app_id)) {
-    LOG_INFO("[ANIVSH:INPUT] shell toggle ignored in game title=%s; use game mod shortcut",
-             running_title.c_str());
-    return;
-  }
   if (!s_host.root)
     resolve_host();
   ShellMenu::Toggle();
@@ -164,7 +157,14 @@ void Tick() {
       big_app_running = sceSystemServiceGetAppIdOfRunningBigApp() >= 0;
     }
   }
-  if (big_app_running) {
+  /* In front, not merely running: a game left running behind Home or a
+     system app hands the Shell Menu back to them until it has the screen
+     again. Under the Control Center and our cards over a game the layer
+     stays Game; without the field the running BigApp is all there is. */
+  const FocusLayer focus =
+      big_app_running ? CurrentFocusLayer() : FocusLayer::Unknown;
+  if (big_app_running && focus != FocusLayer::TopMenu &&
+      focus != FocusLayer::ShellApp) {
     if (!s_game_session_active) {
       std::string running_title;
       int running_app_id = -1;

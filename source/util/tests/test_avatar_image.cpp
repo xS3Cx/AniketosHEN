@@ -139,6 +139,9 @@ int test_a_gif_too_big_to_decode_is_turned_down() {
   TEST_ASSERT_TRUE(DecodeFits(inspect(gif(480, 480, 291))));
   TEST_ASSERT_TRUE(!DecodeFits(inspect(gif(480, 480, 292))));
   TEST_ASSERT_TRUE(!DecodeFits(inspect(gif(65535, 65535, 1))));
+  /* a few frames on a big canvas: stb's canvas alone would be 36 MB */
+  TEST_ASSERT_TRUE(DecodeFits(inspect(gif(1920, 1080, 2))));
+  TEST_ASSERT_TRUE(!DecodeFits(inspect(gif(2048, 2048, 1))));
   return 0;
 }
 

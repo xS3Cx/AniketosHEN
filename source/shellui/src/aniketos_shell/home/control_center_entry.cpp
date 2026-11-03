@@ -162,8 +162,12 @@ MonoMethod *string_constructor(MonoClass *klass) {
 /* An ImageAsset of our icon, made once. */
 MonoObject *icon_asset() {
   const char *path = AniketosIconPath();
-  if (s_icon_for != path)
+  if (s_icon_for != path) {
+    /* another colour: what the button shows is no longer ours to keep */
     Reflect::Release(s_icon_handle);
+    Reflect::Release(s_icon_shown_handle);
+    Reflect::Release(s_inverted_icon_shown_handle);
+  }
   s_icon_for = path;
   if (MonoObject *asset = Reflect::Target(s_icon_handle))
     return asset;

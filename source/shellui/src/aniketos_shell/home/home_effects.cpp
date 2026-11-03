@@ -71,9 +71,7 @@ MonoObject *build_effect(MonoObject *root, int effect) {
     const char *path = HomeEffectImagePath(effect == kVignette
                                                ? HomeEffectImage::Vignette
                                                : HomeEffectImage::Edges);
-    MonoObject *asset = path && path[0] ? image_asset(path) : nullptr;
-    void *image_arguments[1] = {asset};
-    if (!asset || !call(widget, "set_Image", 1, image_arguments))
+    if (!path || !path[0] || !load_image(widget, path))
       return nullptr;
     /* stretched over the whole screen, whatever its shape */
     set_scale(widget, "Stretch");

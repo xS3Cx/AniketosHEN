@@ -18,6 +18,7 @@
 #include "aniketos_shell/core/embedded_assets.hpp"
 #include "aniketos_shell/rn_scripts/rn_reload.hpp"
 #include "aniketos_shell/home/home_bookmark.hpp"
+#include "aniketos_shell/home/home_particles.hpp"
 #include "aniketos_shell/home/hidden_apps.hpp"
 #include "aniketos_shell/home/home_tabs.hpp"
 #include "aniketos_shell/home/title_info.hpp"
@@ -367,7 +368,8 @@ void LeaveGameSession() {
   if (!s_game_session)
     return;
 
-  // BigApp is already gone here. Never call into the dying Scene.Game tree.
+  // The game has left the screen or is gone already. Never call into a dying
+  // Scene.Game tree.
   release_bound_host(false);
   s_stack = s_shell_stack.empty() ? std::vector<PageState>{PageState{}}
                                   : s_shell_stack;
