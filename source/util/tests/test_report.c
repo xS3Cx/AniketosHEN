@@ -229,6 +229,59 @@ static int test_report_file_names(void) {
   return 0;
 }
 
+/* The sender deletes what is not a report, so a file it could not read must
+   never look like one that was read and failed the check. */
+static int test_report_read_tells_failure_from_damage(void) {
+  char base[] = "/tmp/onion-read-XXXXXX";
+  TEST_ASSERT_TRUE(mkdtemp(base) != NULL);
+  char dir[128], path[256] = {0}, junk[160], link_path[160], out[ONION_REPORT_MAX_BYTES];
+  snprintf(dir, sizeof(dir), "%s/reports", base);
+  TEST_ASSERT_TRUE(onion_report_write(dir, "boot", "v1.0", "body"));
+  DIR *handle = opendir(dir);
+  TEST_ASSERT_TRUE(handle != NULL);
+  struct dirent *entry;
+  while ((entry = readdir(handle)) != NULL) {
+    if (entry->d_name[0] != '.')
+      snprintf(path, sizeof(path), "%s/%s", dir, entry->d_name);
+  }
+  closedir(handle);
+
+  size_t length = 0;
+  TEST_ASSERT_EQ_INT(ONION_REPORT_READ_OK,
+                     onion_report_read(path, out, &length));
+  TEST_ASSERT_TRUE(length > strlen(ONION_REPORT_MAGIC));
+  TEST_ASSERT_TRUE(memcmp(out, ONION_REPORT_MAGIC,
+                          strlen(ONION_REPORT_MAGIC)) == 0);
+
+  snprintf(junk, sizeof(junk), "%s/junk.txt", base);
+  FILE *file = fopen(junk, "wb");
+  TEST_ASSERT_TRUE(file != NULL);
+  fputs("not a report", file);
+  fclose(file);
+  TEST_ASSERT_EQ_INT(ONION_REPORT_READ_NOT_OURS,
+                     onion_report_read(junk, out, &length));
+
+  /* An empty file is read, and is no report. */
+  file = fopen(junk, "wb");
+  TEST_ASSERT_TRUE(file != NULL);
+  fclose(file);
+  TEST_ASSERT_EQ_INT(ONION_REPORT_READ_NOT_OURS,
+                     onion_report_read(junk, out, &length));
+
+  /* The open fails, then the read does (a directory opens, and reads fail). */
+  snprintf(link_path, sizeof(link_path), "%s/missing.txt", base);
+  TEST_ASSERT_EQ_INT(ONION_REPORT_READ_FAILED,
+                     onion_report_read(link_path, out, &length));
+  TEST_ASSERT_EQ_INT(ONION_REPORT_READ_FAILED,
+                     onion_report_read(dir, out, &length));
+
+  unlink(junk);
+  unlink(path);
+  rmdir(dir);
+  rmdir(base);
+  return 0;
+}
+
 int test_report_suite(void) {
   int failures = 0;
   failures += onion_test_run("report_console_identifiers",
@@ -246,5 +299,7 @@ int test_report_suite(void) {
   failures += onion_test_run("report_tail_whole_first_line",
                              test_tail_keeps_a_whole_first_line);
   failures += onion_test_run("report_file_names", test_report_file_names);
+  failures += onion_test_run("report_read_failure_or_damage",
+                             test_report_read_tells_failure_from_damage);
   return failures;
 }

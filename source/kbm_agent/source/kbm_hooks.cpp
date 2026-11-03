@@ -399,16 +399,19 @@ bool system_module(const char *name) {
   return n >= 5 && memcmp(name + n - 5, ".sprx", 5) == 0;
 }
 
+bool module_info(int32_t handle, ModuleInfo *info) {
+  memset(info, 0, sizeof(*info));
+  info->size = sizeof(*info);
+  return sceKernelGetModuleInfo(handle, info) == 0;
+}
+
 /* Calls visit(segment, module name) for the data segments of the game's own
    modules among `handles`, until it returns false. */
 template <typename Visit>
 void for_each_game_segment(const int32_t *handles, size_t count, Visit visit) {
   for (size_t h = 0; h < count; ++h) {
     ModuleInfo info;
-    memset(&info, 0, sizeof(info));
-    info.size = sizeof(info);
-    if (sceKernelGetModuleInfo(handles[h], &info) != 0 ||
-        system_module(info.name))
+    if (!module_info(handles[h], &info) || system_module(info.name))
       continue;
     const uint32_t segments = info.segment_count < 4 ? info.segment_count : 4;
     for (uint32_t s = 0; s < segments; ++s) {
@@ -478,10 +481,13 @@ void scan() {
   size_t count = 0;
   if (sceKernelGetModuleList(handles, kMaxModules, &count) != 0 ||
       count > kMaxModules) {
-    /* shortcut: sweep low handle numbers when the list is refused */
-    count = kMaxModules;
-    for (size_t i = 0; i < kMaxModules; ++i)
-      handles[i] = int32_t(i);
+    /* refused: the low handle numbers that answer stand in for the list */
+    count = 0;
+    for (int32_t handle = 0; handle < int32_t(kMaxModules); ++handle) {
+      ModuleInfo info;
+      if (module_info(handle, &info))
+        handles[count++] = handle;
+    }
   }
   if (count == s_scanned_modules)
     return; /* nothing loaded or unloaded since the last scan */
@@ -565,21 +571,26 @@ void Unhook() {
   const uint32_t count = __atomic_load_n(&s_ctl->hook_count, __ATOMIC_ACQUIRE);
   for (uint32_t i = 0; i < count; ++i) {
     const uint32_t kind = s_ctl->hook_kinds[i];
-    const uint64_t slot = s_ctl->hook_slots[i];
-    uint32_t prot = 0;
-    if (kind >= kKindCount || !mapped(slot, &prot))
-      continue;
-    /* a failed swap writes too, and scan left this page read-only */
-    write_slot(slot, prot, [slot, kind, i] {
-      uint64_t expected = s_hook[kind];
-      __atomic_compare_exchange_n(reinterpret_cast<uint64_t *>(slot), &expected,
-                                  s_ctl->hook_originals[i], false,
-                                  __ATOMIC_ACQ_REL, __ATOMIC_RELAXED);
-    });
+    if (kind < kKindCount)
+      SwapSlot(reinterpret_cast<uint64_t *>(s_ctl->hook_slots[i]), s_hook[kind],
+               s_ctl->hook_originals[i]);
   }
   __atomic_store_n(&s_ctl->hook_count, 0u, __ATOMIC_RELEASE);
   __atomic_and_fetch(&s_ctl->agent_status, ~kStatusHooked, __ATOMIC_RELEASE);
   LOG("%u slot(s) restored", count);
+}
+
+void SwapSlot(uint64_t *slot, uint64_t from, uint64_t to) {
+  const uint64_t address = reinterpret_cast<uint64_t>(slot);
+  uint32_t prot = 0;
+  if (!mapped(address, &prot))
+    return;
+  /* a failed swap writes too, and scan left this page read-only */
+  write_slot(address, prot, [slot, from, to] {
+    uint64_t expected = from;
+    __atomic_compare_exchange_n(slot, &expected, to, false, __ATOMIC_ACQ_REL,
+                                __ATOMIC_RELAXED);
+  });
 }
 
 ControlPage *Control() { return s_ctl; }

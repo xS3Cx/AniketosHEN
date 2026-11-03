@@ -357,6 +357,31 @@ bool onion_report_write(const char *dir, const char *kind, const char *build,
   return ok;
 }
 
+OnionReportRead onion_report_read(const char *path, char *out, size_t *length) {
+  const int fd = open(path, O_RDONLY | O_NOFOLLOW);
+  if (fd < 0)
+    return ONION_REPORT_READ_FAILED;
+  size_t used = 0;
+  while (used < ONION_REPORT_MAX_BYTES) {
+    const ssize_t got = read(fd, out + used, ONION_REPORT_MAX_BYTES - used);
+    if (got == 0)
+      break;
+    if (got < 0 && errno == EINTR)
+      continue;
+    if (got < 0) {
+      close(fd);
+      return ONION_REPORT_READ_FAILED;
+    }
+    used += (size_t)got;
+  }
+  close(fd);
+  *length = used;
+  const size_t magic = strlen(ONION_REPORT_MAGIC);
+  return used >= magic && memcmp(out, ONION_REPORT_MAGIC, magic) == 0
+             ? ONION_REPORT_READ_OK
+             : ONION_REPORT_READ_NOT_OURS;
+}
+
 size_t onion_report_append_tail(char *out, size_t out_cap, const char *label,
                                 const char *path, size_t max_bytes) {
   if (!out || out_cap == 0)

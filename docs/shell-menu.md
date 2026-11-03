@@ -204,8 +204,8 @@ wallpapers are untouched.
 `source/shellui/src/aniketos_theme/icon_color/` finds the PUI type that
 exposes `IconFilterColor`, checks that its setter is `void(UIColor)`, and only
 then installs a detour. The detour replaces the colour and tracks each object
-it sees, so turning the feature off puts them back to plain white, the stock
-colour. If the setter is never called, the existing
+it sees with the colour the system asked for, so turning the feature off gives
+each one that colour back, once. If the setter is never called, the existing
 `StyleManager.TryGetComponentTokenColor` hook is the fallback: component
 tokens whose key contains `icon` take the chosen colour, preserving alpha.
 

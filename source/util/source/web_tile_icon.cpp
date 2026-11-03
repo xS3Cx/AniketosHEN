@@ -50,7 +50,10 @@ bool save(const std::string &id, const std::vector<uint8_t> &bytes) {
   if (bytes.empty() || (mkdir(kDir, 0777) != 0 && errno != EEXIST))
     return false;
   const std::string path = std::string(kDir) + "/" + id + ".png";
-  return write_file_atomic(path.c_str(), bytes.data(), bytes.size());
+  if (!write_file_atomic(path.c_str(), bytes.data(), bytes.size()))
+    return false;
+  chmod(path.c_str(), 0644); /* write_file_atomic leaves 0777 */
+  return true;
 }
 
 /* Saved in a form the system's reader takes; false when these bytes are no

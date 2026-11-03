@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <mutex>
 #include <string>
+#include <sys/stat.h>
 #include <utility>
 #include <vector>
 
@@ -114,6 +115,7 @@ bool write_titles(const std::vector<std::string> &titles) {
     LOG_ERROR("[HIDDEN] could not save %s", kFile);
     return false;
   }
+  chmod(kFile, 0644); /* write_file_atomic leaves 0777 */
   return true;
 }
 

@@ -563,8 +563,12 @@ void Tick() {
 void FilterPad(GamePadData &data) {
   if (data.Buttons & Enter)
     s_circle_is_enter = (data.Buttons & Circle) != 0;
-  if (!s_active.load())
+  if (!s_active.load()) {
+    /* a press stand_down let go of ends now, not when the pointer is back */
+    const uint32_t released = s_pad_up.exchange(0);
+    data.ButtonsUp = static_cast<GamePadButtons>(data.ButtonsUp | released);
     return;
+  }
   uint32_t held = s_pad_held.load();
   uint32_t down = s_pad_down.exchange(0);
   uint32_t up = s_pad_up.exchange(0);

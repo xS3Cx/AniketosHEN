@@ -3,10 +3,10 @@
 #include "aniketos_theme/customization.hpp"
 #include "aniketos_theme/icon_color.hpp"
 #include "aniketos_ui/mono_reflect.hpp"
-#include "aniketos_ui/monotonic_clock.hpp"
 
 #include <onion/log.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 
@@ -16,15 +16,14 @@ namespace {
 namespace Reflect = AniketosUI::Reflect;
 
 constexpr size_t kMaxTracked = 4096;
-constexpr uint64_t kWhiteHoldMs = 250;
-constexpr uint64_t kWhiteHoldLogMs = 1000;
+constexpr size_t kMinPruneAt = 256;
 constexpr float kRainbowStep = 0.001f;
 constexpr UIColor kWhite{1.0f, 1.0f, 1.0f, 1.0f, 0};
 
 struct TrackedIcon {
   uint32_t handle = 0; /* weak */
   MonoMethod *setter = nullptr;
-  UIColor restore{};
+  UIColor restore{}; /* as the system last set it */
 };
 
 struct ApplyCount {
@@ -36,15 +35,20 @@ std::vector<TrackedIcon> s_tracked;
 UIColor s_last_rainbow{};
 bool s_has_last_rainbow = false;
 bool s_logged_capacity = false;
-uint64_t s_last_white_ms = 0;
-uint64_t s_last_white_log_ms = 0;
+/* The setter hooks track in every state: the list is pruned when it doubles. */
+size_t s_prune_at = kMinPruneAt;
+/* The icon set_color is writing: its setter hook sees our colour there. */
+MonoObject *s_being_set = nullptr;
+/* The chosen colour can be on icons, so the option going off has to take it
+   away. */
+bool s_tint_shown = false;
 
-bool is_tracked(MonoObject *object) {
-  for (const TrackedIcon &entry : s_tracked) {
+TrackedIcon *find_tracked(MonoObject *object) {
+  for (TrackedIcon &entry : s_tracked) {
     if (Reflect::Target(entry.handle) == object)
-      return true;
+      return &entry;
   }
-  return false;
+  return nullptr;
 }
 
 /* `drop` holds indices in ascending order. */
@@ -64,6 +68,7 @@ void prune_tracked() {
       drop.push_back(i);
   }
   erase_tracked(drop);
+  s_prune_at = std::max(kMinPruneAt, s_tracked.size() * 2);
 }
 
 bool on_screen(MonoObject *object) {
@@ -99,27 +104,30 @@ ApplyCount apply_to_visible(const UIColor &color) {
   return count;
 }
 
-size_t apply_all(const UIColor &color) {
+void apply_all(const UIColor &color) {
   prune_tracked();
   const ApplyCount count = apply_to_visible(color);
   LOG_INFO("[ICONCOLOR] live apply count=%zu skipped=%zu", count.applied,
            count.skipped);
-  return count.applied;
 }
 
-void hold_white() {
-  if (s_tracked.empty())
-    return;
-  const uint64_t now = AniketosUI::MonotonicMs();
-  if (s_last_white_ms && now - s_last_white_ms < kWhiteHoldMs)
-    return;
-  s_last_white_ms = now;
+/* Hidden icons too: this runs once, so nothing comes back to them later. */
+void restore_tracked() {
   prune_tracked();
-  const size_t applied = apply_to_visible(kWhite).applied;
-  if (now - s_last_white_log_ms >= kWhiteHoldLogMs) {
-    s_last_white_log_ms = now;
-    LOG_INFO("[ICONCOLOR] white hold count=%zu", applied);
+  size_t restored = 0;
+  std::vector<size_t> drop;
+  /* By index: a setter can track more icons, which moves the list. */
+  for (size_t i = 0; i < s_tracked.size(); ++i) {
+    MonoObject *object = Reflect::Target(s_tracked[i].handle);
+    if (!object || object_disposed(object))
+      continue;
+    if (set_color(s_tracked[i].setter, object, s_tracked[i].restore))
+      ++restored;
+    else
+      drop.push_back(i);
   }
+  erase_tracked(drop);
+  LOG_INFO("[ICONCOLOR] system colours back count=%zu", restored);
 }
 
 bool any_on_screen() {
@@ -141,7 +149,7 @@ bool same_as_last_rainbow(const UIColor &color) {
 
 void track_object(MonoObject *object, MonoMethod *setter,
                   const UIColor &restore) {
-  if (!object || !setter || is_tracked(object))
+  if (!object || !setter || find_tracked(object))
     return;
   if (s_tracked.size() >= kMaxTracked) {
     if (!s_logged_capacity) {
@@ -158,10 +166,23 @@ void track_object(MonoObject *object, MonoMethod *setter,
     s_tracked.push_back(entry);
 }
 
+void note_system_color(MonoObject *object, MonoMethod *setter,
+                       const UIColor &color) {
+  if (object == s_being_set)
+    return;
+  if (TrackedIcon *entry = find_tracked(object))
+    entry->restore = color;
+  else
+    track_object(object, setter, color);
+}
+
 bool set_color(MonoMethod *setter, MonoObject *object, UIColor color) {
   void *args[1] = {&color};
   MonoObject *exception = nullptr;
+  MonoObject *const outer = s_being_set;
+  s_being_set = object;
   mono_runtime_invoke(setter, object, args, &exception);
+  s_being_set = outer;
   return !exception;
 }
 
@@ -178,10 +199,16 @@ bool tint_image(MonoObject *object) {
 }
 
 void Tick() {
+  if (s_tracked.size() >= s_prune_at)
+    prune_tracked();
   if (!feature_on()) {
-    hold_white();
+    if (s_tint_shown) {
+      s_tint_shown = false;
+      restore_tracked();
+    }
     return;
   }
+  s_tint_shown = true;
   if (g_settings.system_icon_color_animation != 1 || s_tracked.empty())
     return;
   prune_tracked();
@@ -198,11 +225,8 @@ void Tick() {
 void RequestApply() {
   restart_rainbow();
   s_has_last_rainbow = false;
-  if (!feature_on()) {
-    const size_t count = apply_all(kWhite);
-    LOG_INFO("[ICONCOLOR] live white count=%zu", count);
-    return;
-  }
+  if (!feature_on())
+    return; /* Tick brings the system colours back */
   apply_all(current_color());
   run_scene_scan();
 }

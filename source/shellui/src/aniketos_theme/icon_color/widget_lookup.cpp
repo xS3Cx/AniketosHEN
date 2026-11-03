@@ -4,7 +4,7 @@
 #include "aniketos_ui/mono_reflect.hpp"
 #include "hooked_funcs.hpp"
 
-#include <onion/log.h>
+#include <unordered_map>
 
 namespace AniketosTheme::IconColor {
 namespace {
@@ -21,7 +21,7 @@ struct VisibilityProbe {
 };
 
 std::vector<VisibilityProbe> s_visibility_cache;
-MonoMethod *s_disposed_getter = nullptr;
+std::unordered_map<MonoClass *, MonoMethod *> s_disposed_getters;
 
 MonoMethod *find_getter(MonoClass *klass, const char *property,
                         const char *method) {
@@ -57,6 +57,17 @@ MonoMethod *visibility_getter(MonoClass *klass) {
     getter = find_getter(klass, "Shown", "get_Shown");
   if (s_visibility_cache.size() < kMaxVisibilityCache)
     s_visibility_cache.push_back({klass, getter});
+  return getter;
+}
+
+/* Widget and Element each declare their own IsDisposed, with the flag in a
+   different place, so a Widget's getter cannot be used on an ImageElement. */
+MonoMethod *disposed_getter(MonoClass *klass) {
+  const auto known = s_disposed_getters.find(klass);
+  if (known != s_disposed_getters.end())
+    return known->second;
+  MonoMethod *getter = find_getter(klass, "IsDisposed", "get_IsDisposed");
+  s_disposed_getters.emplace(klass, getter);
   return getter;
 }
 
@@ -161,15 +172,13 @@ bool read_color(MonoMethod *getter, MonoObject *object, UIColor *color) {
   return true;
 }
 
-void resolve_disposed_getter(MonoClass *widget) {
-  s_disposed_getter = find_getter(widget, "IsDisposed", "get_IsDisposed");
-  if (!s_disposed_getter)
-    LOG_INFO("[ICONCOLOR] not found: IsDisposed getter");
-}
-
 bool object_disposed(MonoObject *object) {
+  if (!object)
+    return false;
   bool disposed = false;
-  return invoke_bool(s_disposed_getter, object, &disposed) && disposed;
+  return invoke_bool(disposed_getter(mono_object_get_class(object)), object,
+                     &disposed) &&
+         disposed;
 }
 
 bool object_visible(MonoObject *object) {

@@ -20,6 +20,7 @@
 #include <mutex>
 #include <pthread.h>
 #include <string>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <vector>
 
@@ -105,8 +106,11 @@ void save_locked() {
     cJSON_AddItemToArray(array, item);
   }
   const std::string text = onion_cjson::print_owned(root, true);
-  if (text.empty() || !write_file_atomic(kFile, text.data(), text.size()))
+  if (text.empty() || !write_file_atomic(kFile, text.data(), text.size())) {
     LOG_WARN("[WEBTILES] could not save %s", kFile);
+    return;
+  }
+  chmod(kFile, 0644); /* write_file_atomic leaves 0777 */
 }
 
 void changed_locked() {

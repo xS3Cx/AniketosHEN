@@ -32,22 +32,31 @@ bool PlayTest(Pattern pattern) {
   return result == 0;
 }
 
-bool SetVolumeAndConfirm(Volume volume) {
-  if (!s_set_buzzer || !s_set_dim_setting) {
+bool SetVolume(Volume volume) {
+  if (!s_set_dim_setting) {
     LOG_WARN("[ANIKETOSHEN:BUZZER] volume control unavailable on this firmware");
     return false;
   }
 
   const int level = static_cast<int>(volume);
   const int set_result = s_set_dim_setting(level);
-  if (set_result != 0) {
+  if (set_result != 0)
     LOG_WARN("[ANIKETOSHEN:BUZZER] set volume=%d result=%d", level,
              set_result);
+  return set_result == 0;
+}
+
+bool SetVolumeAndConfirm(Volume volume) {
+  if (!s_set_buzzer) {
+    LOG_WARN("[ANIKETOSHEN:BUZZER] volume control unavailable on this firmware");
     return false;
   }
+  if (!SetVolume(volume))
+    return false;
 
   const int beep_result = s_set_buzzer(static_cast<int>(Pattern::Short));
-  LOG_INFO("[ANIKETOSHEN:BUZZER] volume=%d confirm=%d", level, beep_result);
+  LOG_INFO("[ANIKETOSHEN:BUZZER] volume=%d confirm=%d",
+           static_cast<int>(volume), beep_result);
   return beep_result == 0;
 }
 

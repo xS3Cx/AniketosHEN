@@ -34,6 +34,7 @@ bool confirmed(const Option &option) {
    the menu edits. */
 void reset_vsh_settings() {
   const onion::Settings defaults{};
+  const int buzzer_volume = g_settings.vsh_buzzer_volume;
 #define ONION_SHELL_SETTING_BOOL(name, def) g_settings.name = defaults.name;
 #define ONION_SHELL_SETTING_INT(name, def) g_settings.name = defaults.name;
 #define ONION_SHELL_SETTING_FLOAT(name, def) g_settings.name = defaults.name;
@@ -53,6 +54,10 @@ void reset_vsh_settings() {
   g_settings.overlay_fps = defaults.overlay_fps;
   g_settings.overlay_fan = defaults.overlay_fan;
   g_settings.overlay_pos = defaults.overlay_pos;
+  /* only when the menu had moved it: the console's own setting is the user's */
+  if (g_settings.vsh_buzzer_volume != buzzer_volume)
+    (void)Buzzer::SetVolume(
+        static_cast<Buzzer::Volume>(g_settings.vsh_buzzer_volume));
   controller_stop_animation();
   PowerIndicator::RestoreNormal();
   reset_highlight_for_theme_change();

@@ -25,7 +25,8 @@ void Install(MonoImage *pui);
  * of a switch and a style is chosen; true then. */
 bool OnPanelBackground(MonoObject *panel, AniketosUI::UIColor &color);
 
-/* UI thread, once a frame: moves the added parts of the switches on screen. */
+/* UI thread, once a frame: moves the added parts of the switches on screen,
+ * and gives the switches back to the system when the style goes. */
 void Tick();
 
 /* Number of styles, the system's own included, and their names. */

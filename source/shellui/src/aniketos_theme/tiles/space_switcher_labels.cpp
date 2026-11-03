@@ -63,8 +63,10 @@ MonoObject *parent_of(MonoObject *object) {
     MonoMethod *getter = mono_class_get_method_from_name(klass, name, 0);
     if (!getter)
       continue;
-    if (MonoObject *parent =
-            mono_runtime_invoke(getter, object, nullptr, nullptr))
+    MonoObject *exception = nullptr;
+    MonoObject *parent =
+        mono_runtime_invoke(getter, object, nullptr, &exception);
+    if (!exception && parent)
       return parent;
   }
   return nullptr;

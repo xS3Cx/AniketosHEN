@@ -233,11 +233,17 @@ constexpr float kSwitchWidth = 64.0f, kSwitchHeight = 32.0f;
 constexpr const char *kPieceName = "id_aniketos_toggle_piece";
 
 struct Tracked {
-  uint32_t frame = 0; /* weak: the switch's own frame panel */
+  uint32_t owner = 0; /* weak: the switch */
+  uint32_t frame = 0; /* weak: its own frame panel, once the system coloured it */
+  uint32_t fill = 0;  /* weak: its thumb, the same */
   std::vector<uint32_t> pieces; /* weak: the panels the style added */
   int style = 0;
   bool on = false;
   uint64_t changed_ms = 0; /* when it changed position; 0: at rest */
+  /* What the style took off the system's two panels, for when it goes. */
+  UIColor frame_color{}, fill_color{};
+  float frame_border = 0.0f, fill_border = 0.0f;
+  bool frame_clip = false;
 };
 
 MonoClass *s_panel_class = nullptr;
@@ -290,11 +296,49 @@ void remove_pieces(Tracked &entry) {
   entry.pieces.clear();
 }
 
-Tracked *find(MonoObject *frame) {
+/* The system's own look back on a switch the style has left. */
+void restore(Tracked &entry) {
+  remove_pieces(entry);
+  if (MonoObject *frame = Reflect::Target(entry.frame)) {
+    set_property(frame, "set_ClipChildren", entry.frame_clip);
+    set_property(frame, "set_BorderWidth", entry.frame_border);
+    set_property(frame, "set_BackgroundColor", entry.frame_color);
+  }
+  if (MonoObject *fill = Reflect::Target(entry.fill)) {
+    set_property(fill, "set_BorderWidth", entry.fill_border);
+    set_property(fill, "set_BackgroundColor", entry.fill_color);
+  }
+}
+
+void forget(Tracked &entry) {
+  for (uint32_t &handle : entry.pieces)
+    Reflect::Release(handle);
+  Reflect::Release(entry.frame);
+  Reflect::Release(entry.fill);
+  Reflect::Release(entry.owner);
+}
+
+/* The entry of a switch, made the first time either of its panels is seen.
+   Null when no more can be tracked: that one keeps the system's look. */
+Tracked *tracked_switch(MonoObject *owner) {
   for (Tracked &entry : s_tracked)
-    if (Reflect::Target(entry.frame) == frame)
+    if (Reflect::Target(entry.owner) == owner)
       return &entry;
-  return nullptr;
+  /* drop the switches that are gone before taking a new one */
+  for (size_t i = 0; i < s_tracked.size();) {
+    if (Reflect::Target(s_tracked[i].owner)) {
+      ++i;
+      continue;
+    }
+    forget(s_tracked[i]);
+    s_tracked.erase(s_tracked.begin() + static_cast<long>(i));
+  }
+  if (s_tracked.size() >= 96)
+    return nullptr;
+  Tracked fresh;
+  Reflect::Hold(fresh.owner, owner);
+  s_tracked.push_back(std::move(fresh));
+  return &s_tracked.back();
 }
 
 /* The switch a frame or thumb panel belongs to, or null when the panel's
@@ -444,49 +488,48 @@ bool build(Tracked &entry, MonoObject *frame, const Style &style) {
   return true;
 }
 
-/* The system is colouring a switch's frame: make it ours. */
-void style_frame(MonoObject *frame, MonoObject *owner, const Style &style) {
+/* The system is colouring a switch's frame: make it ours. False when it could
+   not be: the frame stays the system's. */
+bool style_frame(Tracked &entry, MonoObject *frame, MonoObject *owner,
+                 const Style &style) {
+  const int wanted = wanted_style();
+  const bool same_frame = Reflect::Target(entry.frame) == frame;
+  const bool whole = same_frame && entry.style == wanted &&
+                     entry.pieces.size() == style.pieces.size() &&
+                     !entry.pieces.empty() &&
+                     Reflect::Target(entry.pieces.front());
+  if (!whole) {
+    remove_pieces(entry);
+    entry.style = wanted;
+    if (!same_frame) {
+      Reflect::Hold(entry.frame, frame);
+      Reflect::FloatProperty(frame, "get_BorderWidth", &entry.frame_border);
+      entry.frame_clip = boolean(frame, "get_ClipChildren", false);
+    }
+    if (!build(entry, frame, style)) {
+      remove_pieces(entry);
+      return false;
+    }
+    entry.on = boolean(owner, "get_Checked", false);
+    entry.changed_ms = 0;
+    place_all(entry, style, 0.0f, true);
+  }
   set_property(frame, "set_BorderWidth", 0.0f);
   set_property(frame, "set_ClipChildren", style.clip);
-  Tracked *entry = find(frame);
-  if (!entry) {
-    /* drop the switches that are gone before taking a new one */
-    for (size_t i = 0; i < s_tracked.size();) {
-      if (Reflect::Target(s_tracked[i].frame)) {
-        ++i;
-        continue;
-      }
-      for (uint32_t &handle : s_tracked[i].pieces)
-        Reflect::Release(handle);
-      Reflect::Release(s_tracked[i].frame);
-      s_tracked.erase(s_tracked.begin() + static_cast<long>(i));
-    }
-    if (s_tracked.size() >= 96 || !mono_gchandle_new_weakref)
-      return;
-    Tracked fresh;
-    fresh.frame = mono_gchandle_new_weakref(frame, false);
-    s_tracked.push_back(std::move(fresh));
-    entry = &s_tracked.back();
-  }
-  const int wanted = wanted_style();
-  const bool whole = entry->style == wanted &&
-                     entry->pieces.size() == style.pieces.size() &&
-                     !entry->pieces.empty() &&
-                     Reflect::Target(entry->pieces.front());
-  if (!whole) {
-    remove_pieces(*entry);
-    entry->style = wanted;
-    if (!build(*entry, frame, style))
-      return;
-    entry->on = boolean(owner, "get_Checked", false);
-    entry->changed_ms = 0;
-    place_all(*entry, style, 0.0f, true);
-  }
   if (!s_logged) {
     s_logged = true;
     LOG_INFO("[TOGGLES] first switch styled style='%s' pieces=%zu",
-             style.name, entry->pieces.size());
+             style.name, entry.pieces.size());
   }
+  return true;
+}
+
+void strip_fill(Tracked &entry, MonoObject *fill) {
+  if (Reflect::Target(entry.fill) != fill) {
+    Reflect::Hold(entry.fill, fill);
+    Reflect::FloatProperty(fill, "get_BorderWidth", &entry.fill_border);
+  }
+  set_property(fill, "set_BorderWidth", 0.0f);
 }
 
 } // namespace
@@ -512,7 +555,8 @@ bool OnPanelBackground(MonoObject *panel, UIColor &color) {
   if (s_own_calls > 0)
     return true; /* a panel of ours: as set, untouched by any theme */
   const Style *style = chosen();
-  if (!style || !panel || !shellui_hooks_are_ready())
+  if (!style || !panel || !s_panel_class || !mono_gchandle_new_weakref ||
+      !shellui_hooks_are_ready())
     return false;
   ++s_own_calls;
   bool styled = false;
@@ -520,16 +564,20 @@ bool OnPanelBackground(MonoObject *panel, UIColor &color) {
       Mono_to_String(reinterpret_cast<MonoString *>(call(panel, "get_Name")));
   const bool frame = name == "CheckBoxFrame";
   if (frame || name == "CheckBoxFill") {
-    if (MonoObject *owner = switch_of(panel)) {
+    MonoObject *owner = switch_of(panel);
+    if (Tracked *entry = owner ? tracked_switch(owner) : nullptr) {
       /* the system's two panels turn invisible; the style's own, on the
          frame, are what is seen */
       s_color_space = color.color_space;
-      color.a = 0.0f;
-      if (frame)
-        style_frame(panel, owner, *style);
-      else
-        set_property(panel, "set_BorderWidth", 0.0f);
-      styled = true;
+      (frame ? entry->frame_color : entry->fill_color) = color;
+      if (frame) {
+        styled = style_frame(*entry, panel, owner, *style);
+      } else {
+        strip_fill(*entry, panel);
+        styled = true;
+      }
+      if (styled)
+        color.a = 0.0f;
     }
   }
   --s_own_calls;
@@ -537,9 +585,19 @@ bool OnPanelBackground(MonoObject *panel, UIColor &color) {
 }
 
 void Tick() {
-  const Style *style = chosen();
-  if (s_tracked.empty() || !style)
+  if (s_tracked.empty())
     return;
+  const Style *style = chosen();
+  if (!style) {
+    ++s_own_calls;
+    for (Tracked &entry : s_tracked) {
+      restore(entry);
+      forget(entry);
+    }
+    s_tracked.clear();
+    --s_own_calls;
+    return;
+  }
   const uint64_t now = AniketosUI::MonotonicMs();
   ++s_own_calls;
   for (Tracked &entry : s_tracked) {

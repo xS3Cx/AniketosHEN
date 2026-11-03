@@ -52,4 +52,8 @@ ControlPage *Control();
    `fn`, made writable; at most `max`. For the IME forwarding in kbm_input. */
 int FindImportSlots(const void *fn, uint64_t **out, int max);
 
+/* Puts `to` in a slot that still holds `from`. A slot whose page has gone (its
+   module unloaded) is left alone. */
+void SwapSlot(uint64_t *slot, uint64_t from, uint64_t to);
+
 } // namespace onion::kbm::hooks

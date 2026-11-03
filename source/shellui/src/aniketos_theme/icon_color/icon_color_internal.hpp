@@ -45,7 +45,6 @@ MonoProperty *find_property_in_hierarchy(MonoClass *klass, const char *wanted);
 MonoType *setter_parameter(MonoMethod *method);
 bool uicolor_setter(MonoMethod *method);
 bool read_color(MonoMethod *getter, MonoObject *object, UIColor *color);
-void resolve_disposed_getter(MonoClass *widget);
 bool object_disposed(MonoObject *object);
 bool object_visible(MonoObject *object);
 bool is_image_box_descendant(MonoClass *klass);
@@ -58,6 +57,10 @@ void restart_rainbow();
 
 void track_object(MonoObject *object, MonoMethod *setter,
                   const UIColor &restore);
+/* A hooked setter's call: the colour the system wants, what is restored when
+   the option goes off. Our own set_color passes through here and is ignored. */
+void note_system_color(MonoObject *object, MonoMethod *setter,
+                       const UIColor &color);
 bool set_color(MonoMethod *setter, MonoObject *object, UIColor color);
 bool tint_image(MonoObject *object);
 

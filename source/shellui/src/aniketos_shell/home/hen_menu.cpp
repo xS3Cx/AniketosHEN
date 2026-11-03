@@ -48,8 +48,10 @@ constexpr const char *kCheatsIcon =
     ONION_DIST_USER_DATA_ROOT "/assets/icon_xml_cheats.png";
 constexpr const char *kPayloadId = "payload:";
 
-std::atomic<bool> s_requested{false};
-uint32_t s_scene_handle = 0; /* where the menu and its dialogs open */
+/* What Request hands to Tick: a weak handle to the scene, 0 for Home's. */
+constexpr int64_t kNoRequest = -1;
+std::atomic<int64_t> s_request{kNoRequest};
+uint32_t s_scene_handle = 0; /* where the menu and its dialogs open (UI thread) */
 bool s_confirming_unload = false;
 bool s_switch_shown = false; /* the menu on screen has the Internet switch */
 bool s_switch_value = true;
@@ -275,13 +277,24 @@ void handle_row_choice(MonoObject *scene) {
 bool Available() { return SystemDialogs::PopupMenuAvailable(); }
 
 void Request(MonoObject *scene) {
-  Reflect::Hold(s_scene_handle, scene);
-  s_requested.store(true, std::memory_order_relaxed);
+  uint32_t handle = 0;
+  Reflect::Hold(handle, scene);
+  const int64_t replaced = s_request.exchange(handle, std::memory_order_acq_rel);
+  if (replaced > 0) {
+    uint32_t stale = static_cast<uint32_t>(replaced);
+    Reflect::Release(stale);
+  }
 }
 
 void Tick() {
+  const int64_t request =
+      s_request.exchange(kNoRequest, std::memory_order_acq_rel);
+  if (request != kNoRequest) {
+    Reflect::Release(s_scene_handle);
+    s_scene_handle = static_cast<uint32_t>(request);
+  }
   MonoObject *scene = Reflect::Target(s_scene_handle);
-  if (s_requested.exchange(false, std::memory_order_relaxed))
+  if (request != kNoRequest)
     open_menu(scene);
 
   follow_internet_switch();

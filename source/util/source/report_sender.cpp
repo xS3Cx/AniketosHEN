@@ -131,26 +131,7 @@ std::vector<std::string> pending_reports() {
   return names;
 }
 
-bool read_report(const std::string &path, std::string *out) {
-  const int fd = open(path.c_str(), O_RDONLY | O_NOFOLLOW);
-  if (fd < 0)
-    return false;
-  std::vector<char> buffer(ONION_REPORT_MAX_BYTES + 1);
-  size_t used = 0;
-  while (used < ONION_REPORT_MAX_BYTES) {
-    const ssize_t got = read(fd, buffer.data() + used,
-                             ONION_REPORT_MAX_BYTES - used);
-    if (got <= 0)
-      break;
-    used += static_cast<size_t>(got);
-  }
-  close(fd);
-  out->assign(buffer.data(), used);
-  return out->compare(0, std::strlen(ONION_REPORT_MAGIC), ONION_REPORT_MAGIC) ==
-         0;
-}
-
-enum class SendResult { Sent, Dropped, Stop };
+enum class SendResult { Sent, Dropped, Kept, Stop };
 
 SendResult send_one(Ps5HttpTransport &http, const std::string &host,
                     const std::string &name,
@@ -165,16 +146,23 @@ SendResult send_one(Ps5HttpTransport &http, const std::string &host,
     unlink(path.c_str());
     return SendResult::Dropped;
   }
-  std::string text;
-  if (!read_report(path, &text)) {
+  std::vector<char> text(ONION_REPORT_MAX_BYTES);
+  size_t text_length = 0;
+  const OnionReportRead state =
+      onion_report_read(path.c_str(), text.data(), &text_length);
+  if (state == ONION_REPORT_READ_FAILED) {
+    LOG_WARN("report %s not read; kept for a later start", name.c_str());
+    return SendResult::Kept;
+  }
+  if (state != ONION_REPORT_READ_OK) {
     unlink(path.c_str()); /* not ours or damaged: never sent */
     return SendResult::Dropped;
   }
 
   /* Scrubbed when written; again here, now with the local user names. */
-  std::vector<char> body(text.size() + 64);
+  std::vector<char> body(text_length + 64);
   const size_t length = onion_report_sanitize(
-      text.data(), text.size(), body.data(), body.size(), words.data());
+      text.data(), text_length, body.data(), body.size(), words.data());
 
   HttpRequest req;
   req.url = kReportUrl;

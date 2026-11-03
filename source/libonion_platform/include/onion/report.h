@@ -52,6 +52,16 @@ bool onion_report_write(const char *dir, const char *kind, const char *build,
  * The dot files beside them hold the sender's own progress. */
 bool onion_report_is_file_name(const char *name);
 
+typedef enum OnionReportRead {
+  ONION_REPORT_READ_OK,
+  ONION_REPORT_READ_NOT_OURS, /* read, but it is not a report */
+  ONION_REPORT_READ_FAILED,   /* could not be read: says nothing of the file */
+} OnionReportRead;
+
+/* Read the file at @path into @out, which holds ONION_REPORT_MAX_BYTES, and
+ * set *@length unless that failed. */
+OnionReportRead onion_report_read(const char *path, char *out, size_t *length);
+
 /* Append up to @max_bytes from the end of the file at @path to @out (of
  * @out_cap bytes, NUL-terminated, appended after its current text), starting
  * at a line boundary, under a "== <label> ==" heading. Missing files add

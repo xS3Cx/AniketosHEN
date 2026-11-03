@@ -22,6 +22,7 @@
 #include <cstring>
 #include <mutex>
 #include <string>
+#include <sys/stat.h>
 #include <vector>
 
 extern onion::Settings g_settings;
@@ -138,22 +139,31 @@ void load_locked() {
            s_titles.size(), s_games.size(), s_media.size(), s_moved.size());
 }
 
-void save_locked() {
+/* The file's text, taken under the lock. */
+std::string text_locked() {
   cJSON *root = cJSON_CreateObject();
   cJSON_AddStringToObject(root, "name", s_name.c_str());
   write_list(root, "titles", s_titles);
   write_list(root, "games", s_games);
   write_list(root, "media", s_media);
   write_list(root, "moved", s_moved);
-  const std::string text = onion_cjson::print_owned(root, true);
-  if (text.empty() || !write_file_atomic(kFile, text.data(), text.size()))
-    LOG_WARN("[BOOKMARK] could not save %s", kFile);
+  return onion_cjson::print_owned(root, true);
 }
 
-/* Saved, and the script told to fetch the rows again. */
-void changed_locked() {
+/* Outside s_mutex: the query hooks take it, and this waits on the disk. Only
+   the UI thread changes the lists, so saves land in the order they were made. */
+void save(const std::string &text) {
+  if (text.empty() || !write_file_atomic(kFile, text.data(), text.size())) {
+    LOG_WARN("[BOOKMARK] could not save %s", kFile);
+    return;
+  }
+  chmod(kFile, 0644); /* write_file_atomic leaves 0777 */
+}
+
+/* The script told to fetch the rows again; the text to save once unlocked. */
+std::string changed_locked() {
   ++s_revision;
-  save_locked();
+  return text_locked();
 }
 
 /* "games", "media", "bookmark": a target in a menu row's id and the log. */
@@ -289,6 +299,7 @@ void unmove_if_free_locked(const std::string &title) {
 void place(const std::string &title, Target target, bool moved) {
   bool emptied = false;
   bool made = false;
+  std::string text;
   {
     std::lock_guard<std::mutex> lock(s_mutex);
     load_locked();
@@ -317,13 +328,14 @@ void place(const std::string &title, Target target, bool moved) {
         else
           list.push_back(title);
       }
-      changed_locked();
+      text = changed_locked();
     }
   }
   if (made) {
     open_prompt(Step::Name, tr("bookmark.default_name"));
     return;
   }
+  save(text);
   const std::string name = target_name(target);
   LOG_INFO("[BOOKMARK] %s %s to %s", title.c_str(),
            moved ? "moved" : "copied", key_of(target));
@@ -337,6 +349,7 @@ void place(const std::string &title, Target target, bool moved) {
 void remove_title(const std::string &title, Target target) {
   const std::string name = target_name(target);
   bool emptied = false;
+  std::string text;
   {
     std::lock_guard<std::mutex> lock(s_mutex);
     load_locked();
@@ -349,8 +362,9 @@ void remove_title(const std::string &title, Target target) {
       s_name.clear();
       emptied = true;
     }
-    changed_locked();
+    text = changed_locked();
   }
+  save(text);
   LOG_INFO("[BOOKMARK] %s removed from %s%s", title.c_str(), key_of(target),
            emptied ? ", bookmark gone" : "");
   notify("%s", TitleInfo::WithName("bookmark.removed", name).c_str());
@@ -368,6 +382,7 @@ void finish_prompt(bool confirmed, const std::string &typed) {
   if (!confirmed)
     return;
   std::string name = CleanName(typed);
+  std::string text;
   {
     std::lock_guard<std::mutex> lock(s_mutex);
     load_locked();
@@ -375,7 +390,7 @@ void finish_prompt(bool confirmed, const std::string &typed) {
       if (name.empty() || s_name.empty() || name == s_name)
         return;
       s_name = name;
-      changed_locked();
+      text = changed_locked();
     } else {
       if (!TitleInfo::Valid(title))
         return;
@@ -389,9 +404,10 @@ void finish_prompt(bool confirmed, const std::string &typed) {
         if (!has(s_moved, title))
           s_moved.push_back(title);
       }
-      changed_locked();
+      text = changed_locked();
     }
   }
+  save(text);
   LOG_INFO("[BOOKMARK] %s",
            step == Step::Rename ? "renamed" : moved ? "made, moved" : "made");
   if (step != Step::Rename)

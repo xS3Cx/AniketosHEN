@@ -47,7 +47,7 @@ void apply_button_setter(size_t index, MonoObject *object, UIColor color) {
   ColorSetter original = s_buttons.originals[index];
   if (!original || !object || object_disposed(object))
     return;
-  track_object(object, s_buttons.methods[index], color);
+  note_system_color(object, s_buttons.methods[index], color);
   original(object, feature_on() ? with_chosen_rgb(color) : color);
 }
 
@@ -68,7 +68,7 @@ void apply_image_setter(size_t index, MonoObject *object, UIColor color) {
     return;
   const bool target = widget_should_tint(object);
   if (target)
-    track_object(object, s_images.methods[index], color);
+    note_system_color(object, s_images.methods[index], color);
   original(object, target && feature_on() ? with_chosen_rgb(color) : color);
 }
 

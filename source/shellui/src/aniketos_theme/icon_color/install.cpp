@@ -161,7 +161,6 @@ void Install(MonoImage *pui) {
     return;
   }
   MonoClass *widget = ui3_class(pui, "Widget");
-  resolve_disposed_getter(widget);
   MonoClass *image_box = ui3_class(pui, "ImageBox");
   const MonoTableInfo *table = mono_image_get_table_info(pui, kTypeDefTable);
   const int rows = table ? mono_table_info_get_rows(table) : 0;

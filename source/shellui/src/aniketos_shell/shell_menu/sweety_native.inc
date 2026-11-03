@@ -26,7 +26,7 @@ std::vector<Option> s_shown; /* the options behind the rows on screen */
 uint32_t s_base_scene = 0;
 
 MonoObject *base_scene() {
-  return s_base_scene ? mono_gchandle_get_target(s_base_scene) : nullptr;
+  return AniketosUI::Reflect::Target(s_base_scene);
 }
 
 void forget_base_scene() {

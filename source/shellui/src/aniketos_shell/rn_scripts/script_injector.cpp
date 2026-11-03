@@ -23,18 +23,22 @@
 #include <onion/log.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cstdio>
 #include <cstring>
 #include <fcntl.h>
+#include <mutex>
 #include <string>
 #include <unistd.h>
 
 namespace ScriptInjector {
 namespace {
 
-/* Present while an injection is in flight. If ShellUI dies inside it the
-   file stays, and the next start counts that as a failed start. */
+/* Present while an injection is in flight, holding the script's url. If
+   ShellUI dies inside it the file stays, and the next start counts that as a
+   failed start and leaves that script out, unless it is Home's. */
 constexpr const char *kPending = ONION_DIST_JS_PENDING_PATH;
+constexpr const char *kHomeScriptUrl = "aniketos-home.js";
 /* Present from an injection until the script reports, eight seconds on,
    that Home is running with it. Still there at the next start: Home did not
    get that far. It holds how many starts in a row that has happened, since
@@ -63,10 +67,14 @@ using RunScript = void (*)(MonoObject *, MonoObject *);
 RunScript s_run_script_original = nullptr;
 using ConsoleLog = void (*)(MonoString *, int, void *, void *);
 ConsoleLog s_console_log_original = nullptr;
-using FlushQueue = void (*)(MonoString *, void *, void *);
-FlushQueue s_flush_original = nullptr;
 MonoClass *s_executor_class = nullptr;
-bool s_disabled = false;
+std::atomic<bool> s_disabled{false};
+/* The script found in kPending at this start. Set before the hooks go in. */
+char s_left_out_script[64] = {};
+/* s_unconfirmed, the AppStarts and kUnconfirmed: each app runs these hooks on
+   its own JS thread. Never held over an eval: the script's console.log comes
+   back on the same thread. No managed call under it either. */
+std::mutex s_state_mutex;
 /* The record kept in kUnconfirmed, as read at this start. */
 Unconfirmed s_unconfirmed;
 /* An app (Home, the Control Center) with the script in it, not yet
@@ -82,11 +90,12 @@ AppStarts s_home_starts;
 AppStarts s_control_center_starts;
 AppStarts s_browser_starts;
 /* The browser's script is left out on its own: it costs Home nothing. */
-bool s_browser_disabled = false;
+std::atomic<bool> s_browser_disabled{false};
 constexpr int kRestartsAllowed = 2;
 
 void note_app_start(AppStarts &starts, const char *app,
-                    bool &disabled = s_disabled) {
+                    std::atomic<bool> &disabled = s_disabled) {
+  std::lock_guard<std::mutex> lock(s_state_mutex);
   if (starts.unconfirmed && ++starts.restarts >= kRestartsAllowed &&
       !disabled) {
     disabled = true;
@@ -141,9 +150,12 @@ void console_log_hook(MonoString *message, int level, void *a, void *b) {
     WebTiles::HandleScriptMessage(text.substr(13));
   if (text.starts_with("ANIKETOS") && !web_tile) {
     LOG_INFO("[HOMEJS] js: %s", text.substr(0, 400).c_str());
-    if (text.starts_with("ANIKETOS web alive"))
+    if (text.starts_with("ANIKETOS web alive")) {
+      std::lock_guard<std::mutex> lock(s_state_mutex);
       s_browser_starts = {};
+    }
     if (text.starts_with("ANIKETOS alive")) {
+      std::lock_guard<std::mutex> lock(s_state_mutex);
       unlink(kUnconfirmed); /* Home survived with the script in it */
       s_unconfirmed = {};
       AppStarts &starts = text.find("app=control-center") != std::string::npos
@@ -241,15 +253,33 @@ std::string home_script_config(bool home, bool emulators, bool bookmark) {
 
 bool scripts_allowed() { return !s_disabled && !if_exists(kOff); }
 
+void read_left_out_script() {
+  const int fd = open(kPending, O_RDONLY);
+  if (fd < 0)
+    return;
+  char url[sizeof(s_left_out_script)] = {};
+  const ssize_t length = read(fd, url, sizeof(url) - 1);
+  close(fd);
+  if (length > 0 && std::strcmp(url, kHomeScriptUrl) != 0)
+    std::memcpy(s_left_out_script, url, sizeof(url));
+}
+
 /* The config is built with the in-flight marker up, as the evals are: it
    reads other modules' state, and dying there counts the same. */
 template <typename BuildConfig>
 bool inject(MonoObject *executor, const std::string &app,
             BuildConfig build_config, const char *config_url,
             const char *script, const char *script_url) {
+  if (std::strcmp(script_url, s_left_out_script) == 0) {
+    LOG_WARN("[HOMEJS] %s is left out: ShellUI died injecting it last time",
+             script_url);
+    return false;
+  }
   const int fd = open(kPending, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-  if (fd >= 0)
+  if (fd >= 0) {
+    (void)write(fd, script_url, std::strlen(script_url));
     close(fd);
+  }
   const std::string config = build_config();
   const bool ok = eval(executor, config.c_str(), config_url) &&
                   eval(executor, script, script_url);
@@ -288,19 +318,23 @@ void run_script_hook(MonoObject *executor, MonoObject *bundle) {
   const bool emulators = home && g_settings.home_tab_emulators;
   const bool bookmark = home && HomeBookmark::Shown();
   if (scripts_allowed() && ((home && HomeRows::Ready()) || control_center)) {
-    /* this start counted, and the pause to follow should it fail too */
-    Unconfirmed next = s_unconfirmed;
-    ++next.count;
-    if (next.count >= kUnconfirmedStartsAllowed) {
-      next.left = next.pause;
-      next.pause = std::min(next.pause * 2, kPauseMax);
+    {
+      /* this start counted, and the pause to follow should it fail too */
+      std::lock_guard<std::mutex> lock(s_state_mutex);
+      Unconfirmed next = s_unconfirmed;
+      ++next.count;
+      if (next.count >= kUnconfirmedStartsAllowed) {
+        next.left = next.pause;
+        next.pause = std::min(next.pause * 2, kPauseMax);
+      }
+      if (!write_unconfirmed(next))
+        LOG_WARN("[HOMEJS] could not record the start count");
     }
-    if (!write_unconfirmed(next))
-      LOG_WARN("[HOMEJS] could not record the start count");
     injected = inject(
         executor, app,
         [=] { return home_script_config(home, emulators, bookmark); },
-        "aniketos-config.js", kInjectedScript, "aniketos-home.js");
+        "aniketos-config.js", kInjectedScript, kHomeScriptUrl);
+    std::lock_guard<std::mutex> lock(s_state_mutex);
     if (injected)
       (home ? s_home_starts : s_control_center_starts).unconfirmed = true;
     else
@@ -317,10 +351,13 @@ void run_script_hook(MonoObject *executor, MonoObject *bundle) {
   const bool browser = is_app("rnps-action-cards");
   if (browser)
     note_app_start(s_browser_starts, "The action cards", s_browser_disabled);
-  if (browser && !s_browser_disabled && scripts_allowed())
-    s_browser_starts.unconfirmed =
+  if (browser && !s_browser_disabled && scripts_allowed()) {
+    const bool browser_injected =
         inject(executor, app, WebTiles::ScriptConfig, "aniketos-web-config.js",
                WebTiles::InjectedScript(), "aniketos-web.js");
+    std::lock_guard<std::mutex> lock(s_state_mutex);
+    s_browser_starts.unconfirmed = browser_injected;
+  }
   /* The Trophies app: View, Unlock and Lock in its options menus. A failure
      there costs that app alone, so the start counters stay out of it. */
   if (scripts_allowed() && g_settings.onionhen_game_opts &&
@@ -346,16 +383,6 @@ void run_script_hook(MonoObject *executor, MonoObject *bundle) {
   }
 }
 
-void flush_hook(MonoString *queue, void *a, void *b) {
-  const std::string text = Mono_to_String(queue);
-  if (text.find("ANIKETOS-FLUSH") != std::string::npos) {
-    LOG_INFO("[HOMEJS] js(flush): %s", text.substr(0, 400).c_str());
-    return; /* ours: not a queue of native calls */
-  }
-  if (s_flush_original)
-    s_flush_original(queue, a, b);
-}
-
 template <typename Detour>
 bool hook_executor(MonoImage *react_pui, const char *method, int parameters,
                    Detour detour, Detour *original) {
@@ -372,6 +399,7 @@ bool hook_executor(MonoImage *react_pui, const char *method, int parameters,
 void NoteRequestedReload(const char *title_id) {
   if (!title_id)
     return;
+  std::lock_guard<std::mutex> lock(s_state_mutex);
   if (std::strcmp(title_id, "NPXS40002") == 0)
     s_home_starts.unconfirmed = false;
   else if (std::strcmp(title_id, "NPXS40003") == 0)
@@ -386,6 +414,7 @@ void Install(MonoImage *react_pui) {
   s_unconfirmed = read_unconfirmed();
   if (if_exists(kPending)) {
     /* ShellUI died with the injection in flight: a failed start as well */
+    read_left_out_script();
     unlink(kPending);
     if (s_unconfirmed.count < 1)
       s_unconfirmed.count = 1;
@@ -414,11 +443,8 @@ void Install(MonoImage *react_pui) {
   const bool log_hooked =
       hook_executor(react_pui, "ConsoleLog", 4, console_log_hook,
                     &s_console_log_original);
-  const bool flush_hooked =
-      hook_executor(react_pui, "NativeFlushQueueImmediate", 3, flush_hook,
-                    &s_flush_original);
-  LOG_INFO("[HOMEJS] hooks RunScript=%d ConsoleLog=%d Flush=%d",
-           run_hooked ? 1 : 0, log_hooked ? 1 : 0, flush_hooked ? 1 : 0);
+  LOG_INFO("[HOMEJS] hooks RunScript=%d ConsoleLog=%d", run_hooked ? 1 : 0,
+           log_hooked ? 1 : 0);
 }
 
 } // namespace ScriptInjector

@@ -13,7 +13,6 @@
 #include <sys/stat.h>
 
 #include "shellui_state.hpp"
-#include <cctype>
 #include <cstring>
 
 void save_appid(int value, const char* filename) {
@@ -101,12 +100,11 @@ int sceRegMgrGetInt_hook(long regid, int* out_val){
   return ret;
 }
 static std::string extractTIDFromURI(const std::string& url) {
-    /* "titleId=" in most entries, "titleid=" in Check for Update's */
-    const std::string prefix = "titleid=";
-    std::string lower = url;
-    for (char &c : lower)
-        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    size_t pos = lower.find(prefix);
+    const std::string prefix = "titleId=";
+    size_t pos = url.find(prefix);
+    /* Check for Update's entry writes "titleid=" */
+    if (pos == std::string::npos)
+        pos = url.find("titleid=");
     
     if (pos != std::string::npos) {
         pos += prefix.length();

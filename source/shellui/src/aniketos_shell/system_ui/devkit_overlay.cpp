@@ -126,7 +126,7 @@ MonoObject *view() {
     if (MonoObject *panel = field(view, which))
       AniketosUI::Pui::Adopt(panel);
   s_view = mono_gchandle_new(view, /*pinned=*/1);
-  s_root = mono_gchandle_new_weakref(root, 0);
+  Reflect::Hold(s_root, root);
   s_next_update = s_frame;
   s_refresh = true;
   LOG_INFO("[DEVKIT] overlay added info=%d expired=%d",

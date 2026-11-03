@@ -1207,8 +1207,13 @@ void patch_homeui_top_nav(unsigned char *buffer, int *size_ptr,
     SourceBundleView source_bundle = {};
     if (locate_source_bundle(buffer, visible_size, capacity, format,
                              &source_bundle)) {
-      if (patch_source_homeui_top_nav(source_bundle, format.kind))
+      /* the patch names a fixed picture; a coloured logo is script_injector's */
+      if (g_settings.logo_color_enabled) {
+        if (find_source_homeui_profile(source_bundle, format.kind))
+          homeui_note_top_nav_patched(false);
+      } else if (patch_source_homeui_top_nav(source_bundle, format.kind)) {
         homeui_note_top_nav_patched(true);
+      }
       return;
     }
   }

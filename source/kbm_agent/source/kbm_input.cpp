@@ -203,6 +203,7 @@ std::atomic<bool> s_game_pumps; /* the game called its sceImeUpdate */
 std::atomic<void *> s_game_arg; /* from the game's own sceImeKeyboardOpen */
 constexpr int kMaxImeSlots = 8;
 uint64_t *s_ime_slots[kMaxImeSlots];
+uint64_t s_ime_hooks[kMaxImeSlots];
 uint64_t s_ime_originals[kMaxImeSlots];
 int s_ime_slot_count;
 
@@ -253,6 +254,7 @@ void PatchSlots(const void *real, const void *ours) {
                                      __ATOMIC_ACQ_REL, __ATOMIC_RELAXED))
       continue;
     s_ime_slots[s_ime_slot_count] = found[i];
+    s_ime_hooks[s_ime_slot_count] = reinterpret_cast<uint64_t>(ours);
     s_ime_originals[s_ime_slot_count++] = reinterpret_cast<uint64_t>(real);
   }
 }
@@ -268,13 +270,8 @@ void HookGameIme() {
 
 /* Back to the real functions, so a newer agent finds them by value. */
 void UnhookGameIme() {
-  for (int i = 0; i < s_ime_slot_count; ++i) {
-    uint64_t ours = __atomic_load_n(s_ime_slots[i], __ATOMIC_RELAXED);
-    if (ours == reinterpret_cast<uint64_t>(&GameUpdate) ||
-        ours == reinterpret_cast<uint64_t>(&GameKeyboardOpen))
-      __atomic_compare_exchange_n(s_ime_slots[i], &ours, s_ime_originals[i],
-                                  false, __ATOMIC_ACQ_REL, __ATOMIC_RELAXED);
-  }
+  for (int i = 0; i < s_ime_slot_count; ++i)
+    hooks::SwapSlot(s_ime_slots[i], s_ime_hooks[i], s_ime_originals[i]);
   s_ime_slot_count = 0;
 }
 

@@ -198,6 +198,13 @@ static MsfGifResult encode_within_limit(const unsigned char *frames, int width,
   return (MsfGifResult){0};
 }
 
+static bool save_file(const char *path, const void *data, size_t size) {
+  if (!write_file_atomic(path, data, size))
+    return false;
+  chmod(path, 0644); /* write_file_atomic leaves 0777 */
+  return true;
+}
+
 static int write_meta(const char *source, const char *cache) {
   char meta_path[AVATAR_CODEC_PATH_SIZE];
   char text[64];
@@ -207,7 +214,7 @@ static int write_meta(const char *source, const char *cache) {
     return -1;
   const int length =
       snprintf(text, sizeof(text), "aniketos-avatar %lld %lld\n", size, mtime);
-  return write_file_atomic(meta_path, text, (size_t)length) ? 0 : -1;
+  return save_file(meta_path, text, (size_t)length) ? 0 : -1;
 }
 
 /* Spreads the frames over at most AVATAR_CODEC_MAX_FRAMES samples, each
@@ -290,7 +297,7 @@ int avatar_codec_fit(const char *source, const char *cache, char *error,
                                 sample_index, sample_delay);
   if (!encoded.data) {
     set_error(error, error_size, "output too large");
-  } else if (!write_file_atomic(cache, encoded.data, encoded.dataSize)) {
+  } else if (!save_file(cache, encoded.data, encoded.dataSize)) {
     set_error(error, error_size, "write failed");
   } else if (write_meta(source, cache) != 0) {
     remove(cache);

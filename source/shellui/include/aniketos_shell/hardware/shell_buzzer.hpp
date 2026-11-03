@@ -27,7 +27,10 @@ void Configure(void *set_buzzer, void *set_dim_setting);
 // persisted ICC preference changes are used.
 bool PlayTest(Pattern pattern);
 
-// Changes the PS5 system buzzer volume and plays a short confirmation beep.
+// Changes the PS5 system buzzer volume, without a sound.
+bool SetVolume(Volume volume);
+
+// The same, then plays a short confirmation beep.
 bool SetVolumeAndConfirm(Volume volume);
 
 } // namespace AniketosShell::Buzzer
