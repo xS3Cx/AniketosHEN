@@ -134,7 +134,8 @@ void after_look_toggle(OptionId id, bool on) {
       LOG_INFO("[ANIVSH:GLOBAL-THEME] disabled; keeping applied colors");
     break;
   case OptionId::LogoColorEnabled:
-    shellui_request_presence_reload(1500, true);
+    /* Home's top-bar icon: the byte patch's own picture or the script's */
+    shellui_request_home_reload_after(1500);
     break;
   case OptionId::ShellBackgroundEnabled:
     if (on) {

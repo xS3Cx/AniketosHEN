@@ -186,6 +186,19 @@ bool set_color(MonoMethod *setter, MonoObject *object, UIColor color) {
   return !exception;
 }
 
+void leave_untinted(MonoObject *object) {
+  TrackedIcon *found = find_tracked(object);
+  if (!found)
+    return;
+  /* out of the list first: the setter's hook comes back here */
+  const TrackedIcon entry = *found;
+  s_tracked.erase(s_tracked.begin() + (found - s_tracked.data()));
+  if (!object_disposed(object))
+    set_color(entry.setter, object, entry.restore);
+  uint32_t handle = entry.handle;
+  Reflect::Release(handle);
+}
+
 /* An image whose colour cannot be read still takes the tint: it is only left
    out of the list. */
 bool tint_image(MonoObject *object) {

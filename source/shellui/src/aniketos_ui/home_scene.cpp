@@ -2,6 +2,7 @@
 
 #include "aniketos_theme/clock/shell_clock.hpp"
 #include "aniketos_ui/mono_reflect.hpp"
+#include "aniketos_ui/monotonic_clock.hpp"
 #include "external_symbols.hpp"
 #include "hooked_funcs.hpp"
 
@@ -149,12 +150,15 @@ MonoObject *OwnRoot() {
   if (cached && !IsDisposed(cached))
     return cached;
   Reflect::Release(s_own_root);
-  /* The tree is walked at most twice a second while Home is not there. */
-  static uint64_t last_try = 0;
-  static uint64_t tries = 0;
-  if (++tries - last_try < 30 && last_try != 0)
+  /* The tree is walked at most four times a second while Home is not there.
+     By time, not by calls: every label React sets asks (space_switcher_labels),
+     so while a reloading Home builds its labels a count let the walk run
+     several times a frame. */
+  static uint64_t next_try_ms = 0;
+  const uint64_t now_ms = MonotonicMs();
+  if (now_ms < next_try_ms)
     return nullptr;
-  last_try = tries;
+  next_try_ms = now_ms + 250;
   MonoObject *scene =
       scene_call(ShellClock::ClockSceneRoot(), "get_ParentScene", 0, nullptr);
   for (int guard = 0; scene && guard < 16; ++guard) {

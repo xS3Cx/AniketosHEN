@@ -45,7 +45,7 @@ void RequestRefresh();
 /* The clock's settings for the script that draws it in Sony's clock
  * (home_inject_js.inc), as JSON: on, seconds, hour format, the AM/PM words,
  * the date's parts and the menu language's month and weekday names, colours
- * and sizes. Plain ASCII (other text is written as \u escapes): the script
+ * and sizes, and whether the Shell Menu is open (hot). Plain ASCII (other text is written as \u escapes): the script
  * executor cuts a script with other text short. */
 std::string ScriptConfig();
 /** One-line description of the clock state, for the profiler log. */

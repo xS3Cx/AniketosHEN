@@ -489,7 +489,7 @@ R"JS((function () {
      settings are read through the app's registry module (aniketos.clock),
      which the native side answers. */
   var CK = { cfg: cfg.clock || null, rev: 0, raw: '', cache: null,
-             component: null, asking: false, told: false, failed: false };
+             component: null, shown: [], told: false, failed: false };
   function pad(n) { return n < 10 ? '0' + n : '' + n; }
   function clockTime(now, stock) {
     var c = CK.cfg, h = now.getHours(), mm = pad(now.getMinutes());
@@ -543,6 +543,43 @@ R"JS((function () {
         best = CK.sizes[i];
     return best;
   }
+  /* An animated theme's colour at this moment, worked out as the native side
+     does (clock_format.cpp json_animation: GlobalTheme::Color, or the
+     background's Rainbow from EvaluateAnimation); null while it is still. */
+  function hsv(h, s, v) {
+    h = (h % 360 + 360) % 360;
+    var c = v * s, x = c * (1 - Math.abs(h / 60 % 2 - 1)), i = h / 60;
+    var rgb = i < 1 ? [c, x, 0] : i < 2 ? [x, c, 0] : i < 3 ? [0, c, x] :
+              i < 4 ? [0, x, c] : i < 5 ? [x, 0, c] : [c, 0, x];
+    return [rgb[0] + v - c, rgb[1] + v - c, rgb[2] + v - c];
+  }
+  function hex(v) {
+    /* in single precision, as the native side rounds */
+    v = Math.round(Math.fround(Math.fround(v) * 255));
+    v = Math.max(0, Math.min(255, v));
+    return (v < 16 ? '0' : '') + v.toString(16);
+  }
+  function animColor() {
+    var a = CK.cfg && CK.cfg.on && CK.cfg.anim;
+    if (!a) return null;
+    var ms = Math.max(0, Date.now() - a.o), rgb, p, k;
+    if (a.m === 0) {
+      ms -= ms % 50;
+      rgb = hsv(a.h + ms / 1000 * a.sp * 45 % 360, a.s, a.v);
+    } else {
+      ms -= ms % 16;
+      p = ms % 120000 * 0.001 * a.sp;
+      if (a.m === 3) {
+        k = 0.62 + 0.38 * (Math.sin(p * 3) * 0.5 + 0.5);
+        rgb = [a.r * k, a.g * k, a.b * k];
+      } else if (a.m === 4) {
+        rgb = hsv(188 + Math.sin(p * 1.8) * 16, 0.9, 1);
+      } else {
+        rgb = hsv(p * 70, 1, 1);
+      }
+    }
+    return '#' + hex(rgb[0]) + hex(rgb[1]) + hex(rgb[2]);
+  }
   /* Draws Sony's clock instead of ours if ours fails while React draws it */
   function makeBoundary(React) {
     function Boundary(props) {
@@ -575,7 +612,8 @@ R"JS((function () {
     var now = new Date(), key;
     var own = {};
     for (key in text.props) own[key] = text.props[key];
-    var look = { color: c.tc };
+    var moving = animColor();
+    var look = { color: moving || c.tc };
     var size = c.ts > 0 ? fontSize(c.ts) : 0;
     if (size) look.fontSize = size;
     own.style = [text.props.style, look];
@@ -587,7 +625,7 @@ R"JS((function () {
     var children = [React.createElement(text.type, own)];
     if (c.date) {
       var date = { position: 'absolute', top: '100%', left: -300, right: -300,
-                   marginTop: c.gap, textAlign: 'center', color: c.dc };
+                   marginTop: c.gap, textAlign: 'center', color: moving || c.dc };
       size = fontSize(c.ds);
       if (size) date.fontSize = size;
       children.push(React.createElement(text.type, {
@@ -606,7 +644,7 @@ R"JS((function () {
     var c = CK.cfg, now = new Date();
     if (!c || !c.on) return CK.rev;
     return CK.rev + '|' + clockTime(now, '') + '|' +
-           (c.date ? clockDate(now) : '');
+           (c.date ? clockDate(now) : '') + '|' + (animColor() || '');
   }
   /* A failure of ours leaves Sony's clock as it is, for good */
   function clockFailed(e) {
@@ -619,16 +657,25 @@ R"JS((function () {
       var element = inner(props); /* Sony's hooks, then ours */
       var shown = React.useState(null);
       React.useEffect(function () {
-        var timer = null;
+        var timer = null, set = shown[1];
+        CK.shown.push(set); /* redrawn at once when the settings change */
+        /* about 15 times a second while the colour moves */
+        var delay = function () {
+          var c = CK.cfg;
+          return c && c.on && c.anim ? 66 : 1000 - Date.now() % 1000;
+        };
         var step = function () {
           if (CK.failed) return;
           try {
             shown[1](clockKey()); /* drawn again only when it changed */
           } catch (e) { clockFailed(e); return; }
-          timer = setTimeout(step, 1000 - Date.now() % 1000);
+          timer = setTimeout(step, delay());
         };
-        timer = setTimeout(step, 1000 - Date.now() % 1000);
-        return function () { clearTimeout(timer); };
+        timer = setTimeout(step, delay());
+        return function () {
+          clearTimeout(timer);
+          CK.shown.splice(CK.shown.indexOf(set), 1);
+        };
       }, []);
       if (CK.failed) return element;
       try {
@@ -638,27 +685,35 @@ R"JS((function () {
     };
     return A.React.memo(Clock);
   }
+  /* Asked every 2 s, and every 100 ms while the Shell Menu is open (hot),
+     where the clock's colour and format are edited; a change is drawn at
+     once, not at the clock's next second. */
   function watchClock() {
-    setInterval(function () {
-      var nm = F.nm;
-      if (CK.asking || !nm || typeof nm.Get !== 'function') return;
-      CK.asking = true;
-      var asked;
+    var later = function () {
+      setTimeout(ask, CK.cfg && CK.cfg.hot ? 100 : 2000);
+    };
+    var ask = function () {
+      var nm = F.nm, asked;
+      if (!nm || typeof nm.Get !== 'function') return later();
       try { asked = nm.Get({ keys: ['aniketos.clock'] }); }
-      catch (e) { CK.asking = false; return; }
+      catch (e) { return later(); }
       Promise.resolve(asked).then(function (answer) {
-        CK.asking = false;
+        later();
         if (typeof answer !== 'string' || answer === CK.raw) return;
         try {
           var next = JSON.parse(answer);
-          if (next && typeof next === 'object') {
-            CK.raw = answer;
-            CK.cfg = next;
-            CK.rev++;
-          }
-        } catch (e) { log('clock: ' + e); }
-      }, function () { CK.asking = false; });
-    }, 2000);
+          if (!next || typeof next !== 'object') return;
+          CK.raw = answer;
+          CK.cfg = next;
+          CK.rev++;
+        } catch (e) { log('clock: ' + e); return; }
+        try {
+          for (var i = 0; i < CK.shown.length && !CK.failed; i++)
+            CK.shown[i](clockKey());
+        } catch (e) { clockFailed(e); }
+      }, later);
+    };
+    later();
   }
   /* The time cache (toTime) the clock formats the system's time with. */
   function patchClockCache(o) {

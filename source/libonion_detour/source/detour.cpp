@@ -19,7 +19,6 @@ along with this program; see the file COPYING. If not, see
 #include <onion/hotpatch.h>
 
 #include <cstdint>
-#include <cstdio>
 #include <cstring>
 #include <cstdlib>
 
@@ -179,6 +178,15 @@ bool PrepareDetour(uint64_t address, void *destination, DetourHandle *handle) {
     return false;
   }
 
+  /* A detour (jmp [rip+0]; dq hook) is already here. Relocating it would
+     read the hook pointer this patch overwrites: the call loops forever. */
+  static constexpr uint8_t kDetourPrefix[] = {0xff, 0x25, 0, 0, 0, 0};
+  if (std::memcmp(reinterpret_cast<const void *>(address), kDetourPrefix,
+                  sizeof(kDetourPrefix)) == 0) {
+    LOG_INFO("DetourFunction: %#02lx is hooked already, skipped", address);
+    return false;
+  }
+
   onion_x64_relocate_result relocation{};
   if (!onion_x64_relocate(
           reinterpret_cast<const uint8_t *>(address), address,
@@ -188,13 +196,6 @@ bool PrepareDetour(uint64_t address, void *destination, DetourHandle *handle) {
     LOG_ERROR("DetourFunction: relocation failed at +%zu: %s",
                 relocation.error_offset,
                 onion_x64_relocate_error_string(relocation.error));
-    /* FF 25 at the start: something hooked this function first */
-    char bytes[24 * 3 + 1] = {};
-    for (size_t i = 0; i < 24; ++i)
-      std::snprintf(bytes + i * 3, 4, "%02x ",
-                    reinterpret_cast<const uint8_t *>(address)[i]);
-    LOG_ERROR("DetourFunction: code at %p: %s",
-              reinterpret_cast<const void *>(address), bytes);
     return false;
   }
 

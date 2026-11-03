@@ -17,18 +17,21 @@ constexpr float kAnomalyLineGap = 6.0f;
 float s_anomaly_controls_y = 0.0f;
 
 /* A font of its own size for the credit/legend line and the page's name,
-   made once per size. */
+   made once per size and weight. */
 MonoObject *anomaly_font(int size, int which) {
   static MonoObject *fonts[2] = {};
   static uint32_t handles[2] = {};
   static int sizes[2] = {};
-  if (fonts[which] && sizes[which] == size)
+  static int weights[2] = {};
+  const int weight = menu_font_weight();
+  if (fonts[which] && sizes[which] == size && weights[which] == weight)
     return fonts[which];
   if (handles[which] && mono_gchandle_free)
     mono_gchandle_free(handles[which]);
   handles[which] = 0;
-  fonts[which] = create_pinned_font(size, 400, handles[which]);
+  fonts[which] = create_pinned_font(size, weight, handles[which]);
   sizes[which] = fonts[which] ? size : 0;
+  weights[which] = weight;
   return fonts[which];
 }
 
@@ -151,10 +154,7 @@ void update_anomaly_menu_widgets() {
   const float line_height = std::round(row * 1.1f);
   const int line_font = static_cast<int>(std::lround(line_height * 0.8f));
   const int title_font = static_cast<int>(std::lround(row * 1.2f * 0.8f));
-  const float opacity = anomaly_own_palette()
-                            ? 1.0f
-                            : active_menu_style().background_opacity;
-  const Color black{0.0f, 0.0f, 0.0f, opacity};
+  const Color black{0.0f, 0.0f, 0.0f, active_menu_style().background_opacity};
   const Color white{1.0f, 1.0f, 1.0f, 1.0f};
 
   const size_t visible = std::min(kMaxVisibleOptions, options.size());

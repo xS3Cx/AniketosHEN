@@ -1,5 +1,6 @@
 /* Copyright (C) 2026 AniketosHEN — shared native PS5 UI background theming. */
 
+#include "aniketos_shell/system_ui/devkit_overlay.hpp"
 #include "aniketos_ui/monotonic_clock.hpp"
 #include "aniketos_ui/pui_primitives.hpp"
 #include "aniketos_ui/ui_color.hpp"
@@ -123,7 +124,7 @@ bool excluded_panel(MonoObject *object) {
     return true;
   /* Our own UI3 panels (the OSD and legend in Home's scene) are painted
      with the colours we give them, not with the system panel theme. */
-  if (AniketosUI::Pui::IsOwn(object))
+  if (AniketosUI::Pui::IsOwn(object) || DevkitOverlay::Owns(object))
     return true;
   const char *name = object_class_name(object);
   if (!name)

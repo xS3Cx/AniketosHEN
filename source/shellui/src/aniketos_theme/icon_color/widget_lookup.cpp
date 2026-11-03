@@ -4,6 +4,8 @@
 #include "aniketos_ui/mono_reflect.hpp"
 #include "hooked_funcs.hpp"
 
+#include <onion/distribution.h>
+
 #include <unordered_map>
 
 namespace AniketosTheme::IconColor {
@@ -83,6 +85,24 @@ bool hierarchy_name_contains(MonoClass *klass, const char *needle) {
       return true;
   }
   return false;
+}
+
+/* The URIs of what the widget shows: a row's or button's icon, an image's
+   picture. */
+std::string picture_uris(MonoObject *object) {
+  std::string uris = object_text(object, "IconUri");
+  for (const char *property : {"Image", "IconImage"}) {
+    if (MonoObject *asset = HomeScene::PropertyObject(object, property))
+      uris += " " + object_text(asset, "Uri");
+  }
+  return uris;
+}
+
+/* Our pictures live in our data folder; the system's emoji are
+   cxml://ui2/unicode_emoji_*, cxml://ui2/emoji_* and cxml://ui3/emoji_*. */
+bool own_colours(const std::string &uris) {
+  return contains(uris, "/" ONION_DIST_DIR_NAME "/") ||
+         contains(ascii_lower(uris), "emoji");
 }
 
 bool inside_settings(MonoObject *object) {
@@ -195,7 +215,14 @@ bool is_image_box_descendant(MonoClass *klass) {
   return derives_from(klass, s_image_filter.box_class);
 }
 
+bool keeps_own_colours(MonoObject *object) {
+  return own_colours(picture_uris(object));
+}
+
 bool widget_should_tint(MonoObject *object) {
+  const std::string pictures = picture_uris(object);
+  if (own_colours(pictures))
+    return false;
   MonoClass *klass = mono_object_get_class(object);
   const char *type = class_name(klass);
   const std::string text = ascii_lower(object_text(object, "TestId") + " " +
@@ -204,8 +231,10 @@ bool widget_should_tint(MonoObject *object) {
   if (contains(all, "background") || contains(all, "avatar") ||
       contains(all, "tile") || contains(all, "artwork"))
     return false;
+  /* a system icon by its picture (cxml://.../iconid_*), whatever the widget
+     is called: React's images have no name */
   return hierarchy_name_contains(klass, "icon") || contains(text, "icon") ||
-         inside_settings(object);
+         contains(pictures, "/iconid_") || inside_settings(object);
 }
 
 } // namespace AniketosTheme::IconColor

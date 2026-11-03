@@ -1,6 +1,7 @@
 #include "aniketos_shell/core/embedded_assets.hpp"
 
 #include "aniketos_theme/logo_tint.hpp"
+#include "aniketos_ui/monotonic_clock.hpp"
 #include "png_encode.hpp"
 #include "shellui_types.hpp"
 
@@ -46,9 +47,14 @@ extern const unsigned char home_background_edges_png_end[];
 namespace {
 
 constexpr int kLogoSide = 128;
+/* Shorter than the Home reload's wait (option_change), which reads the icon. */
+constexpr uint64_t kLogoRestMs = 1000;
 
 /* The colour the logo file is in, -1 when there is no such file. */
 std::atomic<int> s_logo_colour{-1};
+std::atomic<uint64_t> s_logo_held_until_ms{0};
+std::mutex s_logo_mutex;
+char s_logo_path[160];
 
 struct EmbeddedImage {
   const char *file; /* its name in our data folder */
@@ -109,17 +115,20 @@ void write_notification_logo(const void *data, size_t size) {
 }
 
 /* The logo in the chosen colour, under a name of its own: the system keeps
-   pictures by their path. Empty when it cannot be made. */
+   pictures by their path. Empty when it cannot be made. The Control Center
+   button asks every frame, so while the colour is held this is the last
+   picture: a PNG and two file writes per slider step stalled the UI thread. */
 const char *coloured_logo() {
-  static std::mutex mutex;
-  static char path[160];
+  char (&path)[sizeof(s_logo_path)] = s_logo_path;
   const auto channel = [](int value) { return std::clamp(value, 0, 255); };
   const int red = channel(g_settings.logo_color_r);
   const int green = channel(g_settings.logo_color_g);
   const int blue = channel(g_settings.logo_color_b);
   const int colour = red << 16 | green << 8 | blue;
-  std::lock_guard<std::mutex> lock(mutex);
-  if (colour == s_logo_colour.load(std::memory_order_relaxed))
+  std::lock_guard<std::mutex> lock(s_logo_mutex);
+  if (colour == s_logo_colour.load(std::memory_order_relaxed) ||
+      (*path && AniketosUI::MonotonicMs() <
+                    s_logo_held_until_ms.load(std::memory_order_relaxed)))
     return path;
   s_logo_colour.store(colour, std::memory_order_relaxed);
   path[0] = '\0';
@@ -142,6 +151,11 @@ const char *coloured_logo() {
 
 } // namespace
 
+void HoldAniketosIcon() {
+  s_logo_held_until_ms.store(AniketosUI::MonotonicMs() + kLogoRestMs,
+                             std::memory_order_relaxed);
+}
+
 const char *AniketosIconPath() {
   static EmbeddedImage stock = {"aniketos_icon.png", aniketos_icon_png_start,
                                 aniketos_icon_png_end};
@@ -153,7 +167,9 @@ const char *AniketosIconPath() {
       return coloured;
   } else if (!stock_checked.exchange(true, std::memory_order_relaxed) &&
              clear_logo_folder()) {
+    std::lock_guard<std::mutex> lock(s_logo_mutex);
     s_logo_colour.store(-1, std::memory_order_relaxed);
+    s_logo_path[0] = '\0'; /* its file is gone */
     write_notification_logo(
         aniketos_icon_png_start,
         static_cast<size_t>(aniketos_icon_png_end - aniketos_icon_png_start));

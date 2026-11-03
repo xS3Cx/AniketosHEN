@@ -2,7 +2,6 @@
 
 #include "aniketos_ui/home_scene.hpp"
 #include "aniketos_ui/mono_reflect.hpp"
-#include "aniketos_ui/pui_primitives.hpp"
 #include "aniketos_ui/ui_color.hpp"
 #include "hooked_funcs.hpp"
 
@@ -35,6 +34,8 @@ MonoClassField *s_panel_info = nullptr;
 MonoClassField *s_panel_expired = nullptr;
 MonoClassField *s_panel_trial = nullptr;
 MonoClassField *s_label_expired = nullptr;
+using ObjectGetter = MonoObject *(*)(MonoObject *);
+ObjectGetter s_get_parent = nullptr; /* UI3 Widget.get_Parent, native */
 
 uint32_t s_view = 0; /* strong: our DebugInfoView */
 uint32_t s_root = 0; /* weak: the Home root it was put under */
@@ -42,6 +43,7 @@ int s_frame = 0;
 int s_next_update = 0;
 int s_retry_at = 0;
 bool s_refresh = true;
+bool s_building = false; /* the widget's own create methods are running */
 
 bool invoke(MonoObject *object, MonoMethod *method, const char *what) {
   MonoObject *exception = nullptr;
@@ -81,10 +83,6 @@ bool wanted() {
 
 void drop() {
   if (MonoObject *view = Reflect::Target(s_view)) {
-    for (MonoClassField *which :
-         {s_panel_info, s_panel_expired, s_panel_trial})
-      if (MonoObject *panel = field(view, which))
-        AniketosUI::Pui::Disown(panel);
     if (!AniketosUI::HomeScene::IsDisposed(view)) {
       Reflect::Call(view, "RemoveFromParent", 0);
       Reflect::Call(view, "Dispose", 0);
@@ -111,20 +109,24 @@ MonoObject *view() {
   view = mono_object_new(mono_domain_get(), s_view_class);
   if (!view)
     return nullptr;
-  if (!invoke(view, s_view_ctor, "DebugInfoView()"))
+  /* the colours its create methods set are the system's, not the theme's */
+  s_building = true;
+  const bool constructed = invoke(view, s_view_ctor, "DebugInfoView()");
+  bool built = false;
+  if (constructed) {
+    MonoString *name = mono_string_new(mono_domain_get(), kName);
+    Reflect::Call(view, "set_Name", 1, reinterpret_cast<void **>(&name));
+    built = invoke(view, s_create_devkit, "createDevKitPanel") &&
+            invoke(view, s_create_expired, "createExpiredPanel");
+  }
+  s_building = false;
+  if (!constructed)
     return nullptr;
-  MonoString *name = mono_string_new(mono_domain_get(), kName);
-  Reflect::Call(view, "set_Name", 1, reinterpret_cast<void **>(&name));
-  if (!invoke(view, s_create_devkit, "createDevKitPanel") ||
-      !invoke(view, s_create_expired, "createExpiredPanel") ||
+  if (!built ||
       !Reflect::Call(root, "AppendChild", 1, reinterpret_cast<void **>(&view))) {
     Reflect::Call(view, "Dispose", 0);
     return nullptr;
   }
-  /* the system's look, not the theme's */
-  for (MonoClassField *which : {s_panel_info, s_panel_expired, s_panel_trial})
-    if (MonoObject *panel = field(view, which))
-      AniketosUI::Pui::Adopt(panel);
   s_view = mono_gchandle_new(view, /*pinned=*/1);
   Reflect::Hold(s_root, root);
   s_next_update = s_frame;
@@ -189,6 +191,10 @@ void Install() {
         mono_class_get_field_from_name(s_view_class, "m_panel_expiredpup");
     s_label_expired =
         mono_class_get_field_from_name(s_view_class, "m_label_expiredtext");
+    MonoMethod *parent = Reflect::MethodOf(s_view_class, "get_Parent", 0);
+    s_get_parent = parent ? reinterpret_cast<ObjectGetter>(
+                                mono_compile_method(parent))
+                          : nullptr;
   }
   const bool ready = s_view_ctor && s_create_devkit && s_create_expired &&
                      s_update && s_panel_info && s_panel_expired &&
@@ -200,6 +206,19 @@ void Install() {
 }
 
 void Refresh() { s_refresh = true; }
+
+bool Owns(MonoObject *widget) {
+  if (s_building)
+    return true;
+  MonoObject *view = s_view ? Reflect::Target(s_view) : nullptr;
+  /* the view, its panels, their labels */
+  for (int depth = 0; view && widget && depth < 3; ++depth) {
+    if (widget == view)
+      return true;
+    widget = s_get_parent ? s_get_parent(widget) : nullptr;
+  }
+  return false;
+}
 
 void Tick() {
   ++s_frame;

@@ -61,7 +61,9 @@ void shellui_poll_presence_reload(void) {
       s_presence_reload_home_too.exchange(false, std::memory_order_acq_rel);
   LOG_INFO("reloading %sControl Center for its script (presence dot, clock)",
            home ? "Home and " : "");
+  /* Home through its own queue: one reload however many asked, never into a
+     Home still starting, and not on the same tick as the Control Center. */
   if (home)
-    ReloadRNPSApp("NPXS40002");
+    shellui_request_home_reload();
   ReloadRNPSApp("NPXS40003");
 }

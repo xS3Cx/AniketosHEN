@@ -571,20 +571,37 @@ bool write_label_text(MonoObject *label, const std::string &text) {
   return managed != nullptr;
 }
 
-std::string raw_text(MonoObject *raw) {
+MonoString *label_text(MonoObject *raw) {
   if (!raw || !mono_object_get_class || !mono_class_get_method_from_name ||
       !mono_runtime_invoke)
-    return {};
+    return nullptr;
   MonoClass *klass = mono_object_get_class(raw);
-  MonoMethod *getter =
-      klass ? mono_class_get_method_from_name(klass, "get_Text", 0) : nullptr;
-  if (!getter)
-    return {};
+  if (!klass)
+    return nullptr;
+  /* Label.OnUpdate asks this for every label: get_Text of the object's own
+     class (not a parent's, as by name), looked up once per class */
+  constexpr size_t kClasses = 8;
+  static MonoClass *classes[kClasses] = {};
+  static MonoMethod *getters[kClasses] = {};
+  static size_t next = 0;
+  size_t slot = 0;
+  while (slot < kClasses && classes[slot] != klass)
+    ++slot;
+  if (slot == kClasses) {
+    slot = next;
+    next = (next + 1) % kClasses;
+    classes[slot] = klass;
+    getters[slot] = mono_class_get_method_from_name(klass, "get_Text", 0);
+  }
+  if (!getters[slot])
+    return nullptr;
   MonoObject *exception = nullptr;
-  MonoObject *value = mono_runtime_invoke(getter, raw, nullptr, &exception);
-  return exception ? std::string{}
-                   : Mono_to_String(reinterpret_cast<MonoString *>(value));
+  MonoObject *value =
+      mono_runtime_invoke(getters[slot], raw, nullptr, &exception);
+  return exception ? nullptr : reinterpret_cast<MonoString *>(value);
 }
+
+std::string raw_text(MonoObject *raw) { return Mono_to_String(label_text(raw)); }
 
 float native_clock_opacity(MonoObject *label) {
   if (!native_clock_visible(label))

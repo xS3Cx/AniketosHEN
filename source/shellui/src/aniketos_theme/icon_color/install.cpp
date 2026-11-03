@@ -134,6 +134,17 @@ void hook_menu_icons(MonoImage *pui, int rows) {
   hook_menu_icon_setters(candidates);
 }
 
+/* React's buttons (Control Center among them) get only a picture when no
+   iconFilterColor is given, so their IconFilterColor setter never runs. */
+void hook_button_icons(MonoImage *pui, int rows) {
+  std::vector<SetterCandidate> candidates;
+  if (MonoClass *klass = find_pui_class(pui, rows, "Button")) {
+    for (const char *property : {"IconImage", "IconUri"})
+      add_object_setter(klass, "Button", property, candidates);
+  }
+  hook_button_icon_setters(candidates);
+}
+
 bool hook_widget_attach(MonoClass *widget) {
   const char *property_name = "Parent";
   MonoProperty *property = find_property_in_hierarchy(widget, property_name);
@@ -179,6 +190,7 @@ void Install(MonoImage *pui) {
   hook_image_setters(images);
   hook_image_sources(pui, rows);
   hook_menu_icons(pui, rows);
+  hook_button_icons(pui, rows);
   if (!hook_widget_attach(widget))
     LOG_INFO("[ICONCOLOR] attach hook not installed");
 }

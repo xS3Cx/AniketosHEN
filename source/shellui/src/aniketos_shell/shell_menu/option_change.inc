@@ -74,9 +74,13 @@ void write_slider_color(OptionId id, int position) {
   case OptionId::ColorLogo:
     put(g_settings.logo_color_r, g_settings.logo_color_g,
         g_settings.logo_color_b);
-    /* each move puts this off: the picture is made once, when it stops */
-    if (g_settings.logo_color_enabled)
-      shellui_request_presence_reload(1500, true);
+    /* each move puts this off: the picture is made once, when it stops. Only
+       Home's script holds the icon's path; the Control Center button takes
+       the new picture by itself (control_center_entry). */
+    if (g_settings.logo_color_enabled) {
+      HoldAniketosIcon();
+      shellui_request_home_reload_after(1500);
+    }
     break;
   default:
     break;

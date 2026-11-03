@@ -11,6 +11,7 @@
 #include "hooked_funcs.hpp"
 
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <ctime>
 #include <string>
@@ -73,6 +74,9 @@ extern DateOverlayState s_date_overlay;
 extern std::string s_last_rendered;
 extern time_t s_last_second;
 extern bool s_force_refresh;
+/* A game or app has the screen; sampled once a second, read by the script's
+   settings (ScriptConfig) from Home's module thread. */
+extern std::atomic<bool> s_game_focused;
 extern float s_measured_time_width;
 extern uint64_t s_animation_started_ms;
 /* The original setter: what we write must not come back through the hook. */
@@ -106,6 +110,7 @@ void load_clock_alias(const NativeClockAlias &alias);
 MonoString *ui_string(const std::string &text);
 void write_label_text(MonoObject *label, MonoString *text);
 bool write_label_text(MonoObject *label, const std::string &text);
+MonoString *label_text(MonoObject *raw);
 std::string raw_text(MonoObject *raw);
 float native_clock_opacity(MonoObject *label);
 void publish_date_overlay(time_t now, bool target_ready);

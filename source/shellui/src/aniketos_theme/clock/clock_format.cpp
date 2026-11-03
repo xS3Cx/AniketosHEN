@@ -1,5 +1,8 @@
 #include "aniketos_shell/rn_scripts/js_string.hpp"
+#include "aniketos_shell/shell_menu/shell_menu.hpp"
 #include "aniketos_theme/customization.hpp"
+#include "aniketos_theme/global_theme.hpp"
+#include "aniketos_theme/theme_config.hpp"
 #include "aniketos_theme/clock/clock_text.hpp"
 #include "clock_internal.hpp"
 #include "toolbox_i18n.hpp"
@@ -71,6 +74,57 @@ std::string json_color(int r, int g, int b) {
   char text[16];
   std::snprintf(text, sizeof(text), "\"#%02x%02x%02x\"", std::clamp(r, 0, 255),
                 std::clamp(g, 0, 255), std::clamp(b, 0, 255));
+  return text;
+}
+
+/* The moving clock colour of effective_clock_color() (clock_label.cpp) for
+   the script to compute itself: m is the global animation (1..4, see
+   GlobalTheme::Color) or 0 for the background's Rainbow (EvaluateAnimation,
+   its glow as h, s, v with the minimums already applied); the animation's
+   own clock in ms is Date.now() - o. null while the colour does not move,
+   and while a game or app has the screen, so the script stops its 15 Hz
+   redraw there. */
+std::string json_animation() {
+  if (s_game_focused)
+    return "null";
+  timespec wall{}, mono{};
+  clock_gettime(CLOCK_REALTIME, &wall);
+  clock_gettime(CLOCK_MONOTONIC, &mono);
+  /* from nanoseconds, so the offset stays the same from one ask to the next */
+  int64_t offset_ms =
+      (static_cast<int64_t>(wall.tv_sec - mono.tv_sec) * 1000000000 +
+       (wall.tv_nsec - mono.tv_nsec)) / 1000000;
+  char text[160];
+  if (AniketosTheme::GlobalTheme::Animated()) {
+    std::snprintf(text, sizeof(text),
+                  "{\"m\":%d,\"sp\":%.2f,\"r\":%.4f,\"g\":%.4f,\"b\":%.4f,"
+                  "\"o\":%lld}",
+                  std::clamp(g_settings.vsh_color_animation, 0, 4),
+                  std::clamp(g_settings.vsh_color_animation_speed, 25, 400) /
+                      100.0,
+                  std::clamp(g_settings.vsh_left_r, 0.0f, 1.0f),
+                  std::clamp(g_settings.vsh_left_g, 0.0f, 1.0f),
+                  std::clamp(g_settings.vsh_left_b, 0.0f, 1.0f),
+                  static_cast<long long>(offset_ms));
+    return text;
+  }
+  if (AniketosTheme::GlobalTheme::Active() || !clock_animation_active())
+    return "null";
+  const AniketosTheme::ThemeConfig config =
+      AniketosTheme::ConfigFromSettings(g_settings);
+  AniketosTheme::HSV glow = AniketosTheme::RGBToHSV(config.glow);
+  /* the start the native clock counts from; not started yet: now */
+  const uint64_t started = s_animation_started_ms;
+  if (started)
+    offset_ms += static_cast<int64_t>(started);
+  else
+    offset_ms += static_cast<int64_t>(MonotonicMs());
+  std::snprintf(text, sizeof(text),
+                "{\"m\":0,\"sp\":%.2f,\"h\":%.4f,\"s\":%.4f,\"v\":%.4f,"
+                "\"o\":%lld}",
+                std::clamp(config.animation_speed, 0.25f, 4.0f), glow.h,
+                std::max(glow.s, 0.88f), std::max(glow.v, 0.70f),
+                static_cast<long long>(offset_ms));
   return text;
 }
 
@@ -216,6 +270,10 @@ std::string format_date(const std::tm &local) {
 std::string ScriptConfig() {
   std::string out =
       std::string("{\"on\":") + (custom_clock_on() ? "true" : "false");
+  /* the script asks again every 100 ms instead of every 2 s while the menu
+     that edits the clock is open */
+  out += ",\"hot\":";
+  out += AniketosShell::ShellMenu::IsVisible() ? "true" : "false";
   out += ",\"seconds\":";
   out += g_settings.shell_clock_show_seconds ? "true" : "false";
   out += ",\"hour\":" +
@@ -246,6 +304,7 @@ std::string ScriptConfig() {
                             ? 0
                             : std::clamp(g_settings.shell_clock_time_font_size,
                                          8, 96));
+  out += ",\"anim\":" + json_animation();
   out += ",\"dc\":" + json_color(g_settings.shell_clock_date_r,
                                   g_settings.shell_clock_date_g,
                                   g_settings.shell_clock_date_b);

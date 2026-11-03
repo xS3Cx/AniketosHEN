@@ -258,12 +258,13 @@ MonoString *Decorate(MonoObject *label, MonoString *text) {
     tab = bind_space_switcher_label(label, original);
   }
   if (tab < 0) {
-    if (!HomeTabs::IsHomeTabLabel(label))
-      return text;
     tab = localized_space_tab(original);
     /* the bookmark's caption is the user's name as typed, which may be a
-       stock tab's word ("Games", "Gry", "Media"): it is not that tab */
-    if (tab < 0 || original == HomeBookmark::Name())
+       stock tab's word ("Games", "Gry", "Media"): it is not that tab. The
+       words first: every label set in ShellUI comes here, and the Home check
+       walks the label's parents. */
+    if (tab < 0 || original == HomeBookmark::Name() ||
+        !HomeTabs::IsHomeTabLabel(label))
       return text;
     LOG_INFO("[HOME-SPACES:NATIVE] semantic text-label tab=%s text='%s' "
              "label=%p",

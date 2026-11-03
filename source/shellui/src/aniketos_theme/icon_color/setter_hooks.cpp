@@ -1,5 +1,7 @@
 #include "icon_color_internal.hpp"
 
+#include "aniketos_theme/icon_color.hpp"
+
 #include <onion/detour.h>
 #include <onion/log.h>
 
@@ -12,6 +14,7 @@ namespace {
 constexpr size_t kMaxColorSetters = 8;
 constexpr size_t kMaxImageSourceSetters = 6;
 constexpr size_t kMaxMenuIconSetters = 6;
+constexpr size_t kMaxButtonIconSetters = 4;
 
 using ColorSetter = void (*)(MonoObject *, UIColor);
 using ObjectSetter = void (*)(MonoObject *, MonoObject *);
@@ -27,10 +30,12 @@ SetterHooks<ColorSetter, kMaxColorSetters> s_buttons;
 SetterHooks<ColorSetter, kMaxColorSetters> s_images;
 SetterHooks<ObjectSetter, kMaxImageSourceSetters> s_image_sources;
 SetterHooks<ObjectSetter, kMaxMenuIconSetters> s_menu_icons;
+SetterHooks<ObjectSetter, kMaxButtonIconSetters> s_button_icons;
 ObjectSetter s_attach_original = nullptr;
 uint64_t s_attach_address = 0;
 bool s_image_source_active = false;
 bool s_menu_icon_active = false;
+bool s_button_icon_active = false;
 bool s_attach_active = false;
 
 UIColor with_chosen_rgb(UIColor color) {
@@ -47,6 +52,11 @@ void apply_button_setter(size_t index, MonoObject *object, UIColor color) {
   ColorSetter original = s_buttons.originals[index];
   if (!original || !object || object_disposed(object))
     return;
+  if (keeps_own_colours(object)) {
+    leave_untinted(object);
+    original(object, color);
+    return;
+  }
   note_system_color(object, s_buttons.methods[index], color);
   original(object, feature_on() ? with_chosen_rgb(color) : color);
 }
@@ -69,6 +79,8 @@ void apply_image_setter(size_t index, MonoObject *object, UIColor color) {
   const bool target = widget_should_tint(object);
   if (target)
     note_system_color(object, s_images.methods[index], color);
+  else
+    leave_untinted(object);
   original(object, target && feature_on() ? with_chosen_rgb(color) : color);
 }
 
@@ -99,8 +111,12 @@ void set_then_tint(ObjectSetter original, bool &active, MonoObject *object,
 }
 
 void tint_new_image(MonoObject *object) {
-  if (s_image_filter.setter && widget_should_tint(object))
+  if (!s_image_filter.setter)
+    return;
+  if (widget_should_tint(object))
     tint_image(object);
+  else
+    leave_untinted(object); /* the picture before it may have been an icon */
 }
 
 template <int N> void image_source_hook(MonoObject *object, MonoObject *value) {
@@ -123,6 +139,17 @@ constexpr ObjectSetter kMenuIconHooks[kMaxMenuIconSetters] = {
     &menu_icon_hook<0>, &menu_icon_hook<1>, &menu_icon_hook<2>,
     &menu_icon_hook<3>, &menu_icon_hook<4>, &menu_icon_hook<5>};
 
+template <int N>
+void button_icon_hook(MonoObject *object, MonoObject *value) {
+  if (static_cast<size_t>(N) < s_button_icons.count)
+    set_then_tint(s_button_icons.originals[N], s_button_icon_active, object,
+                  value, &tint_button_icon);
+}
+
+constexpr ObjectSetter kButtonIconHooks[kMaxButtonIconSetters] = {
+    &button_icon_hook<0>, &button_icon_hook<1>, &button_icon_hook<2>,
+    &button_icon_hook<3>};
+
 void tint_attached_image(MonoObject *object) {
   if (is_image_box_descendant(mono_object_get_class(object)) &&
       widget_should_tint(object))
@@ -142,7 +169,8 @@ template <typename Hooks> bool in_group(const Hooks &hooks, uint64_t address) {
 bool address_hooked(uint64_t address) {
   return in_group(s_buttons, address) || in_group(s_images, address) ||
          in_group(s_image_sources, address) ||
-         in_group(s_menu_icons, address) || s_attach_address == address;
+         in_group(s_menu_icons, address) || in_group(s_button_icons, address) ||
+         s_attach_address == address;
 }
 
 template <typename Setter, size_t Capacity>
@@ -151,7 +179,12 @@ void hook_group(const char *kind,
                 const Setter (&detours)[Capacity],
                 SetterHooks<Setter, Capacity> &hooks) {
   for (const SetterCandidate &candidate : candidates) {
-    if (address_hooked(candidate.address))
+    /* subclasses share an inherited setter: one try per address */
+    const bool tried = std::any_of(
+        candidates.data(), &candidate, [&](const SetterCandidate &earlier) {
+          return earlier.address == candidate.address;
+        });
+    if (tried || address_hooked(candidate.address))
       continue;
     if (hooks.count >= Capacity) {
       LOG_INFO("[ICONCOLOR] %s hook capacity reached: %zu", kind, Capacity);
@@ -162,8 +195,11 @@ void hook_group(const char *kind,
     if (!InstallDetour(candidate.address,
                        reinterpret_cast<void *>(detours[index]),
                        reinterpret_cast<void **>(&hooks.originals[index]))) {
-      LOG_ERROR("[ICONCOLOR] %s hook failed type=%s setter=0x%llx", kind,
-                candidate.type, setter);
+      /* already detoured by another hook of ours, as MenuListItem.IconImage
+         is by settings_row_icon, which calls MenuIconSet */
+      LOG_INFO("[ICONCOLOR] %s setter not hooked type=%s property=%s "
+               "setter=0x%llx",
+               kind, candidate.type, candidate.property, setter);
       continue;
     }
     hooks.addresses[index] = candidate.address;
@@ -194,6 +230,10 @@ void hook_menu_icon_setters(const std::vector<SetterCandidate> &candidates) {
   hook_group("menu-icon", candidates, kMenuIconHooks, s_menu_icons);
 }
 
+void hook_button_icon_setters(const std::vector<SetterCandidate> &candidates) {
+  hook_group("button-icon", candidates, kButtonIconHooks, s_button_icons);
+}
+
 bool hook_attach_setter(const SetterCandidate &candidate) {
   if (address_hooked(candidate.address) ||
       !InstallDetour(candidate.address, reinterpret_cast<void *>(&attach_hook),
@@ -204,6 +244,14 @@ bool hook_attach_setter(const SetterCandidate &candidate) {
            candidate.type, candidate.property,
            static_cast<unsigned long long>(candidate.address));
   return true;
+}
+
+void MenuIconSet(MonoObject *row) {
+  if (!row || s_menu_icon_active || !feature_on() || object_disposed(row))
+    return;
+  s_menu_icon_active = true;
+  tint_menu_row(row);
+  s_menu_icon_active = false;
 }
 
 } // namespace AniketosTheme::IconColor

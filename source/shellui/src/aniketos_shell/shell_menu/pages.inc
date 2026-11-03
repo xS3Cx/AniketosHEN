@@ -688,6 +688,27 @@ void menu_look_pages(Page page, std::vector<Option> &options) {
         toggle(tr("vsh.m.shortcut_hint"), OptionId::MenuControls,
                g_settings.vsh_show_controls),
     };
+    /* Only what the skin in use draws: Apparition has no frame, and Sweety's
+       pages are the console's own, with its own surfaces and font. One font
+       file stands in for every weight while the custom font is on.
+       shortcut: a Sweety whose pop-up failed is drawn as Akari yet hides
+       these (SweetyNative::Wanted comes after this file), share it if that
+       fallback matters. */
+    const bool drawn_here = active_menu_theme() != kThemeSweety ||
+                            !SystemDialogs::PopupMenuAvailable();
+    std::erase_if(options, [drawn_here](const Option &option) {
+      switch (option.id) {
+      case OptionId::MenuBorderEnabled:
+      case OptionId::MenuBorder:
+        return !drawn_here || apparition_theme();
+      case OptionId::MenuOpacity:
+        return !drawn_here;
+      case OptionId::MenuFontWeight:
+        return !drawn_here || g_settings.custom_font_enabled;
+      default:
+        return false;
+      }
+    });
     break;
   }
   case Page::Colors: {

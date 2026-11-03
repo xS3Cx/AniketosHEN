@@ -122,11 +122,26 @@ bool tint_row_element(MonoObject *row) {
 } // namespace
 
 void tint_menu_row(MonoObject *row) {
+  if (keeps_own_colours(row)) {
+    leave_untinted(row);
+    for (MonoObject *icon : {row_icon_element(row), row_icon_widget(row)}) {
+      if (icon)
+        leave_untinted(icon);
+    }
+    return;
+  }
   if (!object_disposed(row))
     tint_by_property(row, {"IconFilterColor", "FilterColor"});
   if (!tint_row_element(row))
     tint_row_icon_widget(row);
   scan_menu_icons(row);
+}
+
+void tint_button_icon(MonoObject *button) {
+  if (keeps_own_colours(button))
+    leave_untinted(button);
+  else
+    tint_by_property(button, {"IconFilterColor"});
 }
 
 } // namespace AniketosTheme::IconColor

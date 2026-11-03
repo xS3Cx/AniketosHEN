@@ -1,5 +1,7 @@
 #include "aniketos_theme/clock/shell_clock.hpp"
 
+#include "aniketos_shell/core/host_scene.hpp"
+#include "aniketos_shell/home/home_tabs.hpp"
 #include "aniketos_theme/tiles/space_switcher_labels.hpp"
 #include "clock_internal.hpp"
 
@@ -18,6 +20,7 @@ namespace ShellClock {
 std::string s_last_rendered;
 time_t s_last_second = static_cast<time_t>(-1);
 bool s_force_refresh = false;
+std::atomic<bool> s_game_focused{false};
 void (*s_native_label_set_text_orig)(MonoObject *, MonoString *) = nullptr;
 
 namespace {
@@ -131,6 +134,48 @@ void native_label_set_text_hook(MonoObject *label, MonoString *text) {
   s_redraw_frames = 4;
 }
 
+/* Whether the update hook can act on a label that is no clock of ours,
+   judged from its UTF-16 text without copying it: a clock needs a digit
+   followed by the separator (ClockText::Parse, at most 48 bytes), a dressed
+   tab caption our glyph first (UpdateFocusBounds), a stock one no digit, at
+   most 24 bytes and the icons on (IsTabLabel). A label whose text was
+   already found to be no caption is skipped until that text changes:
+   hundreds of labels go through here while Home is being built. */
+bool worth_reading(MonoObject *label, const MonoString *text) {
+  const int32_t length = text ? text->length : 0;
+  if (length <= 0 || length > 48)
+    return false;
+  const auto *chars = text->chars;
+  if (chars[0] >= 0xE000 && chars[0] <= 0xF8FF)
+    return true;
+  bool digit = false;
+  for (int32_t i = 0; i < length; ++i) {
+    if (chars[i] < '0' || chars[i] > '9')
+      continue;
+    if (i + 1 < length && (chars[i + 1] == ':' || chars[i + 1] == '.'))
+      return true;
+    digit = true;
+  }
+  if (digit || length > 24 || !HomeTabs::IconsShown())
+    return false;
+  uint64_t hash = 1469598103934665603ull;
+  for (int32_t i = 0; i < length; ++i)
+    hash = (hash ^ chars[i]) * 1099511628211ull;
+  struct Seen {
+    MonoObject *label;
+    uint64_t hash;
+  };
+  static Seen seen[64] = {};
+  Seen &entry = seen[(reinterpret_cast<uintptr_t>(label) >> 4) % 64];
+  if (entry.label == label && entry.hash == hash)
+    return false;
+  if (AniketosTheme::SpaceSwitcherLabels::IsTabLabel(
+          Mono_to_String(const_cast<MonoString *>(text))))
+    return true;
+  entry = {label, hash};
+  return false;
+}
+
 void native_label_on_update_hook(MonoObject *label) {
   if (s_native_label_on_update_orig)
     s_native_label_on_update_orig(label);
@@ -170,7 +215,10 @@ void native_label_on_update_hook(MonoObject *label) {
     update_clock_alias(label, static_cast<size_t>(alias_index), now);
     return;
   }
-  const std::string stock = raw_text(label);
+  MonoString *text = label_text(label);
+  if (!worth_reading(label, text))
+    return;
+  const std::string stock = Mono_to_String(text);
   AniketosTheme::SpaceSwitcherLabels::UpdateFocusBounds(label, stock);
   // HomeUI may create the native tab labels before our setter hook is
   // installed. Recheck their live text during the runtime-resolved Label
@@ -591,6 +639,7 @@ void Tick() {
     if (now != swept) {
       swept = now;
       sweep_clock_labels(now);
+      s_game_focused = AniketosShell::GameLayerFocused();
     }
   }
   MonoObject *target = clock_target();

@@ -1,4 +1,5 @@
 #include "aniketos_shell/core/embedded_assets.hpp"
+#include "aniketos_theme/icon_color.hpp"
 #include "aniketos_ui/mono_reflect.hpp"
 #include "hooked_funcs.hpp"
 
@@ -18,6 +19,8 @@ void (*MenuListItem_SetIconImage)(MonoObject *item, MonoObject *asset) = nullptr
 void MenuListItem_SetIconImage_Hook(MonoObject *item, MonoObject *asset) {
   if (MenuListItem_SetIconImage)
     MenuListItem_SetIconImage(item, asset);
+  /* this hook owns the setter, so the icon colour cannot detour it */
+  AniketosTheme::IconColor::MenuIconSet(item);
   if (!shellui_hooks_are_ready() || !item || !asset || !mono_object_to_string)
     return;
   /* a coloured logo has a name of its own: the system keeps pictures by path */

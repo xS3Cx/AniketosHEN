@@ -6,6 +6,9 @@
 
 /* The distribution's icon, in the logo colour when one is chosen. */
 const char *AniketosIconPath();
+/* The logo colour was stepped: the icon keeps its last picture until the
+ * colour has rested, instead of a new one at every step. */
+void HoldAniketosIcon();
 /* The globe shown beside the Internet switch: white while the connection is
  * enabled, red and struck through while it is off. */
 const char *InternetIconPath(bool enabled);

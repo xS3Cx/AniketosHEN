@@ -307,12 +307,14 @@ void update_apparition_menu_widgets() {
   const float y = std::clamp(style.y - total_height * 0.5f, 0.0f,
                              std::max(0.0f, s_viewport_height - total_height));
 
-  // Values sampled from the supplied Apparition reference frame. ShellUI's
-  // Apparition surface is deliberately fully opaque, independent of the
-  // general Menu Opacity setting.
+  // Values sampled from the supplied Apparition reference frame; the
+  // surfaces take the Background Opacity, the selected row's bar does not.
   const Color accent = apparition_gradient_color(style, 0.5f);
-  constexpr Color background{20.0f / 255.0f, 20.0f / 255.0f, 20.0f / 255.0f,
-                             1.0f};
+  const float opacity = style.background_opacity;
+  const Color background{20.0f / 255.0f, 20.0f / 255.0f, 20.0f / 255.0f,
+                         opacity};
+  Color banner = kApparitionBanner;
+  banner.a = opacity;
   set_master_geometry(x, y, width, total_height);
   s_apparition_animation_layout = {true, x, y, width, total_height, body_y,
                                     body_height, footer_y, footer_height,
@@ -322,9 +324,9 @@ void update_apparition_menu_widgets() {
   panel_geometry(s_widgets.header, 0.0f, 0.0f, width, body_y);
   panel_geometry(s_widgets.body, 0.0f, body_y, width, body_height);
   panel_geometry(s_widgets.footer, 0.0f, footer_y, width, footer_height);
-  panel_color(s_widgets.header, kApparitionBanner);
+  panel_color(s_widgets.header, banner);
   panel_color(s_widgets.body, background);
-  panel_color(s_widgets.footer, kApparitionBanner);
+  panel_color(s_widgets.footer, banner);
   panel_geometry(s_widgets.scroll_clip, 0.0f, body_y, width, body_height);
   Set_Property(s_panel_class, s_widgets.body, "Opacity", 1.0f);
   Set_Property(s_panel_class, s_widgets.scroll_clip, "Opacity", 1.0f);

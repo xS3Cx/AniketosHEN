@@ -1,5 +1,7 @@
 #pragma once
 
+#include "external_symbols.hpp"
+
 /* The DevKit/TestKit overlays on Home, drawn by the system's own widget
  * (ReactNative.Components.ShellUI.HomeUI.DebugInfoView in
  * Sce.Vsh.ShellUI.ReactNativeShellApp): the "System Software / Release Check
@@ -13,4 +15,8 @@ void Install();
 void Tick();
 /* A setting changed: show, hide or drop the overlay at the next tick. */
 void Refresh();
+/* True for the overlay's widget, its panels and their labels (and anything
+   made while its create methods run): the theme hooks leave them as the
+   system draws them. UI thread; costs nothing while the overlay is off. */
+bool Owns(MonoObject *widget);
 }

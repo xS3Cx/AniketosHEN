@@ -52,11 +52,17 @@ void release_widgets() {
     image.clear();
 }
 
+/* The Font Weight setting (Light, Regular, Bold) as a Core.Imaging.FontWeight.
+   libScePsm opens SST-Light for Light (2), SST-Roman for UI3Medium (6) and
+   SST-Bold for UI3Bold (5); any value it does not know, such as a CSS 400,
+   falls back to SST-Light. */
+int menu_font_weight() {
+  constexpr int kWeights[] = {2, 6, 5};
+  return kWeights[std::clamp(g_settings.vsh_font_weight, 0, 2)];
+}
+
 void replace_font(int size) {
-  const int selected_weight = g_settings.vsh_font_weight;
-  const int weight = selected_weight == 0
-                         ? 300
-                         : (selected_weight == 2 ? 700 : 400);
+  const int weight = menu_font_weight();
   if (s_font && s_font_handle && s_font_size == size &&
       s_font_weight == weight)
     return;
@@ -114,10 +120,11 @@ void panel_geometry(MonoObject *panel, float x, float y, float width,
 
 void panel_color(MonoObject *panel, Color color) {
   if (light_menu_appearance()) {
+    /* the surfaces keep the alpha they were given: the Background Opacity */
     if (panel == s_widgets.header || panel == s_widgets.footer) {
-      color = {1.0f, 1.0f, 1.0f, 1.0f};
+      color = {1.0f, 1.0f, 1.0f, color.a};
     } else if (panel == s_widgets.body) {
-      color = {0.84f, 0.85f, 0.87f, 1.0f};
+      color = {0.84f, 0.85f, 0.87f, color.a};
     } else if (panel == s_widgets.highlight ||
                std::find(std::begin(s_widgets.highlight_slices),
                          std::end(s_widgets.highlight_slices),
