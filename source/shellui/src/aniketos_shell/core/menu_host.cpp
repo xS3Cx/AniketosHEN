@@ -152,21 +152,23 @@ void Tick() {
 
   /* Asking SystemService which BigApp is running is a round trip to another
      process. Home <-> game transitions do not need frame accuracy, so sample
-     it four times a second and reuse the answer in between. */
+     it four times a second and reuse the answer in between; its title is
+     asked for only when a game comes in, for the log. */
   static bool big_app_running = false;
-  static std::string running_title;
   static uint64_t last_query_ms = 0;
   {
     Profile::Scope scope(Profile::kRunningApp);
     const uint64_t now_ms = AniketosUI::MonotonicMs();
     if (!last_query_ms || now_ms - last_query_ms >= 250) {
       last_query_ms = now_ms;
-      int running_app_id = -1;
-      big_app_running = Get_Running_App_TID(running_title, running_app_id);
+      big_app_running = sceSystemServiceGetAppIdOfRunningBigApp() >= 0;
     }
   }
   if (big_app_running) {
     if (!s_game_session_active) {
+      std::string running_title;
+      int running_app_id = -1;
+      (void)Get_Running_App_TID(running_title, running_app_id);
       ShellMenu::EnterGameSession();
       s_game_session_active = true;
       Input::SetMenuCapturing(false);

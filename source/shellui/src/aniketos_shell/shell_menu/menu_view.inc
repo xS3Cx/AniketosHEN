@@ -1,3 +1,14 @@
+/* Slice `i` of the Akari cursor, faded with the text while opening and
+   closing. */
+void color_akari_highlight_slice(int i, float text_opacity) {
+  const float t = gradient_slice(1.0f, i, kGradientSlices).t;
+  panel_color(s_widgets.highlight_slices[i],
+              menu_dual_color()
+                  ? mix(left_color(), right_color(), gradient_t(t),
+                        0.4f * text_opacity)
+                  : right_color(0.4f * text_opacity));
+}
+
 void update_menu_widgets() {
   if (!s_widgets.master || s_stack.empty())
     return;
@@ -23,9 +34,8 @@ void update_menu_widgets() {
     return;
   }
   PageState &state = s_stack.back();
-  std::vector<Option> options_scratch;
   const std::vector<Option> &options =
-      page_options(state.page, options_scratch);
+      page_options(state.page, s_painted_options);
   ensure_selection(state, options);
   hide_theme_accent_slices();
   hide_anomaly_extras();
@@ -120,11 +130,7 @@ void update_menu_widgets() {
   for (int i = 0; i < kGradientSlices; ++i) {
     const GradientSlice slice = gradient_slice(width, i, kGradientSlices);
     panel_geometry(s_widgets.highlight_slices[i], slice.x, 0, slice.width, row);
-    panel_color(s_widgets.highlight_slices[i],
-                menu_dual_color()
-                    ? mix(left_color(), right_color(), gradient_t(slice.t),
-                          0.4f * text_opacity)
-                    : right_color(0.4f * text_opacity));
+    color_akari_highlight_slice(i, text_opacity);
   }
 
   const float text_x = border + layout.padding;
@@ -203,4 +209,29 @@ void update_menu_widgets() {
 
   update_controls();
   s_dirty = false;
+}
+
+/* A colour animation frame of the Akari layout: only what takes the palette
+   (frame, cursor, the switches and sliders that are on) is written again. */
+void update_akari_menu_colors_only() {
+  if (s_stack.empty())
+    return;
+  for (int i = 0; i < 2; ++i) {
+    panel_color(s_widgets.left_borders[i],
+                gradient_edge_color(/*right_edge=*/false));
+    panel_color(s_widgets.right_borders[i],
+                gradient_edge_color(/*right_edge=*/true));
+  }
+  for (int line = 0; line < kBorderLines; ++line)
+    for (int i = 0; i < kFrameGradientSlices; ++i)
+      color_frame_slice(line, i);
+  const float text_opacity = std::clamp(s_akari_text_reveal, 0.0f, 1.0f);
+  for (int i = 0; i < kGradientSlices; ++i)
+    color_akari_highlight_slice(i, text_opacity);
+  if (text_opacity <= 0.0f)
+    return;
+  const size_t scroll = s_stack.back().scroll;
+  for (size_t i = 0; i < kMaxVisibleOptions; ++i)
+    if (scroll + i < s_painted_options.size())
+      color_option_control(i, s_painted_options[scroll + i]);
 }

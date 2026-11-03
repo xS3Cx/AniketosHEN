@@ -519,8 +519,10 @@ std::string wanted() {
   if (!g_settings.home_video_path.empty() &&
       if_exists(g_settings.home_video_path.c_str()))
     return g_settings.home_video_path;
-  /* look for files now and then, so dropping one in is enough */
-  if (!s_videos_scanned || frame_count - s_scanned_frame >= 300)
+  /* look for files now and then while the stage shows, so dropping one in is
+     enough */
+  if (!s_videos_scanned ||
+      (stage_wanted() && frame_count - s_scanned_frame >= 300))
     scan();
   for (const std::string &path : s_videos)
     if (if_exists(path.c_str()))

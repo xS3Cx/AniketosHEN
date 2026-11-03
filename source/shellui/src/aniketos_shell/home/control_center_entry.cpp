@@ -39,6 +39,7 @@ uint32_t s_button_handle = 0;
 uint32_t s_label_holder_handle = 0;
 uint32_t s_scene_handle = 0;
 int s_search_countdown = 0;
+int s_hidden_frames = 0;
 
 MonoObject *get(MonoObject *object, const char *getter) {
   MonoObject *value = nullptr;
@@ -212,19 +213,15 @@ MonoObject *search_button() {
   return button;
 }
 
+/* The button itself, or the focus layer React wraps it in, has focus. */
 bool button_has_focus(MonoObject *button) {
-  /* The button itself, or the focus layer React wraps it in, has focus. */
   bool focused = false;
   MonoObject *node_up = button;
   for (int depth = 0; node_up && depth < 4 && !focused; ++depth) {
     focused = flag(node_up, "get_Focused");
     node_up = get(node_up, "get_Parent");
   }
-  /* Focus stays where it was when the Control Center closes, so it only
-     counts while the button is really on screen. Otherwise presses made in
-     Home or anywhere else would be taken for presses on our button. */
-  return focused && flag(button, "get_IsFinallyShown") &&
-         Reflect::FloatProperty(button, "get_FinalOpacity") > 0.5f;
+  return focused;
 }
 
 /* The caption is a label React creates while the button has focus. */
@@ -275,13 +272,26 @@ void Tick() {
     HenMenu::Request(Reflect::Target(s_scene_handle));
   }
   MonoObject *button = current_button();
+  bool found_now = false;
   if (!button) {
     s_button_focused.store(false, std::memory_order_relaxed);
     button = search_button();
     if (!button)
       return;
+    found_now = true;
   }
-  s_button_focused.store(button_has_focus(button), std::memory_order_relaxed);
+  /* Focus stays where it was when the Control Center closes, so it only
+     counts while the button is really on screen. Otherwise presses made in
+     Home or anywhere else would be taken for presses on our button. */
+  const bool shown = flag(button, "get_IsFinallyShown");
+  const float opacity =
+      shown ? Reflect::FloatProperty(button, "get_FinalOpacity") : 0.0f;
+  s_button_focused.store(opacity > 0.5f && button_has_focus(button),
+                         std::memory_order_relaxed);
+  /* Out of sight (the Control Center closed, most of the time) the icon and
+     caption are seen to four times a second rather than on every frame. */
+  if (opacity <= 0.0f && !found_now && ++s_hidden_frames % 15 != 0)
+    return;
 
   /* React puts its own image back whenever it re-renders the button. */
   if (MonoObject *asset = icon_asset()) {

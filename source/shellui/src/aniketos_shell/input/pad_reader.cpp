@@ -287,7 +287,10 @@ void *reader_thread(void *) {
     if (!state.buttons)
       s_release_guard.store(false, std::memory_order_release);
     previous = state.buttons;
-    SleepMs(8);
+    /* The menu's auto-repeat and the release guard want 8 ms; the shortcuts
+       alone (the rest of the time, a game included) one read a frame, which
+       still sees the quickest press of a button. */
+    SleepMs(IsMenuCapturing() ? 8 : 16);
   }
 }
 

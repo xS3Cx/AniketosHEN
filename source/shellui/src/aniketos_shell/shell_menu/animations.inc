@@ -101,9 +101,11 @@ void update_animations() {
   const float page_reveal = update_page_transition(now);
   if (apparition && (opening || closing)) {
     update_apparition_open_close_animation(menu_reveal);
+    s_menu_reveal_applied = -1.0f;
   } else if (anomaly && (s_animation == AnimationState::Opening ||
                          s_animation == AnimationState::Closing)) {
     update_anomaly_open_close(animation_elapsed, opening);
+    s_menu_reveal_applied = -1.0f;
   } else {
     // Non-Apparition themes keep a fixed geometry. The old centre-growing clip
     // changed the master width/height during every open and page repaint, which
@@ -113,14 +115,16 @@ void update_animations() {
                    s_menu_target_width, s_menu_target_height);
     panel_geometry(s_widgets.content, 0.0f, 0.0f,
                    s_menu_target_width, s_menu_target_height);
-    Set_Property(s_panel_class, s_widgets.master, "Opacity", menu_reveal);
-    if (s_widgets.anomaly_controls) {
+    /* every frame, open or closed: write the opacity only when it moves */
+    if (menu_reveal != s_menu_reveal_applied) {
+      Set_Property(s_panel_class, s_widgets.master, "Opacity", menu_reveal);
       Set_Property(s_panel_class, s_widgets.anomaly_controls, "Opacity",
                    menu_reveal);
-      if (anomaly)
-        AniketosUI::Pui::PanelY(s_pui, s_widgets.anomaly_controls,
-                                s_anomaly_controls_y);
+      s_menu_reveal_applied = menu_reveal;
     }
+    if (anomaly && s_widgets.anomaly_controls)
+      AniketosUI::Pui::PanelY(s_pui, s_widgets.anomaly_controls,
+                              s_anomaly_controls_y);
   }
 
   if (page_transition_was_active || page_transition_active() ||

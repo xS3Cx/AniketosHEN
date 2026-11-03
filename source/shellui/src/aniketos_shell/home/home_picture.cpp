@@ -53,7 +53,8 @@ std::string wanted_image(bool video_shown) {
   if (!g_settings.home_image_path.empty() &&
       if_exists(g_settings.home_image_path.c_str()))
     return g_settings.home_image_path;
-  if (!s_images_scanned || frame_count - s_images_scanned_frame >= 300)
+  if (!s_images_scanned ||
+      (stage_wanted() && frame_count - s_images_scanned_frame >= 300))
     scan_images();
   for (const std::string &path : s_images)
     if (if_exists(path.c_str()))

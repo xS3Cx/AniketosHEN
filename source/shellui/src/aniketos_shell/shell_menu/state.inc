@@ -569,6 +569,13 @@ bool s_menu_visual_style_initialized = false;
 uint64_t s_menu_visual_phase_origin_ms = 0;
 bool s_auxiliary_color_only_update = false;
 ApparitionAnimationLayout s_apparition_animation_layout{};
+/* The options the last full repaint laid out. The colour-only passes read
+   them instead of building the page again on every animation frame; any
+   change to the page goes through a full repaint first. */
+std::vector<Option> s_painted_options;
+/* The Opacity last written to the menu and its Anomaly legend by
+   update_animations (-1: not known). It rests at 0 or 1 nearly always. */
+float s_menu_reveal_applied = -1.0f;
 
 /* Settings persistence. Writing config.ini is two synchronous file writes on
  * the UI thread (about 20 ms on a console): doing it on every slider step, and

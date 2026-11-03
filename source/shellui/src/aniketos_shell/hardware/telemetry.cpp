@@ -54,6 +54,10 @@ std::atomic<int> s_refresh_seconds{1};
 /* A menu page showing live readings is open: sample twice a second. */
 std::atomic<bool> s_live_view{false};
 std::atomic<uint64_t> s_frame_count{0};
+/* GetSnapshot calls: none for a whole period means nothing shows the
+   readings (a game is in front), so the worker stops sampling. */
+std::atomic<uint64_t> s_snapshot_reads{0};
+std::atomic<uint64_t> s_sampled_at_ms{0};
 std::mutex s_snapshot_mutex;
 Snapshot s_snapshot{};
 
@@ -333,17 +337,21 @@ void *worker(void *) {
 
   uint64_t previous_frames = s_frame_count.load(std::memory_order_acquire);
   uint64_t previous_ms = AniketosUI::MonotonicMs();
+  uint64_t reads_seen = s_snapshot_reads.load(std::memory_order_relaxed);
+  bool idle = false;
   bool logged = false;
   for (;;) {
     /* Sleep in short slices so a change of interval (or a live page being
-       opened) takes effect at once instead of after the current period. */
+       opened) takes effect at once instead of after the current period;
+       while idle, the first read again samples at once. */
     for (uint64_t slept_ms = 0;;) {
       const uint64_t period_ms =
           s_live_view.load(std::memory_order_acquire)
               ? 500
               : static_cast<uint64_t>(
                     s_refresh_seconds.load(std::memory_order_acquire)) * 1000;
-      if (slept_ms >= period_ms)
+      if (slept_ms >= period_ms ||
+          (idle && s_snapshot_reads.load(std::memory_order_relaxed) != reads_seen))
         break;
       const timespec delay{0, 100 * 1000 * 1000};
       nanosleep(&delay, nullptr);
@@ -358,6 +366,11 @@ void *worker(void *) {
                               : 0.0f;
     previous_frames = frames;
     previous_ms = now_ms;
+    const uint64_t reads = s_snapshot_reads.load(std::memory_order_relaxed);
+    idle = reads == reads_seen;
+    reads_seen = reads;
+    if (idle)
+      continue;
 
     Snapshot next = initial;
     sample(next, fps);
@@ -365,6 +378,7 @@ void *worker(void *) {
       std::lock_guard<std::mutex> lock(s_snapshot_mutex);
       s_snapshot = next;
     }
+    s_sampled_at_ms.store(next.sampled_at_ms, std::memory_order_release);
     if (!logged) {
       logged = true;
       LOG_INFO("[ANIVSH:TELEMETRY] cpu=%s/%dC soc=%s/%dC fan=%s/raw:%u/%.1f%% ram=%s/%d/%dMB ip=%s fps=%.1f",
@@ -422,8 +436,13 @@ void SetRefreshSeconds(int seconds) {
 }
 
 Snapshot GetSnapshot() {
+  s_snapshot_reads.fetch_add(1, std::memory_order_relaxed);
   std::lock_guard<std::mutex> lock(s_snapshot_mutex);
   return s_snapshot;
+}
+
+uint64_t SampledAtMs() {
+  return s_sampled_at_ms.load(std::memory_order_acquire);
 }
 
 } // namespace AniketosShell::Telemetry

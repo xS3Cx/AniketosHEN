@@ -233,10 +233,20 @@ void apply_font(float font_size = 0.0f) {
   label_font(s_widgets.version);
   label_font(s_widgets.page_title);
   label_font(s_widgets.counter);
-  label_font(s_widgets.overlay);
+  /* not the Home OSD: it keeps its own font (update_overlay) */
   apply_control_font();
   for (size_t i = 0; i < kMaxVisibleOptions; ++i)
     option_row_fonts(i);
+}
+
+/* Slice `i` of a line of the Akari frame. */
+void color_frame_slice(int line, int i) {
+  const float t = (static_cast<float>(i) + 0.5f) /
+                  static_cast<float>(kFrameGradientSlices);
+  panel_color(s_widgets.horizontal_borders[line][i],
+              menu_dual_color()
+                  ? mix(left_color(), right_color(), gradient_t(t), 1.0f)
+                  : akari_theme() ? right_color() : left_color());
 }
 
 void horizontal_border_gradient(int line, float y, float width, float border,
@@ -250,13 +260,9 @@ void horizontal_border_gradient(int line, float y, float width, float border,
                      static_cast<float>(kFrameGradientSlices);
     const float x1 = inset + drawable_width * static_cast<float>(i + 1) /
                      static_cast<float>(kFrameGradientSlices);
-    const float t = (static_cast<float>(i) + 0.5f) /
-                    static_cast<float>(kFrameGradientSlices);
-    MonoObject *slice = s_widgets.horizontal_borders[line][i];
-    panel_geometry(slice, x0, y, x1 - x0, border);
-    panel_color(slice, menu_dual_color()
-                           ? mix(left_color(), right_color(), gradient_t(t), 1.0f)
-                           : akari_theme() ? right_color() : left_color());
+    panel_geometry(s_widgets.horizontal_borders[line][i], x0, y, x1 - x0,
+                   border);
+    color_frame_slice(line, i);
   }
 }
 

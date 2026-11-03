@@ -1,5 +1,6 @@
 /* Copyright (C) 2026 AniketosHEN — shared native PS5 UI background theming. */
 
+#include "aniketos_shell/core/host_scene.hpp"
 #include "aniketos_shell/system_ui/devkit_overlay.hpp"
 #include "aniketos_ui/monotonic_clock.hpp"
 #include "aniketos_ui/pui_primitives.hpp"
@@ -63,6 +64,7 @@ std::vector<std::string> s_logged_token_keys;
 uint64_t s_animation_started_ms = 0;
 uint64_t s_last_frame_ms = 0;
 uint64_t s_last_config = 0;
+uint32_t s_last_theme_bytes = 0;
 bool s_installed = false;
 bool s_last_enabled = false;
 bool s_logged_first_apply = false;
@@ -305,7 +307,8 @@ bool try_token_color_hook(MonoObject *manager, MonoString *managed_key,
     return false;
   const bool found = s_try_token_color_original(manager, managed_key, color,
                                                  theme_override);
-  if (!found || !color)
+  /* both tints below need the customization on; the key is not read without */
+  if (!found || !color || !CustomizationOn())
     return found;
   const std::string key = managed_key ? Mono_to_String(managed_key)
                                       : std::string();
@@ -461,8 +464,17 @@ void Tick() {
     return;
   if (!animated && !config_changed)
     return;
-
+  s_last_frame_ms = now;
+  /* A moving colour waits while a game has the screen, and a step that
+     changes no byte of it is not drawn. */
+  if (!config_changed &&
+      AniketosShell::CurrentFocusLayer() == AniketosShell::FocusLayer::Game)
+    return;
   const RGB theme = animated_theme_color(now);
+  const uint32_t theme_bytes = RGBBytes(theme);
+  if (!config_changed && theme_bytes == s_last_theme_bytes)
+    return;
+  s_last_theme_bytes = theme_bytes;
   remove_dead(s_panels);
   remove_dead(s_basemat_opacities);
   for (const Tracked<UIColor> &panel : s_panels) {
@@ -479,7 +491,6 @@ void Tick() {
              g_settings.shell_ui_panels_strength,
              g_settings.shell_ui_panels_opacity);
   }
-  s_last_frame_ms = now;
   s_last_config = signature;
   s_last_enabled = true;
 }

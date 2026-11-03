@@ -8,8 +8,11 @@
 namespace AniketosUI::MonoPropertyCache {
 namespace {
 
-constexpr size_t kSlots = 1024; /* power of two; ~60 entries are used */
+/* power of two; a few hundred entries are used (accessors and methods) */
+constexpr size_t kSlots = 2048;
 constexpr size_t kNameCapacity = 40;
+/* Kinds from here up are methods, by arity; below are the accessor Kinds. */
+constexpr int kMethodKind = 8;
 
 struct Slot {
   MonoClass *klass;
@@ -46,7 +49,8 @@ size_t hash_key(MonoClass *klass, const char *name, int kind) {
   return static_cast<size_t>(hash ^ (hash >> 29));
 }
 
-void *resolve(MonoClass *klass, const char *property, Kind kind) {
+void *resolve_accessor(MonoClass *klass, const char *property, int kind_id) {
+  const Kind kind = static_cast<Kind>(kind_id);
   MonoProperty *prop = mono_class_get_property_from_name(klass, property);
   if (!prop)
     return nullptr;
@@ -60,16 +64,23 @@ void *resolve(MonoClass *klass, const char *property, Kind kind) {
   return reinterpret_cast<void *>(mono_compile_method(method));
 }
 
-} // namespace
+/* The first class up from `klass` that has the method. */
+void *resolve_method(MonoClass *klass, const char *name, int kind_id) {
+  for (; klass; klass = mono_class_get_parent(klass))
+    if (MonoMethod *method = mono_class_get_method_from_name(
+            klass, name, kind_id - kMethodKind))
+      return method;
+  return nullptr;
+}
 
-void *Accessor(MonoClass *klass, const char *property, Kind kind) {
+void *cached(MonoClass *klass, const char *property, int kind_id,
+             void *(*resolve)(MonoClass *, const char *, int)) {
   if (!klass || !property)
     return nullptr;
   const size_t length = std::strlen(property);
   if (length >= kNameCapacity)
-    return resolve(klass, property, kind);
+    return resolve(klass, property, kind_id);
 
-  const int kind_id = static_cast<int>(kind);
   size_t index = hash_key(klass, property, kind_id) & (kSlots - 1);
   {
     Guard guard;
@@ -85,7 +96,7 @@ void *Accessor(MonoClass *klass, const char *property, Kind kind) {
   /* Resolve outside the lock: the runtime takes its own locks, and a second
      thread resolving the same key simply stores the same answer. Failures
      are not cached, so a property that appears later is still found. */
-  void *value = resolve(klass, property, kind);
+  void *value = resolve(klass, property, kind_id);
   if (!value)
     return nullptr;
 
@@ -103,6 +114,17 @@ void *Accessor(MonoClass *klass, const char *property, Kind kind) {
     }
   }
   return value;
+}
+
+} // namespace
+
+void *Accessor(MonoClass *klass, const char *property, Kind kind) {
+  return cached(klass, property, static_cast<int>(kind), resolve_accessor);
+}
+
+MonoMethod *Method(MonoClass *klass, const char *name, int parameters) {
+  return static_cast<MonoMethod *>(
+      cached(klass, name, kMethodKind + parameters, resolve_method));
 }
 
 MonoObject *ScratchColor(float r, float g, float b, float a) {

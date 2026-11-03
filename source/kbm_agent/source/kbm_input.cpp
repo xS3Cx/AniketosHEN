@@ -579,7 +579,12 @@ void *Reader(void *) {
       s_samples = s_key_events = 0;
       stats_at = now;
     }
-    usleep(s_mouse >= 0 || s_ime_user >= 0 ? 4000 : 50000);
+    /* profile off: nothing reads the devices but the game's own IME, which
+       is pumped at about its frame rate */
+    const bool reading = s_mouse >= 0 || s_ime_user >= 0;
+    usleep(reading && hooks::ProfileEnabled() ? 4000
+           : s_ime_user >= 0                  ? 16000
+                                              : 50000);
   }
   UnhookGameIme();
   if (s_mouse >= 0)

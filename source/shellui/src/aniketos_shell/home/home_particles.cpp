@@ -1,5 +1,6 @@
 #include "aniketos_shell/home/home_particles.hpp"
 
+#include "aniketos_shell/core/host_scene.hpp"
 #include "aniketos_ui/home_scene.hpp"
 #include "aniketos_theme/customization.hpp"
 #include "aniketos_ui/mono_reflect.hpp"
@@ -413,9 +414,11 @@ void Tick() {
     }
     place(root, layer);
   }
-  if (!layer)
+  /* nothing to move while Home is out of sight: a game has the screen, or
+     Home is faded out (parked at about 0.02) */
+  if (!layer ||
+      AniketosShell::CurrentFocusLayer() == AniketosShell::FocusLayer::Game)
     return;
-  /* nothing to move while Home is out of sight */
   float opacity = 1.0f;
   if (Reflect::FloatProperty(layer, "get_FinalOpacity", &opacity) &&
       opacity <= 0.02f)

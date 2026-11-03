@@ -1,15 +1,15 @@
 #include "aniketos_ui/mono_reflect.hpp"
 
+#include "aniketos_ui/mono_property_cache.hpp"
+
 #include <cstring>
 
 namespace AniketosUI::Reflect {
 
 MonoMethod *MethodOf(MonoClass *klass, const char *name, int parameters) {
-  for (; klass; klass = mono_class_get_parent(klass))
-    if (MonoMethod *method =
-            mono_class_get_method_from_name(klass, name, parameters))
-      return method;
-  return nullptr;
+  /* Kept per class: the runtime compares the name with every method of every
+     class up the chain, and per-frame code asks the same questions again. */
+  return MonoPropertyCache::Method(klass, name, parameters);
 }
 
 MonoMethod *MethodOf(MonoObject *object, const char *name, int parameters) {

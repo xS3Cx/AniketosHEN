@@ -12,6 +12,8 @@
 #include "plugin_progress.hpp"
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <string>
 #include <vector>
 
 extern MonoObject* rootWidget;
@@ -216,6 +218,19 @@ void set_label_layout(const char *widget_name, float margin_left,
   Set_Property(label_cls, label, "NumberOfLines", 1);
 }
 
+struct PlacedLabel {
+  const char *id;
+  std::string text;
+  float x;
+  float width;
+};
+/* the bar as last written; every call is 3 frames, so 20 calls are a second */
+std::vector<PlacedLabel> s_placed;
+std::vector<PlacedLabel> s_placed_next;
+float s_placed_margin_top = 0.0f;
+int s_calls_since_full_layout = 0;
+constexpr int kFullLayoutEveryCalls = 20;
+
 /**
  * Lay out metrics as slots packed left/center/right on the full-width bar.
  * Labels use PositionType + margins layout.
@@ -375,6 +390,34 @@ void layout_bar_labels(const char *fps_str, const char *cpu_temp,
       onion::overlay::bar_align_from_value(g_settings.overlay_align));
   const float margin_top = g_overlay_layout.label_margin_top;
 
+  /* Each label update searches the whole UI tree by name: when the bar keeps
+     its geometry only changed texts are written, and the full layout is
+     re-asserted once a second in case the widgets were rebuilt. */
+  s_placed_next.clear();
+  for (size_t i = 0; i < pieces.size(); ++i) {
+    s_placed_next.push_back({pieces[i].id, pieces[i].text, x, pieces[i].width});
+    x += pieces[i].width + gap_after(i);
+  }
+  bool same_geometry = s_placed.size() == s_placed_next.size() &&
+                       s_placed_margin_top == margin_top &&
+                       ++s_calls_since_full_layout < kFullLayoutEveryCalls;
+  for (size_t i = 0; same_geometry && i < s_placed.size(); ++i)
+    same_geometry = std::strcmp(s_placed[i].id, s_placed_next[i].id) == 0 &&
+                    s_placed[i].x == s_placed_next[i].x &&
+                    s_placed[i].width == s_placed_next[i].width;
+  if (same_geometry) {
+    for (size_t i = 0; i < s_placed.size(); ++i) {
+      if (s_placed[i].text == s_placed_next[i].text)
+        continue;
+      set_label_text(s_placed_next[i].id, s_placed_next[i].text.c_str());
+      s_placed[i].text = s_placed_next[i].text;
+    }
+    return;
+  }
+  s_placed.swap(s_placed_next);
+  s_placed_margin_top = margin_top;
+  s_calls_since_full_layout = 0;
+
   static const char *kAll[] = {
       "id_fps_label",        "id_fps_value",       "id_fps_sep",
       "id_cpu_label",        "id_cpu_temp_value",  "id_cpu_usage_value",
@@ -387,10 +430,9 @@ void layout_bar_labels(const char *fps_str, const char *cpu_temp,
   for (const char *id : kAll)
     set_label_layout(id, kOff, margin_top, 0.0f);
 
-  for (size_t i = 0; i < pieces.size(); ++i) {
-    set_label_layout(pieces[i].id, x, margin_top, pieces[i].width);
-    set_label_text(pieces[i].id, pieces[i].text);
-    x += pieces[i].width + gap_after(i);
+  for (const PlacedLabel &placed : s_placed) {
+    set_label_layout(placed.id, placed.x, margin_top, placed.width);
+    set_label_text(placed.id, placed.text.c_str());
   }
 }
 
@@ -640,7 +682,10 @@ void OnRender_Hook(MonoObject* instance) {
     frames_until_update--;
   }
 
-  if (frames_until_fps <= 0) {
+  if (!g_settings.overlay_enabled) {
+    /* no bar widgets exist: nothing to lay out; a later rebuild lays out anew */
+    s_placed.clear();
+  } else if (frames_until_fps <= 0) {
     if (g_settings.overlay_fps)
       format_fps_text(fps_str, sizeof(fps_str));
     else

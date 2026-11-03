@@ -3,6 +3,7 @@
 #include "aniketos_theme/tiles/home_tiles.hpp"
 #include "home_tiles_internal.hpp"
 
+#include "aniketos_shell/core/host_scene.hpp"
 #include "aniketos_theme/animation.hpp"
 #include "aniketos_theme/color.hpp"
 #include "aniketos_theme/customization.hpp"
@@ -38,6 +39,7 @@ using AniketosUI::UIColor;
 constexpr const char *kReactNamespace = "ReactNative.Views.UI3.View";
 constexpr const char *kTileFocusTestId = "tile-item-focus-layer";
 constexpr uint64_t kFrameIntervalMs = 50;
+constexpr uint64_t kReassertMs = 1000;
 constexpr size_t kMaxTrackedLayers = 1024;
 
 struct NullableFloat {
@@ -73,6 +75,11 @@ uint64_t s_animation_started_ms = 0;
 AnimationMode s_outline_animation_mode = AnimationMode::Count;
 uint64_t s_last_frame_ms = 0;
 uint64_t s_last_config_signature = UINT64_MAX;
+/* What the layers were last given (setting, colour, corner) and when; a
+   layer added since is given it too. */
+uint64_t s_applied_look = 0;
+uint64_t s_applied_ms = 0;
+bool s_layer_added = false;
 bool s_last_enabled = false;
 bool s_installed = false;
 
@@ -143,18 +150,21 @@ void sync_render_param_hook(MonoObject *instance) {
    when a HomeUI could not be rounded. Before a Home bundle was seen, the
    setting's: the 106px icon's whole-pixel radius scaled to the 168px focus
    frame. */
+float focus_radius() {
+  const float patched = homeui_tile_focus_radius();
+  if (patched >= 0.0f)
+    return patched;
+  constexpr float kFocusScale = 168.0f / 106.0f;
+  const int rounding = TileRoundingPercent();
+  const float icon_radius =
+      rounding < 0 ? 16.0f : std::round(rounding * 53 / 100.0f);
+  return icon_radius * kFocusScale;
+}
+
 void apply_radius(MonoObject *settings) {
   if (!settings || !s_set_rounded_radius)
     return;
-  float focus_radius = homeui_tile_focus_radius();
-  if (focus_radius < 0.0f) {
-    constexpr float kFocusScale = 168.0f / 106.0f;
-    const int rounding = TileRoundingPercent();
-    const float icon_radius =
-        rounding < 0 ? 16.0f : std::round(rounding * 53 / 100.0f);
-    focus_radius = icon_radius * kFocusScale;
-  }
-  const NullableFloat radius{1, {0, 0, 0}, focus_radius};
+  const NullableFloat radius{1, {0, 0, 0}, focus_radius()};
   s_set_rounded_radius(settings, radius);
 }
 
@@ -176,6 +186,7 @@ void register_layer(MonoObject *widget) {
     return;
   const bool tile = test_id == kTileFocusTestId;
   s_layers.push_back({handle, tile});
+  s_layer_added = true;
   if (tile)
     apply_radius(settings);
   if (s_layers.size() <= 8) {
@@ -293,6 +304,9 @@ void Tick() {
   const bool enabled = outline_enabled();
   if (!enabled && !s_last_enabled)
     return;
+  /* no outline is seen while a game has the screen */
+  if (AniketosShell::CurrentFocusLayer() == AniketosShell::FocusLayer::Game)
+    return;
 
   uint64_t signature = 1469598103934665603ULL;
   const ThemeConfig config = outline_config();
@@ -322,6 +336,22 @@ void Tick() {
     s_last_config_signature = signature;
   }
   const RGB color = current_outline_color();
+  /* The layers are written when the setting, the colour (to the byte) or the
+     corner changed or a layer was added, and once a second besides in case
+     anything else wrote them. */
+  uint64_t look = signature;
+  for (const uint32_t value :
+       {RGBBytes(color),
+        static_cast<uint32_t>(std::lround(focus_radius() * 1000.0f))}) {
+    look ^= value;
+    look *= 1099511628211ULL;
+  }
+  if (look == s_applied_look && !s_layer_added &&
+      now - s_applied_ms < kReassertMs)
+    return;
+  s_applied_look = look;
+  s_applied_ms = now;
+  s_layer_added = false;
   visit_live(s_layers, [&](const TrackedLayer &layer, MonoObject *settings) {
     if (layer.tile)
       apply_radius(settings);

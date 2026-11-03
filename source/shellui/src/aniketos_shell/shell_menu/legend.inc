@@ -69,7 +69,7 @@ void update_controls() {
     const int label_index = next_label++;
     MonoObject *label = s_widgets.control_labels[label_index];
     LabelMetrics &m = metrics[label_index];
-    const std::string value = text ? text : "";
+    const char *value = text ? text : "";
     if (m.label != label || m.font != s_control_font ||
         m.host_generation != s_host_generation ||
         m.font_generation != font_generation || m.text != value) {
@@ -91,7 +91,7 @@ void update_controls() {
       // The SST-tuned estimate holds the first frames only.
       m.width = std::max(
           2.0f,
-          std::ceil(approximate_text_width(value.c_str(), kControlTextSize)));
+          std::ceil(approximate_text_width(value, kControlTextSize)));
       m.box = m.width * 2.0f + 32.0f;
       s_controls_settle_frames = kSettleFrames;
     } else if (settling) {

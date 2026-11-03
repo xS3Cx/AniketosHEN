@@ -440,6 +440,21 @@ void update_appendum_slider(size_t index, const Option &option, float row_y,
   layout.title_right = layout.value_x - edge_gap;
 }
 
+/* For a colour animation frame of the Akari layout: the parts of a row's
+   control in the palette's colour, as update_ps3_option_control and
+   update_appendum_toggle colour them (Anomaly's are white). */
+void color_option_control(size_t index, const Option &option) {
+  const Color on = gradient_edge_color(/*right_edge=*/true);
+  const bool slider = option.type == OptionType::SliderInt ||
+                      option.type == OptionType::SliderFloat;
+  if (option.type == OptionType::Toggle && option.value == "1")
+    panel_color(ps3_theme() ? s_widgets.toggles[index]
+                            : s_widgets.toggle_checks[index],
+                on);
+  else if (ps3_theme() && slider && slider_progress(option) > 0.0f)
+    panel_color(s_widgets.slider_fills[index], on);
+}
+
 AppendumControlLayout update_appendum_option_control(
     size_t index, const Option &option, bool selected, float row_y,
     float row, float content_right) {

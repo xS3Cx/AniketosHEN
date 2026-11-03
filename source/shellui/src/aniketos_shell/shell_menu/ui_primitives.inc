@@ -36,6 +36,15 @@ Color hint_text_color() {
 
 /* The picture on each colour slider's track, so that it loads only on a change. */
 std::string s_color_track_image[kMaxVisibleOptions];
+/* The font each option row's labels were given last (option_row_fonts). */
+MonoObject *s_row_font[kMaxVisibleOptions]{};
+
+/* Forget the values written to the widgets: the next repaint writes them all. */
+void forget_written_values() {
+  AniketosUI::Pui::ForgetAll();
+  std::fill(std::begin(s_row_font), std::end(s_row_font), nullptr);
+  s_menu_reveal_applied = -1.0f;
+}
 
 void release_widgets() {
   if (mono_gchandle_free) {
@@ -45,7 +54,7 @@ void release_widgets() {
     }
   }
   s_widget_handles.clear();
-  AniketosUI::Pui::ForgetAll();
+  forget_written_values();
   s_submenu_marker_active.fill(false);
   /* new widgets start on their default picture */
   for (std::string &image : s_color_track_image)
@@ -196,8 +205,13 @@ void label_font(MonoObject *label) {
   AniketosUI::Pui::LabelFont(pui_for(label), label);
 }
 
-/* Every label on one option row takes the menu's font. */
+/* Every label on one option row takes the menu's font. Setting Font lays a
+   label out again even when it is the same font, and nothing else sets it on
+   these labels, so it is set only when it changed. */
 void option_row_fonts(size_t index) {
+  if (s_row_font[index] == s_font)
+    return;
+  s_row_font[index] = s_font;
   label_font(s_widgets.rows[index]);
   label_font(s_widgets.values[index]);
   label_font(s_widgets.selector_left[index]);

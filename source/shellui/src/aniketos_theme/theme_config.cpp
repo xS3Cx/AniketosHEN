@@ -65,7 +65,7 @@ ThemeConfig ConfigFromSettings(const onion::Settings &settings) {
       animation_speed(settings.shell_background_animation_speed);
   config.image_enabled = settings.shell_background_image_enabled &&
                          settings.shell_customization_enabled;
-  config.image_path = settings.shell_background_image_path;
+  config.image_path = settings.shell_background_image_path.c_str();
   config.image_transition =
       static_cast<NativeShellBackground::ImageTransition>(std::clamp(
           settings.shell_background_image_transition, 0,

@@ -6,8 +6,11 @@
 #include "external_symbols.hpp"
 #include "hooked_funcs.hpp"
 
+#include <algorithm>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <mutex>
 
 namespace AniketosUI::HomeScene {
 
@@ -107,23 +110,61 @@ bool IsDisposed(MonoObject *widget) {
   return getter ? getter(widget) : false;
 }
 
+namespace {
+
+/* The parent getters of a class, in the order Parent tries them: get_Parent
+   then get_NativeParent on each class from the widget's up. Looked up once
+   per class; the clock walks a dozen parents 30 times a second. */
+struct ParentGetters {
+  MonoClass *klass = nullptr;
+  MonoMethod *getters[8] = {};
+  int count = 0;
+};
+ParentGetters s_parent_getters[64];
+std::mutex s_parent_getters_mutex;
+
+/* Copies the getters of `widget_class` into `out`; returns how many. */
+int parent_getters(MonoClass *widget_class, MonoMethod *(&out)[8]) {
+  const size_t start = (reinterpret_cast<uintptr_t>(widget_class) >> 4) % 64;
+  std::lock_guard<std::mutex> lock(s_parent_getters_mutex);
+  size_t slot = start;
+  for (size_t probe = 0; probe < 64; ++probe, slot = (start + probe) % 64) {
+    if (s_parent_getters[slot].klass == widget_class ||
+        !s_parent_getters[slot].klass)
+      break;
+  }
+  ParentGetters &entry = s_parent_getters[slot]; /* full table: reuse a slot */
+  if (entry.klass != widget_class) {
+    entry = {};
+    entry.klass = widget_class;
+    for (MonoClass *klass = widget_class; klass;
+         klass = mono_class_get_parent(klass)) {
+      for (const char *getter_name : {"get_Parent", "get_NativeParent"}) {
+        MonoMethod *getter =
+            mono_class_get_method_from_name(klass, getter_name, 0);
+        if (getter && entry.count < 8)
+          entry.getters[entry.count++] = getter;
+      }
+    }
+  }
+  std::copy(entry.getters, entry.getters + entry.count, out);
+  return entry.count;
+}
+
+} // namespace
+
 MonoObject *Parent(MonoObject *widget) {
   if (!widget || !mono_object_get_class || !mono_class_get_method_from_name ||
       !mono_runtime_invoke || !mono_class_get_parent)
     return nullptr;
-  for (MonoClass *klass = mono_object_get_class(widget); klass;
-       klass = mono_class_get_parent(klass)) {
-    for (const char *getter_name : {"get_Parent", "get_NativeParent"}) {
-      MonoMethod *getter =
-          mono_class_get_method_from_name(klass, getter_name, 0);
-      if (!getter)
-        continue;
-      MonoObject *exception = nullptr;
-      MonoObject *parent =
-          mono_runtime_invoke(getter, widget, nullptr, &exception);
-      if (!exception && parent)
-        return parent;
-    }
+  MonoMethod *getters[8];
+  const int count = parent_getters(mono_object_get_class(widget), getters);
+  for (int index = 0; index < count; ++index) {
+    MonoObject *exception = nullptr;
+    MonoObject *parent =
+        mono_runtime_invoke(getters[index], widget, nullptr, &exception);
+    if (!exception && parent)
+      return parent;
   }
   return nullptr;
 }

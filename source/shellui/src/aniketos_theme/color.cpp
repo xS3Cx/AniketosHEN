@@ -12,6 +12,14 @@ RGB ClampRGB(RGB color) {
   return color;
 }
 
+uint32_t RGBBytes(RGB color) {
+  color = ClampRGB(color);
+  const auto byte = [](float channel) {
+    return static_cast<uint32_t>(std::lround(channel * 255.0f));
+  };
+  return byte(color.r) << 16 | byte(color.g) << 8 | byte(color.b);
+}
+
 HSV RGBToHSV(RGB color) {
   color = ClampRGB(color);
   const float maximum = std::max({color.r, color.g, color.b});

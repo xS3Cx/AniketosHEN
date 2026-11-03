@@ -1,13 +1,15 @@
 #include "icon_color_internal.hpp"
 
+#include "aniketos_shell/core/host_scene.hpp"
+#include "aniketos_theme/color.hpp"
 #include "aniketos_theme/customization.hpp"
 #include "aniketos_theme/icon_color.hpp"
 #include "aniketos_ui/mono_reflect.hpp"
+#include "aniketos_ui/monotonic_clock.hpp"
 
 #include <onion/log.h>
 
 #include <algorithm>
-#include <cmath>
 #include <cstddef>
 
 namespace AniketosTheme::IconColor {
@@ -17,7 +19,7 @@ namespace Reflect = AniketosUI::Reflect;
 
 constexpr size_t kMaxTracked = 4096;
 constexpr size_t kMinPruneAt = 256;
-constexpr float kRainbowStep = 0.001f;
+constexpr uint64_t kFrameIntervalMs = 50;
 constexpr UIColor kWhite{1.0f, 1.0f, 1.0f, 1.0f, 0};
 
 struct TrackedIcon {
@@ -32,8 +34,9 @@ struct ApplyCount {
 };
 
 std::vector<TrackedIcon> s_tracked;
-UIColor s_last_rainbow{};
+uint32_t s_last_rainbow = 0; /* RGBBytes of the last step drawn */
 bool s_has_last_rainbow = false;
+uint64_t s_last_frame_ms = 0;
 bool s_logged_capacity = false;
 /* The setter hooks track in every state: the list is pruned when it doubles. */
 size_t s_prune_at = kMinPruneAt;
@@ -71,10 +74,6 @@ void prune_tracked() {
   s_prune_at = std::max(kMinPruneAt, s_tracked.size() * 2);
 }
 
-bool on_screen(MonoObject *object) {
-  return object && !object_disposed(object) && object_visible(object);
-}
-
 bool apply_entry(const TrackedIcon &entry, MonoObject *object,
                  const UIColor &color) {
   UIColor applied = color;
@@ -83,13 +82,19 @@ bool apply_entry(const TrackedIcon &entry, MonoObject *object,
   return set_color(entry.setter, object, applied);
 }
 
+/* Icons that are gone leave the list on the way, as prune_tracked would. */
 ApplyCount apply_to_visible(const UIColor &color) {
   ApplyCount count;
   std::vector<size_t> drop;
   /* By index: a setter can track more icons, which moves the list. */
   for (size_t i = 0; i < s_tracked.size(); ++i) {
     MonoObject *object = Reflect::Target(s_tracked[i].handle);
-    if (!on_screen(object)) {
+    if (!object || object_disposed(object)) {
+      ++count.skipped;
+      drop.push_back(i);
+      continue;
+    }
+    if (!object_visible(object)) {
       ++count.skipped;
       continue;
     }
@@ -128,21 +133,6 @@ void restore_tracked() {
   }
   erase_tracked(drop);
   LOG_INFO("[ICONCOLOR] system colours back count=%zu", restored);
-}
-
-bool any_on_screen() {
-  for (const TrackedIcon &entry : s_tracked) {
-    if (on_screen(Reflect::Target(entry.handle)))
-      return true;
-  }
-  return false;
-}
-
-bool same_as_last_rainbow(const UIColor &color) {
-  return s_has_last_rainbow &&
-         std::fabs(color.r - s_last_rainbow.r) < kRainbowStep &&
-         std::fabs(color.g - s_last_rainbow.g) < kRainbowStep &&
-         std::fabs(color.b - s_last_rainbow.b) < kRainbowStep;
 }
 
 } // namespace
@@ -224,13 +214,19 @@ void Tick() {
   s_tint_shown = true;
   if (g_settings.system_icon_color_animation != 1 || s_tracked.empty())
     return;
-  prune_tracked();
-  if (!any_on_screen())
+  /* The rainbow steps at the rate of the other theme animations, waits while
+     a game has the screen and skips a step that changes no byte. */
+  const uint64_t now = AniketosUI::MonotonicMs();
+  if (now - s_last_frame_ms < kFrameIntervalMs)
+    return;
+  s_last_frame_ms = now;
+  if (AniketosShell::CurrentFocusLayer() == AniketosShell::FocusLayer::Game)
     return;
   const UIColor color = current_color();
-  if (same_as_last_rainbow(color))
+  const uint32_t bytes = RGBBytes({color.r, color.g, color.b});
+  if (s_has_last_rainbow && bytes == s_last_rainbow)
     return;
-  s_last_rainbow = color;
+  s_last_rainbow = bytes;
   s_has_last_rainbow = true;
   apply_to_visible(color);
 }

@@ -58,6 +58,7 @@ int s_handle = -1;
 int s_handle_user = -1;
 int s_reopen_frames = 0;
 int s_last_error = 0;
+bool s_game_had_focus = false; /* at the last read */
 
 void load_api() {
   s_api_tried = true;
@@ -470,6 +471,12 @@ void Tick() {
     load_api();
   if (!s_api_ready)
     return;
+  /* A game, or the screen a game is on, has the mouse: nothing of ours, and
+     ShellUI is sent no samples then. One read after it took the screen, none
+     while it keeps it, and the first one back drops what came meanwhile. */
+  const bool game = AniketosShell::CheatsMenu::GameHasFocus();
+  if (game && s_game_had_focus)
+    return;
   if (--s_reopen_frames <= 0) {
     s_reopen_frames = 120; /* the user may change; look every two seconds */
     open_mouse();
@@ -506,9 +513,9 @@ void Tick() {
     buttons = sample.buttons;
   }
   const uint64_t now = AniketosUI::MonotonicMs();
-  /* a game, or the screen a game is on, has the mouse: nothing of ours */
-  if (intercepted || (count > 0 && !connected) ||
-      AniketosShell::CheatsMenu::GameHasFocus()) {
+  const bool coming_back = s_game_had_focus;
+  s_game_had_focus = game;
+  if (intercepted || (count > 0 && !connected) || game || coming_back) {
     if (s_active)
       stand_down();
     return;

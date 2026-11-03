@@ -1,5 +1,6 @@
 #include "aniketos_shell/system_ui/devkit_overlay.hpp"
 
+#include "aniketos_shell/core/host_scene.hpp"
 #include "aniketos_ui/home_scene.hpp"
 #include "aniketos_ui/mono_reflect.hpp"
 #include "aniketos_ui/ui_color.hpp"
@@ -244,7 +245,9 @@ void Tick() {
     set_visible(expired, g_settings.devkit_overlay_expired);
     set_visible(field(widget, s_panel_trial), false);
   }
-  if (g_settings.devkit_overlay_expired && expired)
+  /* under Home's root: out of sight while a game has the screen */
+  if (g_settings.devkit_overlay_expired && expired &&
+      AniketosShell::CurrentFocusLayer() != AniketosShell::FocusLayer::Game)
     show_expired(expired, field(widget, s_label_expired));
 }
 

@@ -1,4 +1,5 @@
 #include "aniketos_theme/toggle_styles.hpp"
+#include "aniketos_shell/core/host_scene.hpp"
 #include "aniketos_theme/customization.hpp"
 #include "aniketos_ui/mono_reflect.hpp"
 #include "aniketos_ui/monotonic_clock.hpp"
@@ -598,6 +599,9 @@ void Tick() {
     --s_own_calls;
     return;
   }
+  /* no switch can be seen or flipped while a game has the screen */
+  if (AniketosShell::CurrentFocusLayer() == AniketosShell::FocusLayer::Game)
+    return;
   const uint64_t now = AniketosUI::MonotonicMs();
   ++s_own_calls;
   for (Tracked &entry : s_tracked) {

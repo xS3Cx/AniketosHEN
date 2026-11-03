@@ -193,9 +193,12 @@ R"JS((function () {
      online get that entry instead, so the dot shows as if they were. */
   function patchLamps(o, id) {
     var table = o && o.default;
-    if (A.patched.lamps || !table || typeof table !== 'object' ||
-        !table.online || !table.busy || !table.appearOffline ||
-        !('unavailable' in table) || !table.online.iconId) return;
+    /* none asked for: no Proxy in every avatar's lookups (a change of the
+       setting reloads the app) */
+    if (!cfg.presence || A.patched.lamps || !table ||
+        typeof table !== 'object' || !table.online || !table.busy ||
+        !table.appearOffline || !('unavailable' in table) ||
+        !table.online.iconId) return;
     if (typeof Proxy !== 'function') { log('lamps: no Proxy'); return; }
     var view = new Proxy(table, {
       get: function (target, key) {
@@ -243,17 +246,15 @@ R"JS((function () {
       try { F.listeners[i](); } catch (e) { log('bookmark: refresh ' + e); }
     }
   }
-  function watchBookmark() {
-    setInterval(function () {
-      if (F.asking || !F.listeners.length) return;
-      F.asking = true;
-      bookmarkRevision().then(function (rev) {
-        F.asking = false;
-        if (rev === null) return;
-        if (F.rev >= 0 && rev !== F.rev) refreshRows();
-        F.rev = rev;
-      }, function () { F.asking = false; });
-    }, 2000);
+  function askBookmark() {
+    if (F.asking) return;
+    F.asking = true;
+    bookmarkRevision().then(function (rev) {
+      F.asking = false;
+      if (rev === null) return;
+      if (F.rev >= 0 && rev !== F.rev) refreshRows();
+      F.rev = rev;
+    }, function () { F.asking = false; });
   }
   /* The websites kept among the media apps. They are in no database: their
      rows are put in with the Media row as it comes back from the store, in
@@ -263,7 +264,8 @@ R"JS((function () {
      list is read through the registry module, which the native side answers
      (aniketos.web_tiles), as the bookmark's revision is. */
   var W = { rev: cfg.webTiles ? cfg.webTiles.rev : 0,
-            tiles: cfg.webTiles ? cfg.webTiles.tiles : [], asking: false };
+            tiles: cfg.webTiles ? cfg.webTiles.tiles : [], asking: false,
+            raw: '' };
   function tileLink(url) {
     return 'pscontrolcenter:main?target=action-card&type=ActionCardWebBrowser' +
            '&mode=selected&anchor=' +
@@ -293,27 +295,36 @@ R"JS((function () {
     }
     row.items = rows.concat(row.items);
   }
-  function watchTiles() {
-    setInterval(function () {
-      var nm = F.nm;
-      if (W.asking || !nm || typeof nm.Get !== 'function' ||
-          !F.listeners.length)
+  function askTiles() {
+    var nm = F.nm;
+    if (W.asking || !nm || typeof nm.Get !== 'function') return;
+    W.asking = true;
+    var asked;
+    try { asked = nm.Get({ keys: ['aniketos.web_tiles'] }); }
+    catch (e) { W.asking = false; return; }
+    Promise.resolve(asked).then(function (answer) {
+      W.asking = false;
+      if (typeof answer !== 'string' || answer === W.raw) return;
+      W.raw = answer;
+      var state = JSON.parse(answer);
+      if (!state || state.rev === W.rev || !Array.isArray(state.tiles))
         return;
-      W.asking = true;
-      var asked;
-      try { asked = nm.Get({ keys: ['aniketos.web_tiles'] }); }
-      catch (e) { W.asking = false; return; }
-      Promise.resolve(asked).then(function (answer) {
-        W.asking = false;
-        if (typeof answer !== 'string') return;
-        var state = JSON.parse(answer);
-        if (!state || state.rev === W.rev || !Array.isArray(state.tiles))
-          return;
-        W.rev = state.rev;
-        W.tiles = state.tiles;
-        refreshRows();
-      }).then(null, function (e) { W.asking = false; log('tiles: ' + e); });
-    }, 2000);
+      W.rev = state.rev;
+      W.tiles = state.tiles;
+      refreshRows();
+    }).then(null, function (e) { W.asking = false; log('tiles: ' + e); });
+  }
+  /* The bookmark's revision and the websites, asked together every 2 s
+     while Home has rows to fetch again, and not in the background. */
+  function watchRows() {
+    var ask = function () {
+      if (away(ask)) return;
+      setTimeout(ask, 2000);
+      if (!F.listeners.length) return;
+      if (F.watch) askBookmark();
+      askTiles();
+    };
+    setTimeout(ask, 2000);
   }
   function patchTitles(o, id) {
     var store = o && o.default;
@@ -346,8 +357,7 @@ R"JS((function () {
         return unlisten.apply(this, arguments);
       };
     once('titles', id);
-    if (F.watch) watchBookmark();
-    watchTiles();
+    watchRows();
   }
   /* The Control Center owns an action card's place on screen and keeps a card
      within a limit of its own (under the screen's width). The browser's
@@ -474,6 +484,41 @@ R"JS((function () {
       if (modules && modules.VshNMRegistryModule)
         F.nm = modules.VshNMRegistryModule;
     } catch (e) {}
+  }
+
+  /* The app behind a game or another app: AppState 'background', where the
+     apps pause their own media, and nothing of ours shows. The clock's
+     redraws and the asks wait there and go on at once when it is back; any
+     other state, or no AppState, runs them as before. */
+  var BG = { state: null, waiting: [], told: false };
+  function back(next) {
+    if (next === 'background') return;
+    var waiting = BG.waiting;
+    BG.waiting = [];
+    for (var i = 0; i < waiting.length; i++) {
+      try { waiting[i](); } catch (e) { log('back: ' + e); }
+    }
+  }
+  /* True while in the background, `job` then run once the app is back. */
+  function away(job) {
+    try {
+      if (BG.state === null && A.rn) {
+        BG.state = false;
+        A.rn.AppState.addEventListener('change', back);
+        BG.state = A.rn.AppState;
+      }
+      if (!BG.state || BG.state.currentState !== 'background') return false;
+    } catch (e) {
+      BG.state = false;
+      log('app state: ' + e);
+      return false;
+    }
+    if (BG.waiting.indexOf(job) < 0) BG.waiting.push(job);
+    if (!BG.told) {
+      BG.told = true;
+      log(cfg.app + ' in the background: clock and asks wait');
+    }
+    return true;
   }
 
   /* The custom clock, drawn by the app's own clock (Home and the Control
@@ -658,23 +703,29 @@ R"JS((function () {
       var shown = React.useState(null);
       React.useEffect(function () {
         var timer = null, set = shown[1];
-        CK.shown.push(set); /* redrawn at once when the settings change */
-        /* about 15 times a second while the colour moves */
-        var delay = function () {
-          var c = CK.cfg;
-          return c && c.on && c.anim ? 66 : 1000 - Date.now() % 1000;
+        /* at the next change of what it shows: about 15 times a second
+           while the colour moves, else the next second or minute (Sony's
+           own minute redraws it too); never while it is Sony's clock */
+        var schedule = function () {
+          var c = CK.cfg, unit = c && c.seconds ? 1000 : 60000;
+          if (c && c.on)
+            timer = setTimeout(step, c.anim ? 66 : unit - Date.now() % unit);
         };
         var step = function () {
-          if (CK.failed) return;
+          clearTimeout(timer);
+          timer = null;
+          if (CK.failed || !set || away(step)) return;
           try {
-            shown[1](clockKey()); /* drawn again only when it changed */
+            set(clockKey()); /* drawn again only when it changed */
           } catch (e) { clockFailed(e); return; }
-          timer = setTimeout(step, delay());
+          schedule();
         };
-        timer = setTimeout(step, delay());
+        CK.shown.push(step); /* redrawn at once when the settings change */
+        schedule();
         return function () {
           clearTimeout(timer);
-          CK.shown.splice(CK.shown.indexOf(set), 1);
+          set = null;
+          CK.shown.splice(CK.shown.indexOf(step), 1);
         };
       }, []);
       if (CK.failed) return element;
@@ -687,13 +738,14 @@ R"JS((function () {
   }
   /* Asked every 2 s, and every 100 ms while the Shell Menu is open (hot),
      where the clock's colour and format are edited; a change is drawn at
-     once, not at the clock's next second. */
+     once, not at the clock's next second. Not in the background. */
   function watchClock() {
     var later = function () {
       setTimeout(ask, CK.cfg && CK.cfg.hot ? 100 : 2000);
     };
     var ask = function () {
       var nm = F.nm, asked;
+      if (away(ask)) return;
       if (!nm || typeof nm.Get !== 'function') return later();
       try { asked = nm.Get({ keys: ['aniketos.clock'] }); }
       catch (e) { return later(); }
@@ -707,10 +759,7 @@ R"JS((function () {
           CK.cfg = next;
           CK.rev++;
         } catch (e) { log('clock: ' + e); return; }
-        try {
-          for (var i = 0; i < CK.shown.length && !CK.failed; i++)
-            CK.shown[i](clockKey());
-        } catch (e) { clockFailed(e); }
+        for (var i = 0; i < CK.shown.length; i++) CK.shown[i]();
       }, later);
     };
     later();

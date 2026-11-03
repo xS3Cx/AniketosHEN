@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 namespace AniketosTheme {
 
 struct RGB {
@@ -15,6 +17,9 @@ struct HSV {
 };
 
 RGB ClampRGB(RGB color);
+/* The eight-bit channels the colour is drawn with, as 0xRRGGBB: an animation
+   step that leaves this the same changes nothing on screen. */
+uint32_t RGBBytes(RGB color);
 HSV RGBToHSV(RGB color);
 RGB HSVToRGB(HSV color);
 

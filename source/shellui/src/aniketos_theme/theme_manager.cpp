@@ -2,6 +2,7 @@
 #include "aniketos_theme/customization.hpp"
 
 #include "external_symbols.hpp"
+#include "aniketos_shell/core/host_scene.hpp"
 #include "aniketos_theme/animation.hpp"
 #include "aniketos_theme/global_theme.hpp"
 #include "aniketos_theme/shell_background.hpp"
@@ -29,6 +30,7 @@ bool s_custom_was_applied = false;
 AnimationMode s_animation_mode = AnimationMode::Static;
 uint64_t s_animation_started_ms = 0;
 uint64_t s_last_animation_frame_ms = 0;
+uint64_t s_drawn_color = 0; /* RGBBytes of the last Apply's base and glow */
 int s_applied_particle_mode =
     static_cast<int>(NativeShellBackground::ParticleMode::Default);
 bool s_image_was_applied = false;
@@ -64,7 +66,7 @@ void apply_requested_state(const ThemeConfig &config, uint64_t now_ms,
     LOG_INFO("[ANITHEME:APPLY] enabled=%d image=%d path='%s' force_home=%d "
              "particles=%d wave=%d",
              config.enabled ? 1 : 0, config.image_enabled ? 1 : 0,
-             config.image_path.c_str(), force_home_setting() ? 1 : 0,
+             config.image_path, force_home_setting() ? 1 : 0,
              static_cast<int>(config.particles), wave_setting() ? 1 : 0);
   if (!config.enabled) {
     if ((s_restore_requested || s_custom_was_applied) &&
@@ -87,9 +89,15 @@ void apply_requested_state(const ThemeConfig &config, uint64_t now_ms,
       base = frame.base;
       glow = frame.glow;
     }
+    const uint64_t drawn =
+        static_cast<uint64_t>(RGBBytes(base)) << 24 | RGBBytes(glow);
+    /* a frame that moves neither colour by a byte is not drawn again */
+    if (animation_frame && drawn == s_drawn_color)
+      return;
     if (!NativeShellBackground::Apply(base, glow, config.glow_intensity,
                                       !animation_frame))
       return;
+    s_drawn_color = drawn;
     s_custom_was_applied = true;
   }
   if (animation_frame)
@@ -109,7 +117,7 @@ void apply_requested_state(const ThemeConfig &config, uint64_t now_ms,
   if (config.image_enabled) {
     if (!s_image_was_applied || config.image_path != s_applied_image_path ||
         transition != s_applied_image_transition) {
-      if (!NativeShellBackground::ApplyImage(config.image_path.c_str(),
+      if (!NativeShellBackground::ApplyImage(config.image_path,
                                              config.image_transition))
         return;
       s_image_was_applied = true;
@@ -151,16 +159,19 @@ void Tick() {
 
   const bool animation_active = config.enabled &&
       (config.animation != AnimationMode::Static || GlobalTheme::Animated());
+  /* The background is not seen while a game has the screen: it stops moving
+     there. */
   const bool animation_due = animation_active &&
       (!s_last_animation_frame_ms ||
-       now_ms - s_last_animation_frame_ms >= kAnimationFrameMs);
+       now_ms - s_last_animation_frame_ms >= kAnimationFrameMs) &&
+      AniketosShell::CurrentFocusLayer() != AniketosShell::FocusLayer::Game;
   const bool wave_active = wave_setting();
   const bool force_home = force_home_setting() || wave_active;
   /* Home coming back into view (from Settings, a game, the Control Center)
      puts the focused title's picture up again without the transition the
      hook holds back, so with Home's background forced it is cleared again. */
   float home_opacity = 0.0f;
-  const bool home_visible =
+  const bool home_visible = force_home &&
       ShellClock::GetNativeClockOpacity(&home_opacity) && home_opacity > 0.5f;
   if (home_visible && !s_home_was_visible) {
     /* Home brings the picture back a moment after it shows, so it is

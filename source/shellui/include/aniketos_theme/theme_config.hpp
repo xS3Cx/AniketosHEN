@@ -3,8 +3,6 @@
 #include "aniketos_theme/color.hpp"
 #include "aniketos_theme/shell_background.hpp"
 
-#include <string>
-
 namespace onion { struct Settings; }
 
 namespace AniketosTheme {
@@ -55,7 +53,9 @@ struct ThemeConfig {
   AnimationMode animation = AnimationMode::Static;
   float animation_speed = 1.0f;
   bool image_enabled = false;
-  std::string image_path;
+  /* Points into the settings: the config is built every frame, so it is not
+     copied. */
+  const char *image_path = "";
   NativeShellBackground::ImageTransition image_transition =
       NativeShellBackground::ImageTransition::Fade;
   NativeShellBackground::ParticleMode particles =

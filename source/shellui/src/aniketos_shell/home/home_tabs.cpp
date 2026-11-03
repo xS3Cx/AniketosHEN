@@ -1,5 +1,6 @@
 #include "aniketos_shell/home/home_tabs.hpp"
 
+#include "aniketos_shell/core/host_scene.hpp"
 #include "aniketos_shell/home/home_bookmark.hpp"
 #include "aniketos_shell/home/home_rows.hpp"
 #include "aniketos_shell/system_ui/system_dialogs.hpp"
@@ -561,6 +562,9 @@ void Tick() {
     return;
   rename_tick();
   remember_tab_names();
+  /* The tab bar is Home's: nothing of it shows while a game has the screen. */
+  if (AniketosShell::CurrentFocusLayer() == AniketosShell::FocusLayer::Game)
+    return;
   const std::string captions[2] = {caption_of(StockTab::Games),
                                    caption_of(StockTab::Media)};
   name_tab_labels(captions);

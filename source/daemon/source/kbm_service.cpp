@@ -182,16 +182,17 @@ bool is_game(const std::string &title_id) {
   return onion::fps::is_ps5_native_title(title_id.c_str());
 }
 
-bool inject_agent(const Game &game, uint32_t gen, bool replacing) {
+/* The agent's control page once it runs, else 0. */
+uint64_t inject_agent(const Game &game, uint32_t gen, bool replacing) {
   const pid_t pid = game.pid;
   if (!wait_until(game, gen, kPadWaitMs,
                   [pid] { return sprx_loaded(pid, "libScePad.sprx"); })) {
     LOG_INFO("[kbm] %s pid=%d: no libScePad (or the game left); not injected",
              game.title_id.c_str(), static_cast<int>(pid));
-    return false;
+    return 0;
   }
   if (!nap(gen, kSettleMs) || !isProcessAlive(pid))
-    return false;
+    return 0;
 
   /* shortcut: a game with its own KB+M is always left alone (checked before
      our first injection only: the agent itself loads libSceMouse); a profile
@@ -200,7 +201,7 @@ bool inject_agent(const Game &game, uint32_t gen, bool replacing) {
                      sprx_loaded(pid, "libSceKeyboard.sprx"))) {
     LOG_INFO("[kbm] %s pid=%d reads the mouse/keyboard itself; not injected",
              game.title_id.c_str(), static_cast<int>(pid));
-    return false;
+    return 0;
   }
 
   bool injected;
@@ -225,7 +226,7 @@ bool inject_agent(const Game &game, uint32_t gen, bool replacing) {
       std::lock_guard<std::mutex> lock(s_game_mutex);
       s_injected_pid = -1;
     }
-    return false;
+    return 0;
   }
   uint64_t page = 0;
   if (!wait_until(game, gen, kAgentWaitMs,
@@ -233,14 +234,14 @@ bool inject_agent(const Game &game, uint32_t gen, bool replacing) {
     LOG_ERROR("[kbm] %s pid=%d: agent injected but its control page never "
               "appeared",
               game.title_id.c_str(), static_cast<int>(pid));
-    return false;
+    return 0;
   }
   const uint32_t build = agent_checksum();
   game_write(pid, page + offsetof(ControlPage, agent_build), &build, sizeof(build));
   LOG_INFO("[kbm] %s pid=%d: agent running, control page 0x%lx",
            game.title_id.c_str(), static_cast<int>(pid),
            static_cast<unsigned long>(page));
-  return true;
+  return page;
 }
 
 bool push_profile(const Game &game, uint64_t page,
@@ -297,9 +298,7 @@ void serve(const Game &game, uint32_t gen) {
                 static_cast<int>(game.pid));
       return;
     }
-    if (!inject_agent(game, gen, /*replacing=*/false))
-      return;
-    page = find_page(game.pid);
+    page = inject_agent(game, gen, /*replacing=*/false);
     if (!page)
       return;
   } else if (wanted) {

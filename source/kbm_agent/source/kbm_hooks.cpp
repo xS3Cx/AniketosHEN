@@ -71,6 +71,7 @@ ProfileBlob s_profiles[2];
 std::atomic<const ProfileBlob *> s_published{nullptr};
 std::atomic<const ProfileBlob *> s_acked{nullptr};
 uint32_t s_profile_generation;
+std::atomic<bool> s_profile_enabled{false}; /* the published one is on */
 
 /* hook side, owned by whoever holds s_busy */
 std::atomic<int> s_busy{0};
@@ -128,26 +129,29 @@ bool compute(Result *out) {
     return false;
   }
   const ProfileBlob *profile = s_published.load(std::memory_order_acquire);
-  const uint32_t beat = __atomic_load_n(&s_ctl->heartbeat, __ATOMIC_RELAXED);
-  const uint64_t now = agent::NowUs();
-  if (beat != s_beat_seen) {
-    s_beat_seen = beat;
-    s_beat_at = now;
-  }
   Result r{neutral(), 0};
   const bool reset = s_intercepted.exchange(false, std::memory_order_acq_rel);
-  if (profile && profile->enabled && now - s_beat_at <= kStaleUs) {
-    /* a new profile, or back from the system: the engine starts over */
-    const bool changed = profile != s_engine_profile || reset;
-    s_engine_profile = profile;
-    s_tick(profile, changed, &r.pad);
-    /* "controller works too" off: only while a mouse or keyboard is open */
-    const uint32_t status =
-        __atomic_load_n(&s_ctl->agent_status, __ATOMIC_RELAXED);
-    r.replace = !profile->merge_real_pad &&
-                (status & (kStatusMouseOpen | kStatusKeyboardOpen));
-  } else if (!profile || !profile->enabled) {
+  if (!profile || !profile->enabled) {
     s_engine_profile = nullptr; /* hand it over again when we resume */
+  } else {
+    /* the clock and the reader's beat matter only while a profile is on */
+    const uint32_t beat = __atomic_load_n(&s_ctl->heartbeat, __ATOMIC_RELAXED);
+    const uint64_t now = agent::NowUs();
+    if (beat != s_beat_seen) {
+      s_beat_seen = beat;
+      s_beat_at = now;
+    }
+    if (now - s_beat_at <= kStaleUs) {
+      /* a new profile, or back from the system: the engine starts over */
+      const bool changed = profile != s_engine_profile || reset;
+      s_engine_profile = profile;
+      s_tick(profile, changed, &r.pad);
+      /* "controller works too" off: only while a mouse or keyboard is open */
+      const uint32_t status =
+          __atomic_load_n(&s_ctl->agent_status, __ATOMIC_RELAXED);
+      r.replace = !profile->merge_real_pad &&
+                  (status & (kStatusMouseOpen | kStatusKeyboardOpen));
+    }
   }
   s_acked.store(profile, std::memory_order_release);
   s_seq.fetch_add(1, std::memory_order_relaxed);
@@ -523,6 +527,7 @@ void copy_profile() {
                      spare->size == sizeof(ProfileBlob);
   LOG("profile generation %u %s", generation, valid ? "loaded" : "invalid");
   s_published.store(valid ? spare : nullptr, std::memory_order_release);
+  s_profile_enabled.store(valid && spare->enabled, std::memory_order_relaxed);
 }
 
 } // namespace
@@ -563,6 +568,10 @@ void Service() {
 bool Superseded() {
   return s_ctl && __atomic_load_n(&s_ctl->agent_generation, __ATOMIC_ACQUIRE) !=
                       s_generation;
+}
+
+bool ProfileEnabled() {
+  return s_profile_enabled.load(std::memory_order_relaxed);
 }
 
 void Unhook() {

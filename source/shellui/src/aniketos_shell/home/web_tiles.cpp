@@ -200,8 +200,10 @@ void remove_tile(const std::string &url) {
 
 /* Icons the util process has written by now. */
 void look_for_icons() {
+  if (s_pending.empty())
+    return;
   const time_t now = std::time(nullptr);
-  if (s_pending.empty() || now == s_last_look)
+  if (now == s_last_look)
     return;
   s_last_look = now;
   for (size_t i = 0; i < s_pending.size();) {

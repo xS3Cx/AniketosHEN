@@ -220,14 +220,14 @@ void reassert_widgets(uint64_t now) {
   if (IsVisible() && now - s_last_reassert_ms >= 5000 &&
       s_page_transition == PageTransitionState::Idle) {
     s_last_reassert_ms = now;
-    AniketosUI::Pui::ForgetAll();
+    forget_written_values();
     s_dirty = true;
     s_color_dirty = true;
   }
 }
 
-// Apparition keeps its text and managed label objects stable while the menu
-// is visible.  Its animated palette is applied by a colour-only pass after
+// Every look keeps its text and managed label objects stable while the menu
+// is visible.  The animated palette is applied by a colour-only pass after
 // the geometry/highlight animation, never by rebuilding the pooled labels.
 // That separation keeps the text attached to its row while still allowing
 // the selected row, submenu marker and gradient borders to animate.
@@ -242,10 +242,7 @@ void pace_color_animation(uint64_t now) {
   if (!s_last_menu_animation_frame_ms ||
       now - s_last_menu_animation_frame_ms >= 16) {
     s_last_menu_animation_frame_ms = now;
-    if (active_menu_theme() == kThemeApparition)
-      s_color_dirty = true;
-    else
-      s_dirty = true;
+    s_color_dirty = true;
   }
 }
 
@@ -384,7 +381,9 @@ void LeaveGameSession() {
 void UpdateDiagnostics(const Diagnostics &diagnostics) {
   if (diagnostics.tick_count != s_last_diagnostics_tick) {
     s_last_diagnostics_tick = diagnostics.tick_count;
-    if (!s_stack.empty() && s_stack.back().page == Page::Information)
+    /* closed on this page, a repaint would only redraw an invisible menu */
+    if (IsVisible() && !s_stack.empty() &&
+        s_stack.back().page == Page::Information)
       s_dirty = true;
   }
 }
@@ -405,7 +404,7 @@ void Show() {
     (void)flush_save(); /* never reload over a change not yet written */
   (void)LoadSettings();
   s_overlay_dirty = true;
-  AniketosUI::Pui::ForgetAll();
+  forget_written_values();
   create_widgets();
   sample_menu_color_clock(MonotonicMs());
   reset_page_transition();
@@ -480,7 +479,9 @@ void Tick() {
       !s_page_transition_target_geometry.valid) {
     capture_page_transition_target_geometry();
   }
-  const Telemetry::Snapshot telemetry = Telemetry::GetSnapshot();
+  /* Not the snapshot: reading it every frame would copy it and keep the
+     worker sampling with nothing on screen to show its readings. */
+  const uint64_t sampled_at_ms = Telemetry::SampledAtMs();
   /* Pages that show sensor readings follow the telemetry worker: sample
      faster while one is open, and repaint when a new sample lands (they used
      to change only when a button was pressed). */
@@ -490,13 +491,13 @@ void Tick() {
        s_stack.back().page == Page::Information);
   Telemetry::SetLiveView(live_page);
   static uint64_t s_last_live_sample = 0;
-  if (live_page && telemetry.sampled_at_ms != s_last_live_sample &&
+  if (live_page && sampled_at_ms != s_last_live_sample &&
       s_page_transition == PageTransitionState::Idle) {
-    s_last_live_sample = telemetry.sampled_at_ms;
+    s_last_live_sample = sampled_at_ms;
     s_dirty = true;
   }
   const bool overlay_dirty = s_overlay_dirty ||
-      telemetry.sampled_at_ms != s_last_overlay_sample;
+      sampled_at_ms != s_last_overlay_sample;
   if (overlay_dirty) {
     Profile::Scope scope(Profile::kMenuOverlay);
     update_overlay();
@@ -510,8 +511,13 @@ void Tick() {
   // Keep them running through a page transition so the menu stays on the same
   // global animation phase as the background, clock and focus outline instead
   // of freezing and jumping when the transition finishes.
-  if (IsVisible() && active_menu_theme() == kThemeApparition && s_color_dirty) {
-    update_apparition_menu_colors_only();
+  if (IsVisible() && s_color_dirty) {
+    if (active_menu_theme() == kThemeApparition)
+      update_apparition_menu_colors_only();
+    else if (anomaly_theme())
+      update_anomaly_menu_colors_only();
+    else
+      update_akari_menu_colors_only();
     s_color_dirty = false;
   }
 }

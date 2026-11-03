@@ -135,9 +135,8 @@ Color anomaly_slice_color(float t) {
 
 void update_anomaly_menu_widgets() {
   PageState &state = s_stack.back();
-  std::vector<Option> options_scratch;
   const std::vector<Option> &options =
-      page_options(state.page, options_scratch);
+      page_options(state.page, s_painted_options);
   ensure_selection(state, options);
   hide_theme_accent_slices();
 
@@ -320,6 +319,24 @@ void update_anomaly_menu_widgets() {
   update_anomaly_controls(x, y + controls_offset, outer_width, line_height,
                           line_font);
   s_dirty = false;
+}
+
+/* A colour animation frame of the Anomaly layout: only the frame and the
+   selected row's bar take the palette; its controls are white. */
+void update_anomaly_menu_colors_only() {
+  if (active_menu_style().border_enabled)
+    for (int line = 0; line < 2; ++line)
+      for (int segment = 0; segment < kFrameGradientSlices; ++segment)
+        panel_color(s_widgets.horizontal_borders[line][segment],
+                    anomaly_slice_color(
+                        gradient_slice(1.0f, segment, kFrameGradientSlices).t));
+  panel_color(s_widgets.left_borders[0],
+              gradient_edge_color(/*right_edge=*/false));
+  panel_color(s_widgets.right_borders[0],
+              gradient_edge_color(/*right_edge=*/true));
+  for (int i = 0; i < kGradientSlices; ++i)
+    panel_color(s_widgets.highlight_slices[i],
+                anomaly_slice_color(gradient_slice(1.0f, i, kGradientSlices).t));
 }
 
 /* Opening: down from above the screen in a second with Out (Back)'s

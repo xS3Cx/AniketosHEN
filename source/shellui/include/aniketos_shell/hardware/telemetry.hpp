@@ -56,6 +56,9 @@ void ReportShellFrame();
 void SetRefreshSeconds(int seconds);
 /** Sample every 500 ms while a page with live readings is on screen. */
 void SetLiveView(bool live);
+/** Keeps the worker sampling: one call per period at least, or it idles. */
 Snapshot GetSnapshot();
+/** sampled_at_ms of the latest sample, without copying the snapshot. */
+uint64_t SampledAtMs();
 
 } // namespace AniketosShell::Telemetry

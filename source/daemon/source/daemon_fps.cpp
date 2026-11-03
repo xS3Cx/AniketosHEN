@@ -184,6 +184,29 @@ uint64_t monotonic_ns() {
          static_cast<uint64_t>(ts.tv_nsec);
 }
 
+/* The running title only changes with a Big App switch: SystemService is
+   asked at most twice a second instead of on every 33 ms tick. */
+constexpr uint64_t kTitleRecheckNs = 500000000ULL;
+
+struct RunningTitle {
+  uint64_t asked_ns = 0;
+  bool found = false;
+  std::string tid;
+  int app_id = 0;
+};
+
+bool running_title(RunningTitle &cache, std::string &tid, int &app_id) {
+  const uint64_t now = monotonic_ns();
+  if (cache.asked_ns == 0 || now < cache.asked_ns ||
+      now - cache.asked_ns >= kTitleRecheckNs) {
+    cache.found = Get_Running_App_TID(cache.tid, cache.app_id);
+    cache.asked_ns = now;
+  }
+  tid = cache.tid;
+  app_id = cache.app_id;
+  return cache.found;
+}
+
 bool diag_due(uint64_t &last_ns) {
   const uint64_t now = monotonic_ns();
   if (now == 0)
@@ -365,6 +388,7 @@ void *vsync_fps_sampler_thread(void *args) noexcept {
   bool had_app = false;
   int last_enabled = -1;
   uint64_t last_diag_ns = 0;
+  RunningTitle title;
 
   while (!g_stack_shutting_down.load(std::memory_order_acquire)) {
     const onion::Settings cfg = g_settings.snapshot();
@@ -381,13 +405,14 @@ void *vsync_fps_sampler_thread(void *args) noexcept {
       logged_active = false;
       had_app = false;
       clear_vsync_state();
+      title = {};
       sleep(kIdleSleepSec);
       continue;
     }
 
     std::string tid;
     int app_id = 0;
-    if (!Get_Running_App_TID(tid, app_id)) {
+    if (!running_title(title, tid, app_id)) {
       if (had_app)
         LOG_TRACE("fps-diag: vsync target cleared (no running big app)");
       had_app = false;
@@ -421,7 +446,7 @@ void *vsync_fps_sampler_thread(void *args) noexcept {
       if (diag_due(last_diag_ns))
         LOG_TRACE("fps-diag: vsync tid=%s app=%d state=ps4-bc-skipped",
                  tid.c_str(), app_id);
-      usleep(kSampleUs);
+      sleep(kIdleSleepSec); /* nothing to sample until the title changes */
       continue;
     }
 
@@ -493,6 +518,7 @@ void *fps_sampler_thread(void *args) noexcept {
   uint64_t last_diag_ns = 0;
   uint64_t last_publish_diag_ns = 0;
   uint64_t last_fallback_diag_ns = 0;
+  RunningTitle title;
 
   (void)onion::fps::publish_open();
 
@@ -513,13 +539,14 @@ void *fps_sampler_thread(void *args) noexcept {
     if (!enabled) {
       last_publish_valid = -1;
       publish_invalid(-1, nullptr);
+      title = {};
       sleep(kIdleSleepSec);
       continue;
     }
 
     std::string tid;
     int app_id = 0;
-    if (!Get_Running_App_TID(tid, app_id)) {
+    if (!running_title(title, tid, app_id)) {
       if (had_app)
         LOG_DEBUG("fps-diag: render target cleared (no running big app)");
       had_app = false;

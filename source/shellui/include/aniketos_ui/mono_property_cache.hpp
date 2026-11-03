@@ -7,8 +7,8 @@
  * per (class, property) and then call the cached thunk directly.
  *
  * Only pass classes from assemblies that stay loaded for the life of
- * SceShellUI (Sce.PlayStation.PUI): the cache is keyed by the MonoClass
- * pointer and is never invalidated.
+ * SceShellUI (ShellUI never unloads a domain or an assembly): the cache is
+ * keyed by the MonoClass pointer and is never invalidated.
  */
 #pragma once
 
@@ -20,6 +20,9 @@ enum class Kind : int { GetThunk, SetThunk, SetMethod };
 
 /** Compiled getter/setter address, or the setter MonoMethod. Null if absent. */
 void *Accessor(MonoClass *klass, const char *property, Kind kind);
+/** The method of that name and arity on `klass` or the first parent that has
+ * one (Reflect::MethodOf), kept the same way. Null if absent. */
+MonoMethod *Method(MonoClass *klass, const char *name, int parameters);
 
 template <typename Result>
 Result Get(MonoClass *klass, MonoObject *instance, const char *property) {

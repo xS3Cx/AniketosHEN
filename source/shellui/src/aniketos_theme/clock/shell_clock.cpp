@@ -634,18 +634,23 @@ void Install(MonoImage *pui) {
 void Tick() {
   const time_t now = std::time(nullptr);
   sync_clock_language(now);
+  /* While a game has the screen no clock is on it (the Control Center takes
+     the focus from the game): the scenes are not searched for one then. */
+  const bool game =
+      AniketosShell::CurrentFocusLayer() == AniketosShell::FocusLayer::Game;
   {
     static time_t swept = 0;
     if (now != swept) {
       swept = now;
-      sweep_clock_labels(now);
+      if (!game)
+        sweep_clock_labels(now);
       s_game_focused = AniketosShell::GameLayerFocused();
     }
   }
   MonoObject *target = clock_target();
   if (!target) {
     static int recover_countdown = 0;
-    if (--recover_countdown <= 0) {
+    if (!game && --recover_countdown <= 0) {
       recover_countdown = 60;
       recover_clock();
     }
@@ -654,6 +659,10 @@ void Tick() {
     s_date_overlay = {};
     return;
   }
+  /* The clock was last seen hidden and the game has the screen: it is not
+     probed again until the game gives the screen up. */
+  if (game && !s_native.visible)
+    return;
   /* Whether Sony's clock label is alive and how opaque it is means walking
      its parent chain. Its fades last hundreds of milliseconds, so sampling
      at 30 Hz tracks them just as well as doing it on every frame. */

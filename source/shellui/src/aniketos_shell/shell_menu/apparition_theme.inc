@@ -162,9 +162,7 @@ void update_apparition_menu_colors_only() {
     return;
 
   PageState &state = s_stack.back();
-  std::vector<Option> options_scratch;
-  const std::vector<Option> &options =
-      page_options(state.page, options_scratch);
+  const std::vector<Option> &options = s_painted_options;
   // Palette-only redraws never reconcile selection. Focus is committed by
   // input or by the structural page renderer, not by an animation frame.
   if (options.empty() || state.selected >= options.size())
@@ -259,9 +257,8 @@ float update_apparition_toggle(size_t index, const Option &option, float width,
 
 void update_apparition_menu_widgets() {
   PageState &state = s_stack.back();
-  std::vector<Option> options_scratch;
   const std::vector<Option> &options =
-      page_options(state.page, options_scratch);
+      page_options(state.page, s_painted_options);
   ensure_selection(state, options);
   hide_theme_accent_slices();
   hide_anomaly_extras();

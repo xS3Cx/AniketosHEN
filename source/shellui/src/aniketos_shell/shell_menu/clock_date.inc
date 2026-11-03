@@ -13,13 +13,14 @@ void style_clock_date_label(MonoObject *label) {
 }
 
 void update_clock_date() {
-  ShellClock::DateOverlayState state{};
+  /* kept between frames: copying into it reuses its text's buffer */
+  static ShellClock::DateOverlayState state;
   ShellClock::GetDateOverlayState(&state);
-  /* Same frame-by-frame mirror of the clock's opacity as the OSD. */
-  float clock_opacity = 0.0f;
-  ShellClock::GetNativeClockOpacity(&clock_opacity);
-  if (s_clock_layer) /* part of Home's scene: PUI fades it with the clock */
-    clock_opacity = 1.0f;
+  /* Part of Home's scene, PUI fades it with the clock; otherwise the same
+     frame-by-frame mirror of the clock's opacity as the OSD. */
+  float clock_opacity = s_clock_layer ? 1.0f : 0.0f;
+  if (!s_clock_layer)
+    ShellClock::GetNativeClockOpacity(&clock_opacity);
   const bool visible = state.wanted && clock_opacity > 0.0f;
   /* What was last written to the date label. This function runs every frame
      for as long as the host exists, and nearly all of what it sets only

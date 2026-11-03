@@ -243,14 +243,16 @@ void rename_fonts(bool on) {
   }
 }
 
-std::string wanted_file() {
-  if (!g_settings.custom_font_enabled)
-    return {};
+/* Asked every frame: a reference, so nothing is copied. */
+const std::string &wanted_file() {
+  static const std::string kSystemFont;
+  if (s_held_back || !g_settings.custom_font_enabled)
+    return kSystemFont;
   const std::vector<std::string> &files = Files();
   if (std::find(files.begin(), files.end(), g_settings.custom_font_path) !=
       files.end())
     return g_settings.custom_font_path;
-  return files.empty() ? std::string() : files.front();
+  return files.empty() ? kSystemFont : files.front();
 }
 
 /* A static PUI method by name, run here; false on a missing method or an
@@ -383,16 +385,12 @@ void Tick() {
     unlink(kPending);
     s_pending_since = 0;
   }
-  std::string wanted = wanted_file();
-  if (s_held_back) {
-    /* until the switch is turned off and on again */
-    if (!g_settings.custom_font_enabled)
-      s_held_back = false;
-    wanted.clear();
-  }
-  if (wanted == s_applied)
+  /* held back until the switch is turned off and on again */
+  if (s_held_back && !g_settings.custom_font_enabled)
+    s_held_back = false;
+  if (wanted_file() == s_applied)
     return;
-  s_applied = wanted;
+  const std::string &wanted = s_applied = wanted_file();
   if (!wanted.empty()) {
     const int fd = open(kPending, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (fd >= 0)

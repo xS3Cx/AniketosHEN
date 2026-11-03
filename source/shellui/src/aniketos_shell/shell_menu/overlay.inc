@@ -114,12 +114,14 @@ void update_overlay() {
   if (!s_widgets.overlay)
     return;
 
-  const Telemetry::Snapshot telemetry = Telemetry::GetSnapshot();
-  s_last_overlay_sample = telemetry.sampled_at_ms;
+  /* Off, it does not read the snapshot: the telemetry worker then idles. */
   if (!g_settings.home_osd_enabled) {
+    s_last_overlay_sample = Telemetry::SampledAtMs();
     clear_label(s_widgets.overlay);
     return;
   }
+  const Telemetry::Snapshot telemetry = Telemetry::GetSnapshot();
+  s_last_overlay_sample = telemetry.sampled_at_ms;
 
   const auto temperature = [](int celsius) {
     switch (g_settings.overlay_temp_unit) {

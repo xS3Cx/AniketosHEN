@@ -43,6 +43,9 @@ void Service();
 /* A newer agent took over: stop reading input; do not call Unhook. */
 bool Superseded();
 
+/* The profile Service last handed to the hooks is on (any thread). */
+bool ProfileEnabled();
+
 /* Points every slot back at the real function (not when superseded). */
 void Unhook();
 

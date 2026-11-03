@@ -56,11 +56,30 @@ MonoObject *parent_of(MonoObject *object) {
   // React/PUI can attach a node through its layout/base relationship while
   // the public Parent is still null.  Resolve semantically and accept the
   // first live relationship instead of binding to one firmware's storage.
-  constexpr const char *kParentGetters[] = {
+  static constexpr const char *kParentGetters[] = {
       "get_Parent", "get_ParentBase", "get_LayoutParent",
       "get_NativeParent"};
-  for (const char *name : kParentGetters) {
-    MonoMethod *getter = mono_class_get_method_from_name(klass, name, 0);
+  /* Every label text set in ShellUI walks its parents here: the getters are
+     looked up once per class. */
+  struct Getters {
+    MonoClass *klass;
+    MonoMethod *methods[std::size(kParentGetters)];
+  };
+  static Getters cache[32];
+  static size_t next = 0;
+  Getters *entry = std::find_if(std::begin(cache), std::end(cache),
+                                [klass](const Getters &known) {
+                                  return known.klass == klass;
+                                });
+  if (entry == std::end(cache)) {
+    entry = &cache[next];
+    next = (next + 1) % std::size(cache);
+    entry->klass = klass;
+    for (size_t i = 0; i < std::size(kParentGetters); ++i)
+      entry->methods[i] =
+          mono_class_get_method_from_name(klass, kParentGetters[i], 0);
+  }
+  for (MonoMethod *getter : entry->methods) {
     if (!getter)
       continue;
     MonoObject *exception = nullptr;

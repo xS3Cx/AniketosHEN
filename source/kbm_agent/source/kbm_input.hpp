@@ -3,8 +3,9 @@
  * Only the process with the screen gets the USB mouse and keyboard, so the
  * agent reads them here: libSceMouse for the mouse, libSceIme's keyboard
  * (with our own sceImeUpdate pump) for the keys; libSceKeyboard never
- * delivers keys. A low-priority reader thread polls every 4 ms (50 ms while
- * nothing is open); the hook thread takes snapshots without locks and
+ * delivers keys. A low-priority reader thread polls every 4 ms while the
+ * profile is on (16 ms for the game's IME while it is off, 50 ms while
+ * nothing needs it); the hook thread takes snapshots without locks and
  * without ever blocking the game. Once our keyboard is open, the game's own
  * sceImeUpdate gets every event we received, so its text fields still work.
  */

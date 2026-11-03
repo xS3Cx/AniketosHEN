@@ -494,6 +494,11 @@ void verify_box(TrackedBox &entry, MonoObject *box) {
 
 void box_hook(MonoObject *box, MonoString *uri, MonoObject *action,
               MonoObject *option, bool set_image) {
+  /* every picture ShellUI loads comes here: off, none is looked at */
+  if (!g_settings.account_avatar_enabled) {
+    s_box_original(box, uri, action, option, set_image);
+    return;
+  }
   const std::string text = Mono_to_String(uri);
   const std::string path =
       box && is_own_face(text) ? effective_path() : std::string();

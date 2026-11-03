@@ -264,9 +264,12 @@ void Tick() {
   }
   if (s_running.load(std::memory_order_acquire))
     return;
-  /* a relay that ended on its own (another user, no ring) retries slowly */
+  /* a relay that ended on its own (another user, no ring) retries slowly;
+     resolve() is cached, so a console without the calls costs no clock read */
+  if (!resolve())
+    return;
   const time_t now = std::time(nullptr);
-  if (now < s_retry_at || !resolve())
+  if (now < s_retry_at)
     return;
   s_retry_at = now + 5;
   s_stop.store(false, std::memory_order_relaxed);
