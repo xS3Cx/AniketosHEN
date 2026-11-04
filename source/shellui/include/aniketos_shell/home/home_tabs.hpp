@@ -49,8 +49,8 @@ std::string TabName(StockTab tab);
 void RequestRename(StockTab tab);
 /* Asks for a new icon for a stock tab (from the Shell Menu). Any thread. */
 void RequestIcon(StockTab tab);
-/* Games and Media back to the system's captions (from the Shell Menu; UI
- * thread). */
-void RestoreNames();
+/* Games and Media back to the system's captions and every tab's icon back to
+ * its default (from the Shell Menu; UI thread). */
+void RestoreDefaults();
 bool ConsumeUiChange();
 }

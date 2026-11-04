@@ -601,18 +601,27 @@ void RequestIcon(StockTab tab) {
   s_icon_request = index_of(tab);
 }
 
-void RestoreNames() {
+void RestoreDefaults() {
+  const bool custom_icons = HomeTabsStore::RestoreIcons();
   const bool named = !g_settings.home_tab_games_name.empty() ||
                      !g_settings.home_tab_media_name.empty();
+  const bool stock_icons =
+      g_settings.home_tab_games_icon != HomeTabsStore::kDefaultGamesIcon ||
+      g_settings.home_tab_media_icon != HomeTabsStore::kDefaultMediaIcon;
   notify("%s", toolbox_i18n::tr("home_tabs.names_restored"));
-  if (!named)
+  if (!named && !stock_icons) {
+    if (custom_icons)
+      shellui_request_home_reload();
     return;
+  }
   g_settings.home_tab_games_name.clear();
   g_settings.home_tab_media_name.clear();
+  g_settings.home_tab_games_icon = HomeTabsStore::kDefaultGamesIcon;
+  g_settings.home_tab_media_icon = HomeTabsStore::kDefaultMediaIcon;
   if (!SaveSettings())
-    LOG_WARN("[HOMETABS] the system's names were not saved");
+    LOG_WARN("[HOMETABS] the tabs' names and icons were not saved");
   s_ui_changed = true;
-  LOG_INFO("[HOMETABS] games and media tabs back to the system's names");
+  LOG_INFO("[HOMETABS] tabs back to the system names and default icons");
   shellui_request_home_reload();
 }
 

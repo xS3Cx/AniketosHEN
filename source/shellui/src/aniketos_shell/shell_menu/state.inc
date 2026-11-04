@@ -205,7 +205,7 @@ enum class OptionId {
   HomePresenceDot,
   HomeTabRenameGames,
   HomeTabRenameMedia,
-  HomeTabRestoreNames,
+  HomeTabRestoreDefaults,
   HomeTabIconGames,
   HomeTabIconMedia,
   HomeTabIcons,

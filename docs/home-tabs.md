@@ -69,8 +69,9 @@ startup it is deleted and a fresh `home_tabs.json` is created.
   themselves and deleted from **Home screen → Tabs** in the Shell Menu.
 - Games and Media can only be renamed (and have their icon changed); they are
   never hidden or deleted.
-- Restoring the system names clears the Games and Media names only. Custom
-  tab names are always the user's.
+- *Restore tab names and icons* clears the Games and Media names and resets
+  the icons of all four tabs (Games, Media and the two custom tabs) to their
+  defaults. Custom tab names are always the user's.
 
 ## Copy, Move and Remove
 

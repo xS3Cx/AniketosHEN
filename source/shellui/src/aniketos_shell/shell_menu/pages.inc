@@ -424,7 +424,7 @@ void home_pages(Page page, std::vector<Option> &options) {
       ++position;
     }
     options.push_back(action(tr("vsh.tiles.restore_tab_names"),
-                             OptionId::HomeTabRestoreNames));
+                             OptionId::HomeTabRestoreDefaults));
     options.push_back(toggle(tr("vsh.tiles.tab_icons"), OptionId::HomeTabIcons,
                              g_settings.home_tab_icons));
     break;

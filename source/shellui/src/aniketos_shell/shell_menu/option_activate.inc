@@ -366,9 +366,9 @@ void run_home_action(const Option &option) {
                                 ? HomeTabs::StockTab::Games
                                 : HomeTabs::StockTab::Media);
     break;
-  case OptionId::HomeTabRestoreNames:
+  case OptionId::HomeTabRestoreDefaults:
     /* Home reloads behind the menu, as Refresh Home does */
-    HomeTabs::RestoreNames();
+    HomeTabs::RestoreDefaults();
     break;
   case OptionId::HomeTabIconGames:
   case OptionId::HomeTabIconMedia:

@@ -960,6 +960,27 @@ bool SlotVisible(int slot) {
   return tab && tab->visible;
 }
 
+bool RestoreIcons() {
+  bool changed = false;
+  std::string text;
+  {
+    std::lock_guard<std::mutex> lock(s_mutex);
+    load_locked();
+    for (Tab &tab : s_tabs) {
+      if (tab.icon != kDefaultCustomIcon) {
+        tab.icon = kDefaultCustomIcon;
+        changed = true;
+      }
+    }
+    if (changed)
+      text = changed_locked();
+  }
+  if (!changed)
+    return false;
+  save(text);
+  return true;
+}
+
 int FirstFreeSlot() {
   std::lock_guard<std::mutex> lock(s_mutex);
   load_locked();

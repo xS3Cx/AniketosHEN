@@ -45,6 +45,7 @@ std::string SlotName(int slot);
 std::string SlotIcon(int slot);
 int SlotPosition(int slot);
 bool SlotVisible(int slot);
+bool RestoreIcons();
 int FirstFreeSlot();
 
 std::string AddedSql(StockRow row);

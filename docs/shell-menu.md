@@ -219,9 +219,9 @@ is a value type; writing into the Lazy is unsafe, so the renderer path
 *Home screen → Tabs* lists one row per tab, in the order of the tab bar:
 *Games* is *Tab 1*, *Media* is *Tab 2*, and every custom tab is
 *Tab 3: Name* or *Tab 4: Name*, with *(hidden)* after a
-hidden one. An empty slot offers *Create tab %d*; *Restore system tab names*
-clears Games' and Media's names and *Tab icons* switches the icon in front of
-every caption on or off.
+hidden one. An empty slot offers *Create tab %d*; *Restore tab names and icons*
+clears Games' and Media's names, resets every tab's icon to its default and
+*Tab icons* switches the icon in front of every caption on or off.
 
 A tab's row opens its detail page, with the tab's icon and name at the top.
 Games and Media offer *Rename Games tab* / *Rename Media tab* and *Games tab
