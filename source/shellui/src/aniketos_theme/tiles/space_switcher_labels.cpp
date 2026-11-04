@@ -4,7 +4,7 @@
 #include "aniketos_theme/tiles/space_switcher_labels.hpp"
 #include "home_tiles_internal.hpp"
 
-#include "aniketos_shell/home/home_bookmark.hpp"
+#include "aniketos_shell/home/home_tabs_store.hpp"
 #include "aniketos_shell/home/home_tabs.hpp"
 #include "aniketos_theme/mono_text.hpp"
 #include "external_symbols.hpp"
@@ -199,11 +199,14 @@ int localized_space_tab(const std::string &text) {
 
 /* The tab of a stock caption with our glyph in front, or -1. */
 int dressed_space_tab(const std::string &text) {
-  const bool games = text.starts_with(HomeTabs::kGamesGlyph);
-  if (!games && !text.starts_with(HomeTabs::kMediaGlyph))
+  const std::string games_icon =
+      HomeTabs::StockIcon(HomeTabs::StockTab::Games);
+  const std::string media_icon =
+      HomeTabs::StockIcon(HomeTabs::StockTab::Media);
+  const bool games = text.starts_with(games_icon);
+  if (!games && !text.starts_with(media_icon))
     return -1;
-  size_t start = games ? sizeof(HomeTabs::kGamesGlyph) - 1
-                       : sizeof(HomeTabs::kMediaGlyph) - 1;
+  size_t start = games ? games_icon.size() : media_icon.size();
   while (start < text.size() && (text[start] == ' ' || text[start] == '\t'))
     ++start;
   const int tab = games ? kGamesTab : kMediaTab;
@@ -264,11 +267,11 @@ MonoString *Decorate(MonoObject *label, MonoString *text) {
   if (!label || !text)
     return text;
   const std::string original = Mono_to_String(text);
-  /* Already carrying a glyph: ours, or the Emulators caption that stands in
-     on the Games tab while that tab is showing. */
-  if (original.empty() || original.starts_with(HomeTabs::kGamesGlyph) ||
-      original.starts_with(HomeTabs::kMediaGlyph) ||
-      original.starts_with(HomeTabs::kEmulatorsGlyph))
+  /* Already carrying an icon of ours: Home set the caption back while the
+     text hook had already dressed it. */
+  if (original.empty() ||
+      original.starts_with(HomeTabs::StockIcon(HomeTabs::StockTab::Games)) ||
+      original.starts_with(HomeTabs::StockIcon(HomeTabs::StockTab::Media)))
     return text;
 
   const std::string test_id = space_switcher_ancestor(label);
@@ -284,11 +287,11 @@ MonoString *Decorate(MonoObject *label, MonoString *text) {
   }
   if (tab < 0) {
     tab = localized_space_tab(original);
-    /* the bookmark's caption is the user's name as typed, which may be a
-       stock tab's word ("Games", "Gry", "Media"): it is not that tab. The
-       words first: every label set in ShellUI comes here, and the Home check
-       walks the label's parents. */
-    if (tab < 0 || original == HomeBookmark::Name() ||
+    /* a custom tab's caption is the user's name, which may be a stock tab's
+       word ("Games", "Gry", "Media"): it is not that tab. The words first:
+       every label set in ShellUI comes here, and the Home check walks the
+       label's parents. */
+    if (tab < 0 || HomeTabsStore::IsTabName(original) ||
         !HomeTabs::IsHomeTabLabel(label))
       return text;
     LOG_INFO("[HOME-SPACES:NATIVE] semantic text-label tab=%s text='%s' "
@@ -308,7 +311,9 @@ MonoString *Decorate(MonoObject *label, MonoString *text) {
   /* tab icons switched off: the system's caption as it is */
   if (named.empty() && !HomeTabs::IconsShown())
     return text;
-  const char *symbol = games ? HomeTabs::kGamesGlyph : HomeTabs::kMediaGlyph;
+  const std::string symbol =
+      HomeTabs::StockIcon(games ? HomeTabs::StockTab::Games
+                                : HomeTabs::StockTab::Media);
   const std::string caption =
       named.empty() ? HomeTabs::Caption(symbol, original) : named;
   MonoString *replacement = Root_Domain && mono_string_new
@@ -316,9 +321,9 @@ MonoString *Decorate(MonoObject *label, MonoString *text) {
                                 : nullptr;
   if (!replacement)
     return text;
-  LOG_INFO("[HOME-SPACES:NATIVE] decorated match='%s' symbol=U+%04X "
+  LOG_INFO("[HOME-SPACES:NATIVE] decorated match='%s' icon='%s' "
            "text='%s' label=%p",
-           test_id.c_str(), games ? 0xefceu : 0xf871u, original.c_str(),
+           test_id.c_str(), symbol.c_str(), original.c_str(),
            static_cast<void *>(label));
   return replacement;
 }

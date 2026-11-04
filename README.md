@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <b>AniketosHEN</b> · <code>0.04l</code><br/>
+  <b>AniketosHEN</b> · <code>0.04n</code><br/>
   An all-in-one HEN and Toolbox for PlayStation 5<br/>
   <sub>A fork of <a href="https://github.com/aydencharles/onionHEN">OnionHEN</a>
   by 麒麟/0xp0co and contributors. Everything added on top of OnionHEN is by
@@ -34,7 +34,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="license"/></a>
-  <img src="https://img.shields.io/badge/Version-0.04l-8a2be2" alt="version 0.04l"/>
+  <img src="https://img.shields.io/badge/Version-0.04n-8a2be2" alt="version 0.04n"/>
   <img src="https://img.shields.io/badge/Platform-PlayStation%205-003791?style=flat&logo=playstation" alt="PlayStation 5"/>
   <img src="https://img.shields.io/badge/C-00599C?style=flat&logo=c&logoColor=white" alt="C"/>
   <img src="https://img.shields.io/badge/C++-00599C?style=flat&logo=cplusplus&logoColor=white" alt="C++"/>
@@ -48,7 +48,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/screenshot_01.png" alt="AniketosHEN on the Home screen: Emulators and Bookmark tabs and the stats overlay"/>
+  <img src="assets/screenshot_01.png" alt="AniketosHEN on the Home screen: the custom tabs and the stats overlay"/>
 </p>
 
 <p align="center">
@@ -91,7 +91,7 @@ existing OnionHEN installation, and adds a large set of features of its own.
 - **System look customization** — global colour theme, system background, focus outlines, interface panels, toggle-switch styles and a custom system font
 - **Home screen customization** — video or picture background with effects and PlayStation particles, clock and date, circular or rounded game tiles, custom (also animated GIF/WebP) account avatar, avatar status dot
 - **HEN button menu** — the top-bar button now opens a menu: HEN Toolbox, package install from `/data` and USB, payloads, cheats, Internet connection switch, unload; the button also appears on firmware the byte patch has no profile for
-- **Home tabs** — Emulators tab, Bookmark tab, renamed Games/Media tabs, copy/move between tabs from a game's Options menu
+- **Home tabs** - Games, Media and up to two custom tabs, all renameable and each with a system glyph icon; show, hide, reorder and delete custom tabs, and copy or move titles between tabs from a game's Options menu
 - **Game Options menu** — Cheats, trophy unlock, **Copy / Move** and **Hide App** on a game's or app's Options menu, with a Hidden apps page that brings hidden tiles back
 - **Game Information** — more rows on a game's Information screen (Title ID, Content ID, SDK version, mount path…)
 - **Keyboard & mouse for games** (experimental) — play any PS5 game with a USB keyboard and mouse mapped to DualSense input ([docs/kbm.md](docs/kbm.md))
@@ -129,7 +129,7 @@ The first page has one row per area:
 |---|---|
 | **Console** | *Console information* (name, model, masked serial / IDPS / PSID shown only after a confirmation, firmware, kernel, processor and clocks, disc drive, swap, RAM, disk, uptime, IP), *Hidden apps* (bring back apps hidden with *Hide App*; *Filter hidden apps* switches the Home filter off without emptying the list), *Power* (Rest Mode, reboot, power off), *Fan* (manual temperature threshold, with CPU/SoC temperature and fan duty), *Power light* (white, blue, orange), *Buzzer* |
 | **Controller** | Light bar colour and a second colour for pulses, brightness, animations (breathing, pulse, rainbow, fast spectrum, neon wave), player lights, vibration test and strength, console sound mirrored to the DualSense speaker with volume, restore |
-| **Home screen** | *Background*: looping video (with optional sound), still picture, effects (dim, haze, vignette, edges), PlayStation-symbol particles and their count, optionally behind Settings and system screens too · *Clock and date* · *Tabs* (Emulators and Bookmark tabs, tab names and icons) · *Game tiles* (circular, corner rounding) · *Profile* (custom avatar, status dot) |
+| **Home screen** | *Background*: looping video (with optional sound), still picture, effects (dim, haze, vignette, edges), PlayStation-symbol particles and their count, optionally behind Settings and system screens too · *Clock and date* · *Tabs* (Games and Media names and icons, up to two custom tabs that can be created, renamed, shown or hidden, reordered and deleted) · *Game tiles* (circular, corner rounding) · *Profile* (custom avatar, status dot) |
 | **System look** | Global theme (one colour and animation for every themed surface), system background, focus outlines, interface panels, system icon colour (Home screen; Settings screen icons are not covered yet — TODO), toggle-switch style (Indicator, Classic, Metal, Skull, Indicator Light or the system's own), custom font |
 | **Overlays** | *Home Screen OSD* (frame rate, viewport, CPU/SoC temperature, fan, RAM used and free, disk, system software, uptime, IP; refresh rate, FPS precision, size, units, corner) and the in-game *Performance OSD* (FPS, CPU per core, GPU, memory, fan, IP; background, position) |
 | **Keyboard** | Mouse control of the system UI, glyph key and emoji on the system keyboard |
@@ -395,6 +395,10 @@ the settings found in `/data/OnionHEN/config.ini` (see
 | `overlay.cpu_usage_mode` | `average` | `average`, `per_core` |
 | `shortcuts.cheats_menu` | `off` | `off`, `r3_l3`, `l2_triangle`, `long_options`, `long_share`, `share` |
 | `shortcuts.toolbox` | `off` | `off`, `l2_r3`, `long_share`, `share` |
+| `shell_menu.home_tab_games_name` / `home_tab_media_name` | empty | a tab name; empty keeps the system's caption |
+| `shell_menu.home_tab_games_icon` / `home_tab_media_icon` | `U+EFCE` / `U+F871` | one system glyph, `U+E000` through `U+F8FF` |
+| `shell_menu.home_tab_icons` | `true` | `true`, `false` |
+| `shell_menu.home_hide_apps` | `true` | `true`, `false` |
 
 The `[shell_menu]` section holds about 140 Shell Menu and appearance settings
 (default style Apparition). They are defined in
@@ -412,8 +416,7 @@ and are best changed from the menu itself.
 | `/data/AniketosHEN/kbm/` | Keyboard and mouse settings, default template and per-game profiles |
 | `/data/AniketosHEN/ShellUI/` | Shell Menu media: `videos/`, `background/`, `particles/`, `avatars/` |
 | `/data/AniketosHEN/fonts/` | Custom system fonts |
-| `/data/AniketosHEN/home_bookmark.json` | Bookmark tab contents |
-| `/data/AniketosHEN/emulators.txt` | Optional override of the Emulators tab list |
+| `/data/AniketosHEN/home_tabs.json` | Home's custom tabs, their names, icons and titles (v2) |
 | `/data/AniketosHEN/reports/` | Scrubbed error reports |
 | `/data/AniketosHEN/kstuff.elf` | Optional runtime override with priority over the embedded `kstuff` |
 | `/data/AniketosHEN/AniketosHEN.log` | Main runtime log |
@@ -550,7 +553,7 @@ Everything that OnionHEN does not have is credited to its original authors:
 
 - **AlexZero** — author and maintainer of AniketosHEN: the Aniketos Shell Menu
   and its PS5/PUI implementations of every menu style, System look and Home
-  screen customization, the HEN button menu, Home tabs and bookmarks, custom font
+  screen customization, the HEN button menu, Home tabs and their icons, custom font
   and avatars (with automatic fitting of large animated avatars), Hide App, controller tools, keyboard and mouse for games, mouse control,
   the Visual Cheats Menu, game Information and trophy tools, error reports,
   the OnionHEN import and the AniketosHEN artwork.

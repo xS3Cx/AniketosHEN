@@ -17,7 +17,7 @@
 #include "aniketos_shell/system_ui/popup_menu.hpp"
 #include "aniketos_shell/core/embedded_assets.hpp"
 #include "aniketos_shell/rn_scripts/rn_reload.hpp"
-#include "aniketos_shell/home/home_bookmark.hpp"
+#include "aniketos_shell/home/home_tabs_store.hpp"
 #include "aniketos_shell/home/home_particles.hpp"
 #include "aniketos_shell/home/hidden_apps.hpp"
 #include "aniketos_shell/home/home_tabs.hpp"
@@ -189,6 +189,18 @@ void poll_confirmation() {
   s_confirming = OptionId::None;
   Show();
   s_dirty = true;
+}
+
+void leave_deleted_tab() {
+  if (s_stack.empty() || s_stack.back().page != Page::HomeTabDetail)
+    return;
+  if (s_home_tab_detail.kind != HomeTabDetailKind::Custom)
+    return;
+  if (s_animation != AnimationState::Visible || page_transition_active())
+    return;
+  if (HomeTabsStore::SlotUsed(s_home_tab_detail.slot))
+    return;
+  begin_page_transition(PageTransitionAction::Pop);
 }
 
 void move_menu_with_stick(uint64_t now) {
@@ -464,6 +476,11 @@ void Tick() {
   SweetyNative::Tick();
   follow_renderer_choice();
   poll_confirmation();
+  leave_deleted_tab();
+  const bool store_changed = HomeTabsStore::ConsumeUiChange();
+  const bool tabs_changed = HomeTabs::ConsumeUiChange();
+  if (store_changed || tabs_changed)
+    s_dirty = true;
   sync_clock_layer();
   update_clock_date();
   update_overlay_fade();

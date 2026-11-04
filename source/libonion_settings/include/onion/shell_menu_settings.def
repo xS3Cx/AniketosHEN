@@ -190,18 +190,15 @@ ONION_SHELL_SETTING_INT(home_particles_speed, 100)
  * aniketos_shell/rn_scripts/script_injector). */
 ONION_SHELL_SETTING_INT(home_presence_dot, 0)
 /* Names of the user's for Home's Games and Media tabs, empty for the
- * system's own, and the Emulators tab on or off (shellui:
+ * system's own, and the glyph each shows in front of its caption (shellui:
  * aniketos_shell/home/home_tabs). */
 ONION_SHELL_SETTING_STRING(home_tab_games_name, "")
 ONION_SHELL_SETTING_STRING(home_tab_media_name, "")
-ONION_SHELL_SETTING_BOOL(home_tab_emulators, true)
-/* The glyph in front of the captions of Games, Media and Emulators; a name
- * of the user's that starts with a glyph has that one. The bookmark shows its
- * name as typed. */
+ONION_SHELL_SETTING_STRING(home_tab_games_icon, "\xEE\xBF\x8E")
+ONION_SHELL_SETTING_STRING(home_tab_media_icon, "\xEF\xA1\xB1")
+/* The glyph in front of every tab's caption (shellui:
+ * aniketos_shell/home/home_tabs). */
 ONION_SHELL_SETTING_BOOL(home_tab_icons, true)
-/* A bookmark tab on Home after Emulators, named by the user and filled
- * from a game's Options menu (shellui: aniketos_shell/home/home_bookmark). */
-ONION_SHELL_SETTING_BOOL(home_bookmark, true)
 ONION_SHELL_SETTING_BOOL(home_hide_apps, true)
 /* A key after Shift on the system keyboard that turns the letter keys into
  * pages of the console's glyphs (shellui: aniketos_shell/input/osk_glyphs). */
@@ -216,6 +213,6 @@ ONION_SHELL_SETTING_BOOL(mouse_control_enabled, true)
 ONION_SHELL_SETTING_INT(shell_toggle_style, 0)
 
 /* Master switch for every change to the interface's look the menu makes
- * (shellui: aniketos_theme/customization.hpp). The HEN button and the
- * Emulators tab stay either way. */
+ * (shellui: aniketos_theme/customization.hpp). The HEN button and the Home
+ * tabs stay either way. */
 ONION_SHELL_SETTING_BOOL(shell_customization_enabled, true)

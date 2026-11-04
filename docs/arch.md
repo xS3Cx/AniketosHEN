@@ -205,9 +205,17 @@ AniketosHEN 只负责配对和设备注册。配对信息可从网络页面保�
 HomeUI 顶部导航和 Settings Debug Settings 入口按固件 profile 覆盖 2.30–12.70；11.00 起 Settings 走 `debug_settings_old`。
 
 `home_rows.cpp` 的 `build_where_hook` 同时按 `aniketos_shell/home/hidden_apps` 的
-`hidden_apps.json` 过滤 Home 的 Games、Media、Emulators 和 Bookmark 查询：
+`hidden_apps.json` 过滤 Home 的 Games、Media 以及每个自定义标签页查询：
 在 `ORDER BY` / `GROUP BY` / `LIMIT` 之前追加
 `AND (icon.titleId NOT IN (...))`；列表为空或 `home_hide_apps=false` 时查询保持原样。
+
+Home 固定四个标签页：Games、Media 和最多两个自定义标签页。自定义标签页由
+`aniketos_shell/home/home_tabs_store` 存放在 `/data/AniketosHEN/home_tabs.json`
+（v2），`rn_scripts/script_injector` 与 `home_inject_js.inc` 把它们作为额外 space
+加入 Home，内容限制为 7780–7781；`home_rows.cpp` 先用该限制识别自定义列表，
+再用标题 ID 过滤。Games/Media 的复制、移动和图标由
+`aniketos_shell/home/home_tabs.cpp` 及 `home_tabs_store` 处理。旧的
+`home_bookmark.json`、Emulators 特殊标签页和 `emulators.txt` 均已移除。
 
 监控条 FPS 由 daemon skip-hook 采样：`libonion_fps` 通过 `/dev/dce` ioctl
 和 DMAP 读取游戏加载的 `libSceAgcDriver`，ShellUI 负责显示 FPS、CPU、GPU、

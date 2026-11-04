@@ -66,6 +66,7 @@ enum class Page {
   HomeParticles,
   ShellClock,
   HomeTabs,
+  HomeTabDetail,
   ShellTiles,
   HomeProfile,
   /* the look of the console's own interface */
@@ -89,6 +90,11 @@ enum class Page {
   Debug,
   /* AniketosHEN itself */
   Settings,
+};
+enum class HomeTabDetailKind { Games, Media, Custom };
+struct HomeTabDetailState {
+  HomeTabDetailKind kind = HomeTabDetailKind::Games;
+  int slot = 0;
 };
 enum class OptionType {
   Submenu,
@@ -200,10 +206,19 @@ enum class OptionId {
   HomeTabRenameGames,
   HomeTabRenameMedia,
   HomeTabRestoreNames,
-  HomeEmulatorsTab,
+  HomeTabIconGames,
+  HomeTabIconMedia,
   HomeTabIcons,
-  HomeBookmark,
-  HomeBookmarkRename,
+  HomeTabCreate,
+  HomeTabRename,
+  HomeTabIcon,
+  HomeTabToggle,
+  HomeTabDelete,
+  HomeTabMoveLeft,
+  HomeTabMoveRight,
+  HomeTabOpenGames,
+  HomeTabOpenMedia,
+  HomeTabOpenCustom,
   HomeHideApps,
   HiddenAppShow,
   HiddenAppsShowAll,
@@ -468,6 +483,7 @@ std::vector<PageState> s_stack{PageState{}};
 // Only one owns the pooled widget tree at a time, but entering a game must
 // never overwrite the Shell Menu page/focus state that is restored on HomeUI.
 std::vector<PageState> s_shell_stack{PageState{}};
+HomeTabDetailState s_home_tab_detail{};
 bool s_game_session = false;
 AnimationState s_animation = AnimationState::Hidden;
 uint64_t s_animation_started_ms = 0;

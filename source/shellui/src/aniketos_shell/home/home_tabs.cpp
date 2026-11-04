@@ -1,7 +1,7 @@
 #include "aniketos_shell/home/home_tabs.hpp"
 
 #include "aniketos_shell/core/host_scene.hpp"
-#include "aniketos_shell/home/home_bookmark.hpp"
+#include "aniketos_shell/home/home_tabs_store.hpp"
 #include "aniketos_shell/home/home_rows.hpp"
 #include "aniketos_shell/system_ui/system_dialogs.hpp"
 #include "aniketos_ui/home_scene.hpp"
@@ -14,6 +14,7 @@
 #include <onion/settings.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <ctime>
 #include <mutex>
@@ -28,6 +29,7 @@ namespace {
 namespace Reflect = AniketosUI::Reflect;
 
 bool s_installed = false;
+std::atomic<bool> s_ui_changed{false};
 uint32_t s_switcher = 0; /* React's 'space-switcher' focus layer */
 int s_search_countdown = 0;
 
@@ -64,14 +66,17 @@ std::string s_stock_names[2];
    setting or a stock caption changed, not every frame. */
 std::string s_captions[2];
 std::string s_seen_names[2];
-bool s_seen_icons = false;
+std::string s_seen_icons[2];
+bool s_seen_icons_shown = false;
 bool s_captions_stale = true;
 /* A label was given text: the bar is fitted again on the next frame. */
 bool s_fit_dirty = true;
 
 std::mutex s_request_mutex;
-int s_rename_request = -1; /* the tab a prompt is asked for */
-int s_renaming = -1;       /* the tab whose prompt is open (UI thread) */
+int s_rename_request = -1; /* the tab a rename prompt is asked for */
+int s_icon_request = -1;   /* the tab an icon prompt is asked for */
+int s_renaming = -1;       /* the tab whose rename prompt is open */
+int s_icon_setting = -1;   /* the tab whose icon prompt is open */
 
 /* TabName's answers, kept by Tick: the Options menu is built on another
    thread than the one the names change on. */
@@ -208,13 +213,13 @@ std::string &name_setting(StockTab tab) {
                                 : g_settings.home_tab_media_name;
 }
 
-/* What a stock tab is to show: the user's name for it, with its glyph (see
+/* What a stock tab is to show: the user's name for it, with its icon (see
    Caption); empty while it keeps the system's caption. */
 std::string caption_of(StockTab tab) {
-  const std::string name = HomeBookmark::CleanName(name_setting(tab));
+  const std::string name = HomeTabsStore::CleanName(name_setting(tab));
   if (name.empty())
     return {};
-  return Caption(tab == StockTab::Games ? kGamesGlyph : kMediaGlyph, name);
+  return Caption(StockIcon(tab), name);
 }
 
 bool is_label(MonoObject *object) {
@@ -305,7 +310,7 @@ void show_caption(MonoObject *label, StockTab tab,
   if (shown_logs++ < 32)
     LOG_INFO("[HOMETABS] %s tab shows '%s' label=%p",
              tab == StockTab::Games ? "games" : "media",
-             HomeBookmark::CleanName(name_setting(tab)).c_str(),
+             HomeTabsStore::CleanName(name_setting(tab)).c_str(),
              static_cast<void *>(label));
 }
 
@@ -373,7 +378,7 @@ bool panels_moved() {
 }
 
 void open_rename_prompt(StockTab tab) {
-  const std::string name = HomeBookmark::CleanName(name_setting(tab));
+  const std::string name = HomeTabsStore::CleanName(name_setting(tab));
   SystemDialogs::PromptOptions options;
   options.title = toolbox_i18n::tr(tab == StockTab::Games
                                        ? "home_tabs.rename_games_title"
@@ -398,17 +403,18 @@ void finish_rename(bool confirmed, const std::string &typed) {
   s_renaming = -1;
   if (!confirmed)
     return;
-  std::string name = HomeBookmark::CleanName(typed);
+  std::string name = HomeTabsStore::CleanName(typed);
   /* The system's own caption is not kept as a name: without one the tab
      follows the console's language. */
   if (name == s_stock_names[index_of(tab)])
     name.clear();
   std::string &setting = name_setting(tab);
-  if (name == HomeBookmark::CleanName(setting))
+  if (name == HomeTabsStore::CleanName(setting))
     return;
   setting = name;
   if (!SaveSettings())
     LOG_WARN("[HOMETABS] the tab's name was not saved");
+  s_ui_changed = true;
   LOG_INFO("[HOMETABS] %s tab %s", tab == StockTab::Games ? "games" : "media",
            name.empty() ? "back to the system's name" : "renamed");
   /* the name goes in as Home builds its tab bar */
@@ -417,7 +423,7 @@ void finish_rename(bool confirmed, const std::string &typed) {
 
 void remember_tab_names() {
   for (const StockTab tab : {StockTab::Games, StockTab::Media}) {
-    std::string name = HomeBookmark::CleanName(name_setting(tab));
+    std::string name = HomeTabsStore::CleanName(name_setting(tab));
     if (name.empty())
       name = s_stock_names[index_of(tab)];
     std::lock_guard<std::mutex> lock(s_names_mutex);
@@ -426,20 +432,78 @@ void remember_tab_names() {
   }
 }
 
-/* The rename prompt asked for from the Shell Menu, and its answer. A prompt
-   can go without one (closed by the system, as when a game starts over
-   Home): asking again replaces it. */
+std::string default_icon(StockTab tab) {
+  return tab == StockTab::Games ? HomeTabsStore::kDefaultGamesIcon
+                                : HomeTabsStore::kDefaultMediaIcon;
+}
+
+void open_icon_prompt(StockTab tab) {
+  SystemDialogs::PromptOptions options;
+  options.title = toolbox_i18n::tr("home_tabs.icon_title");
+  options.message = toolbox_i18n::tr("home_tabs.icon_message");
+  options.text = StockIcon(tab);
+  options.positive = toolbox_i18n::tr("home_tabs.save");
+  options.negative = toolbox_i18n::tr("home_tabs.cancel");
+  std::string failure;
+  if (!SystemDialogs::ShowPrompt(options, &failure)) {
+    LOG_WARN("[HOMETABS] icon prompt: %s", failure.c_str());
+    return;
+  }
+  s_icon_setting = index_of(tab);
+}
+
+void finish_icon(bool confirmed, const std::string &typed) {
+  const StockTab tab = s_icon_setting == 0 ? StockTab::Games : StockTab::Media;
+  s_icon_setting = -1;
+  if (!confirmed)
+    return;
+  std::string glyph;
+  const HomeTabsStore::IconText result =
+      HomeTabsStore::ParseIconText(typed, &glyph);
+  if (result == HomeTabsStore::IconText::Invalid) {
+    notify("%s", toolbox_i18n::tr("home_tabs.icon_invalid"));
+    return;
+  }
+  if (result == HomeTabsStore::IconText::Empty)
+    glyph = default_icon(tab);
+  std::string &setting = tab == StockTab::Games ? g_settings.home_tab_games_icon
+                                                : g_settings.home_tab_media_icon;
+  if (glyph == setting)
+    return;
+  setting = glyph;
+  if (!SaveSettings())
+    LOG_WARN("[HOMETABS] the tab's icon was not saved");
+  s_ui_changed = true;
+  LOG_INFO("[HOMETABS] %s tab icon changed",
+           tab == StockTab::Games ? "games" : "media");
+  shellui_request_home_reload();
+}
+
+/* The rename and icon prompts asked for from the Shell Menu, and their
+   answers. A prompt can go without one (closed by the system, as when a game
+   starts over Home): asking again replaces it. */
 void rename_tick() {
-  int request = -1;
+  int rename = -1;
+  int icon = -1;
   {
     std::lock_guard<std::mutex> lock(s_request_mutex);
-    std::swap(request, s_rename_request);
+    std::swap(rename, s_rename_request);
+    std::swap(icon, s_icon_request);
   }
-  if (request >= 0) {
-    if (s_renaming >= 0)
+  if (rename >= 0) {
+    if (s_renaming >= 0 || s_icon_setting >= 0)
       LOG_INFO("[HOMETABS] the last prompt never answered; asking again");
     s_renaming = -1;
-    open_rename_prompt(request == 0 ? StockTab::Games : StockTab::Media);
+    s_icon_setting = -1;
+    open_rename_prompt(rename == 0 ? StockTab::Games : StockTab::Media);
+    return;
+  }
+  if (icon >= 0) {
+    if (s_renaming >= 0 || s_icon_setting >= 0)
+      LOG_INFO("[HOMETABS] the last prompt never answered; asking again");
+    s_renaming = -1;
+    s_icon_setting = -1;
+    open_icon_prompt(icon == 0 ? StockTab::Games : StockTab::Media);
     return;
   }
   if (s_renaming >= 0) {
@@ -447,35 +511,12 @@ void rename_tick() {
     std::string typed;
     if (SystemDialogs::PollPrompt(&confirmed, &typed))
       finish_rename(confirmed, typed);
+  } else if (s_icon_setting >= 0) {
+    bool confirmed = false;
+    std::string typed;
+    if (SystemDialogs::PollPrompt(&confirmed, &typed))
+      finish_icon(confirmed, typed);
   }
-}
-
-/* Nothing to show in the Emulators tab: say so, once per arrival on the tab. */
-void emulators_tab_tick() {
-  MonoObject *emulators_tab = nullptr;
-  for (const TabPanel &tab : s_tab_panels) {
-    MonoObject *panel = Reflect::Target(tab.handle);
-    if (panel && tab.name == "space-switcher-emulators")
-      emulators_tab = panel;
-  }
-  static bool was_on_emulators = false;
-  MonoObject *focused = get(emulators_tab, "get_Focused");
-  const bool on_emulators =
-      focused && *static_cast<bool *>(mono_object_unbox(focused));
-  if (on_emulators && !was_on_emulators && !HomeRows::FindEmulators()) {
-    /* A notification, not a dialog: the tab is on the way to the icons on the
-       right of the bar, and a dialog that took the focus back to Games made
-       them unreachable. Not more often than every half minute. */
-    static time_t last_notice = 0;
-    const time_t now = time(nullptr);
-    if (now - last_notice >= 30) {
-      last_notice = now;
-      notify("%s. %s", toolbox_i18n::tr("home_tabs.no_emulators.title"),
-             toolbox_i18n::tr("home_tabs.no_emulators.body"));
-      LOG_INFO("[HOMETABS] no emulators installed: notification sent");
-    }
-  }
-  was_on_emulators = on_emulators;
 }
 
 bool is_under(MonoObject *node, MonoObject *ancestor) {
@@ -489,14 +530,21 @@ bool is_under(MonoObject *node, MonoObject *ancestor) {
 
 bool IconsShown() { return g_settings.home_tab_icons; }
 
-std::string Caption(const char *glyph, const std::string &name) {
-  /* a glyph of the user's leads: U+E000-U+F8FF, EE 80 80 to EF A3 BF */
-  const unsigned char lead = name.size() >= 3 ? name[0] : 0;
-  const unsigned char second = name.size() >= 3 ? name[1] : 0;
-  const bool own = lead == 0xee || (lead == 0xef && second <= 0xa3);
-  if (!IconsShown() || own)
+bool ConsumeUiChange() { return s_ui_changed.exchange(false); }
+
+std::string StockIcon(StockTab tab) {
+  const std::string &value =
+      tab == StockTab::Games ? g_settings.home_tab_games_icon
+                             : g_settings.home_tab_media_icon;
+  return HomeTabsStore::SanitizeIcon(
+      value, tab == StockTab::Games ? HomeTabsStore::kDefaultGamesIcon
+                                    : HomeTabsStore::kDefaultMediaIcon);
+}
+
+std::string Caption(const std::string &icon, const std::string &name) {
+  if (!IconsShown() || icon.empty())
     return name;
-  return std::string(glyph) + " " + name;
+  return icon + " " + name;
 }
 
 void Install(MonoImage *pui) {
@@ -528,10 +576,9 @@ std::string TabLabelText(MonoObject *label, StockTab tab,
   return {};
 }
 
-void ScriptCaption(StockTab tab, std::string *name, std::string *glyph) {
+void ScriptCaption(StockTab tab, std::string *name, std::string *icon) {
   *name = caption_of(tab);
-  *glyph = IconsShown() ? (tab == StockTab::Games ? kGamesGlyph : kMediaGlyph)
-                        : "";
+  *icon = IconsShown() ? StockIcon(tab) : std::string();
 }
 
 std::string TabName(StockTab tab) {
@@ -549,6 +596,11 @@ void RequestRename(StockTab tab) {
   s_rename_request = index_of(tab);
 }
 
+void RequestIcon(StockTab tab) {
+  std::lock_guard<std::mutex> lock(s_request_mutex);
+  s_icon_request = index_of(tab);
+}
+
 void RestoreNames() {
   const bool named = !g_settings.home_tab_games_name.empty() ||
                      !g_settings.home_tab_media_name.empty();
@@ -559,6 +611,7 @@ void RestoreNames() {
   g_settings.home_tab_media_name.clear();
   if (!SaveSettings())
     LOG_WARN("[HOMETABS] the system's names were not saved");
+  s_ui_changed = true;
   LOG_INFO("[HOMETABS] games and media tabs back to the system's names");
   shellui_request_home_reload();
 }
@@ -589,13 +642,18 @@ void Tick() {
   if (!s_installed)
     return;
   rename_tick();
-  if (s_captions_stale || s_seen_icons != IconsShown() ||
+  const std::string games_icon = StockIcon(StockTab::Games);
+  const std::string media_icon = StockIcon(StockTab::Media);
+  if (s_captions_stale || s_seen_icons_shown != IconsShown() ||
       s_seen_names[0] != g_settings.home_tab_games_name ||
-      s_seen_names[1] != g_settings.home_tab_media_name) {
+      s_seen_names[1] != g_settings.home_tab_media_name ||
+      s_seen_icons[0] != games_icon || s_seen_icons[1] != media_icon) {
     s_captions_stale = false;
-    s_seen_icons = IconsShown();
+    s_seen_icons_shown = IconsShown();
     s_seen_names[0] = g_settings.home_tab_games_name;
     s_seen_names[1] = g_settings.home_tab_media_name;
+    s_seen_icons[0] = games_icon;
+    s_seen_icons[1] = media_icon;
     s_captions[0] = caption_of(StockTab::Games);
     s_captions[1] = caption_of(StockTab::Media);
     s_fit_dirty = true;
@@ -625,8 +683,6 @@ void Tick() {
     s_fit_dirty = false;
     fit_tab_panels(s_captions);
   }
-  if (slow)
-    emulators_tab_tick();
 }
 
 } // namespace HomeTabs

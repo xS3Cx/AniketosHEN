@@ -734,4 +734,11 @@ void Tick() {
   Install();
 }
 
+bool HasGlyph(uint32_t codepoint) {
+  for (int i = 0; i < kGlyphCount; ++i)
+    if (kGlyphs[i] == codepoint)
+      return true;
+  return false;
+}
+
 } // namespace OskGlyphs

@@ -4,7 +4,7 @@
 #include "aniketos_shell/games/content_info.hpp"
 #include "aniketos_shell/games/trophy_tools.hpp"
 #include "aniketos_shell/home/hen_menu.hpp"
-#include "aniketos_shell/home/home_bookmark.hpp"
+#include "aniketos_shell/home/home_tabs_store.hpp"
 #include "aniketos_shell/home/home_rows.hpp"
 #include "aniketos_shell/home/home_tabs.hpp"
 #include "aniketos_shell/home/web_tiles.hpp"
@@ -210,44 +210,38 @@ const char *presence_name() {
   }
 }
 
-/* The config ahead of Home's script, and of the same script in the Control
-   Center. */
-std::string home_script_config(bool home, bool emulators, bool bookmark) {
-  const std::string caption = HomeTabs::Caption(
-      HomeTabs::kEmulatorsGlyph, toolbox_i18n::tr("home_tabs.emulators"));
-  /* Games and Media as the bar shows them, for React to lay it out by */
-  std::string games_name, games_glyph, media_name, media_glyph;
-  HomeTabs::ScriptCaption(HomeTabs::StockTab::Games, &games_name, &games_glyph);
-  HomeTabs::ScriptCaption(HomeTabs::StockTab::Media, &media_name, &media_glyph);
-  /* the bookmark has no identity but the user's name: shown as typed, with
-     no glyph of ours (one the user typed shows as typed) */
-  const std::string bookmark_name = HomeBookmark::Name();
+std::string tabs_config(bool home) {
+  std::string out = "[";
+  bool first = true;
+  if (home) {
+    for (const HomeTabsStore::TabView &tab : HomeTabsStore::Tabs(true)) {
+      if (!first)
+        out += ",";
+      first = false;
+      const std::string caption = HomeTabs::Caption(tab.icon, tab.name);
+      out += "{id: " + JsString(tab.space) + ", caption: " + JsString(caption) +
+             ", label: " + JsString(tab.name) +
+             ", limit: " + std::to_string(tab.limit) + "}";
+    }
+  }
+  out += "]";
+  return out;
+}
+
+std::string home_script_config(bool home) {
+  std::string games_name, games_icon, media_name, media_icon;
+  HomeTabs::ScriptCaption(HomeTabs::StockTab::Games, &games_name, &games_icon);
+  HomeTabs::ScriptCaption(HomeTabs::StockTab::Media, &media_name, &media_icon);
   return std::string("globalThis.__aniketosConfig = {app: ") +
-         (home ? "'home'" : "'control-center'") + ", space: " +
-         (home ? "'emulators'" : "''") +
-         ", emulators: " + (emulators ? "true" : "false") + ", caption: " +
-         JsString(caption) + ", label: " +
-         JsString(toolbox_i18n::tr("home_tabs.emulators")) + ", limit: " +
-         std::to_string(HomeRows::kEmulatorsContentLimit) +
-         /* the top-bar icon, for a Home the byte patch has no profile for;
-            taken back once that is known */
+         (home ? "'home'" : "'control-center'") + ", tabs: " +
+         tabs_config(home) + ", tabsWatch: " +
+         (home ? "true" : "false") +
          ", icon: " + JsString(home ? AniketosIconPath() : "") +
-         /* the presence dot to show on avatars while not online */
          ", presence: " + JsString(presence_name()) +
-         /* the custom clock's settings, drawn by the script in Sony's own
-            clock (asked for again while it is up: aniketos.clock) */
          ", clock: " + ShellClock::ScriptConfig() +
-         /* the bookmark tab: its caption (empty for none) and its name */
-         ", bookmark: " + JsString(bookmark ? bookmark_name : std::string()) +
-         ", bookmarkLabel: " + JsString(bookmark_name) +
-         ", bookmarkLimit: " + std::to_string(HomeBookmark::kContentLimit) +
-         ", bookmarkWatch: " +
-         (home && HomeBookmark::Enabled() ? "true" : "false") +
          ", stockCaptions: {game: [" + JsString(games_name) + ", " +
-         JsString(games_glyph) + "], media: [" + JsString(media_name) + ", " +
-         JsString(media_glyph) + "]}" +
-         /* the websites kept among the games, asked for again while it is up:
-            aniketos.web_tiles */
+         JsString(games_icon) + "], media: [" + JsString(media_name) + ", " +
+         JsString(media_icon) + "]}" +
          ", webTiles: " + WebTiles::HomeState() + "};";
 }
 
@@ -313,10 +307,7 @@ void run_script_hook(MonoObject *executor, MonoObject *bundle) {
   } else if (control_center) {
     note_app_start(s_control_center_starts, "Control Center");
   }
-  /* the Emulators tab, unless switched off, and the bookmark tab while it
-     holds a game */
-  const bool emulators = home && g_settings.home_tab_emulators;
-  const bool bookmark = home && HomeBookmark::Shown();
+  /* the custom tabs of the Home that is starting */
   if (scripts_allowed() && ((home && HomeRows::Ready()) || control_center)) {
     {
       /* this start counted, and the pause to follow should it fail too */
@@ -331,8 +322,7 @@ void run_script_hook(MonoObject *executor, MonoObject *bundle) {
         LOG_WARN("[HOMEJS] could not record the start count");
     }
     injected = inject(
-        executor, app,
-        [=] { return home_script_config(home, emulators, bookmark); },
+        executor, app, [=] { return home_script_config(home); },
         "aniketos-config.js", kInjectedScript, kHomeScriptUrl);
     std::lock_guard<std::mutex> lock(s_state_mutex);
     if (injected)
@@ -340,13 +330,10 @@ void run_script_hook(MonoObject *executor, MonoObject *bundle) {
     else
       unlink(kUnconfirmed); /* nothing went in, so nothing to confirm */
   }
-  /* Before the bundle runs and asks for its rows: the emulators, and the
-     games moved to the bookmark, leave the Games row only for a tab of
-     their own. */
-  if (home) {
-    HomeRows::SetEmulatorsTabShown(injected && emulators);
-    HomeBookmark::SetHome(injected, injected && bookmark);
-  }
+  /* Before the bundle runs and asks for its rows: the titles moved to a
+     custom tab leave the stock rows only while a visible tab holds them. */
+  if (home)
+    HomeTabsStore::SetHome(injected);
   /* The web browser's card: full screen and the Home tile row. */
   const bool browser = is_app("rnps-action-cards");
   if (browser)

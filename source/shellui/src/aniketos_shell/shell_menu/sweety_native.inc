@@ -190,6 +190,8 @@ void pressed(int index) {
   switch (option.type) {
   case OptionType::Submenu:
     s_stack.back().selected = static_cast<size_t>(index);
+    if (option.target == Page::HomeTabDetail)
+      remember_tab_detail(option);
     {
       PageState next{};
       next.page = option.target;

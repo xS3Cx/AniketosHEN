@@ -242,6 +242,10 @@ void controller_pages(Page page, std::vector<Option> &options) {
   }
 }
 
+std::string tab_caption(const std::string &icon, const std::string &name) {
+  return icon.empty() || !HomeTabs::IconsShown() ? name : icon + " " + name;
+}
+
 void home_pages(Page page, std::vector<Option> &options) {
   switch (page) {
   case Page::HomeScreen:
@@ -378,23 +382,115 @@ void home_pages(Page page, std::vector<Option> &options) {
     };
     break;
   }
-  case Page::HomeTabs:
-    /* Home's tabs in their order: Games and Media under names of the
-       user's, Emulators, the bookmark tab (home_tabs, home_bookmark) */
-    options = {
-        action(tr("vsh.tiles.rename_games"), OptionId::HomeTabRenameGames),
-        action(tr("vsh.tiles.rename_media"), OptionId::HomeTabRenameMedia),
-        action(tr("vsh.tiles.restore_tab_names"),
-               OptionId::HomeTabRestoreNames),
-        toggle(tr("vsh.tiles.emulators_tab"), OptionId::HomeEmulatorsTab,
-               g_settings.home_tab_emulators),
-        toggle(tr("vsh.tiles.tab_icons"), OptionId::HomeTabIcons,
-               g_settings.home_tab_icons),
-        toggle(tr("vsh.tiles.bookmark"), OptionId::HomeBookmark,
-               g_settings.home_bookmark),
-        action(tr("vsh.tiles.rename_bookmark"), OptionId::HomeBookmarkRename),
+  case Page::HomeTabs: {
+    /* Home's four tabs: Games and Media under names of the user's, and the
+       two custom tabs (home_tabs, home_tabs_store) */
+    const auto tab_row = [&options](const char *title, OptionId id, int slot) {
+      Option row = option_row(title, OptionType::Submenu, id);
+      row.target = Page::HomeTabDetail;
+      row.payload = static_cast<uint64_t>(slot);
+      options.push_back(row);
     };
+    tab_row(toolbox_i18n::format("vsh.tiles.tab_slot", 1,
+                                 HomeTabs::TabName(HomeTabs::StockTab::Games)
+                                     .c_str())
+                .c_str(),
+            OptionId::HomeTabOpenGames, 0);
+    tab_row(toolbox_i18n::format("vsh.tiles.tab_slot", 2,
+                                 HomeTabs::TabName(HomeTabs::StockTab::Media)
+                                     .c_str())
+                .c_str(),
+            OptionId::HomeTabOpenMedia, 0);
+    int position = 3;
+    const std::vector<HomeTabsStore::TabView> tabs =
+        HomeTabsStore::Tabs(false);
+    for (const HomeTabsStore::TabView &tab : tabs) {
+      std::string title = toolbox_i18n::format(
+          "vsh.tiles.tab_slot", position, tab.name.c_str());
+      if (!tab.visible)
+        title += " " + std::string(tr("vsh.tiles.tab_hidden"));
+      tab_row(title.c_str(), OptionId::HomeTabOpenCustom, tab.slot);
+      ++position;
+    }
+    position = 3 + static_cast<int>(tabs.size());
+    for (int slot = 0; slot < HomeTabsStore::kMaxCustomTabs; ++slot) {
+      if (HomeTabsStore::SlotUsed(slot))
+        continue;
+      Option create = action(
+          toolbox_i18n::format("vsh.tiles.create_tab", position).c_str(),
+          OptionId::HomeTabCreate);
+      create.payload = static_cast<uint64_t>(slot);
+      options.push_back(create);
+      ++position;
+    }
+    options.push_back(action(tr("vsh.tiles.restore_tab_names"),
+                             OptionId::HomeTabRestoreNames));
+    options.push_back(toggle(tr("vsh.tiles.tab_icons"), OptionId::HomeTabIcons,
+                             g_settings.home_tab_icons));
     break;
+  }
+  case Page::HomeTabDetail: {
+    if (s_home_tab_detail.kind != HomeTabDetailKind::Custom) {
+      const bool games = s_home_tab_detail.kind == HomeTabDetailKind::Games;
+      const HomeTabs::StockTab stock =
+          games ? HomeTabs::StockTab::Games : HomeTabs::StockTab::Media;
+      options.push_back(value(
+          toolbox_i18n::format(
+              "vsh.tiles.tab_slot", games ? 1 : 2,
+              tab_caption(HomeTabs::StockIcon(stock), HomeTabs::TabName(stock))
+                  .c_str())
+              .c_str(),
+          ""));
+      options.push_back(action(tr(games ? "vsh.tiles.rename_games"
+                                       : "vsh.tiles.rename_media"),
+                               games ? OptionId::HomeTabRenameGames
+                                     : OptionId::HomeTabRenameMedia));
+      options.push_back(action(tr(games ? "vsh.tiles.games_icon"
+                                       : "vsh.tiles.media_icon"),
+                               games ? OptionId::HomeTabIconGames
+                                     : OptionId::HomeTabIconMedia));
+      break;
+    }
+    const int slot = std::clamp(s_home_tab_detail.slot, 0,
+                                HomeTabsStore::kMaxCustomTabs - 1);
+    if (!HomeTabsStore::SlotUsed(slot)) {
+      Option create = action(
+          toolbox_i18n::format("vsh.tiles.create_tab", slot + 1).c_str(),
+          OptionId::HomeTabCreate);
+      create.payload = static_cast<uint64_t>(slot);
+      options.push_back(create);
+      break;
+    }
+    const std::string name = HomeTabsStore::SlotName(slot);
+    const std::string caption =
+        tab_caption(HomeTabsStore::SanitizeIcon(
+                        HomeTabsStore::SlotIcon(slot),
+                        HomeTabsStore::kDefaultCustomIcon),
+                    name);
+    const int position = HomeTabsStore::SlotPosition(slot);
+    const std::string header_title =
+        position > 0
+            ? toolbox_i18n::format("vsh.tiles.tab_slot", position,
+                                   caption.c_str())
+            : caption;
+    Option header = value(header_title.c_str(), "");
+    header.payload = static_cast<uint64_t>(slot);
+    options.push_back(header);
+    const auto add_action = [&options, slot](const char *title, OptionId id) {
+      Option entry = action(title, id);
+      entry.payload = static_cast<uint64_t>(slot);
+      options.push_back(entry);
+    };
+    add_action(tr("vsh.tiles.rename_tab"), OptionId::HomeTabRename);
+    add_action(tr("vsh.tiles.tab_icon"), OptionId::HomeTabIcon);
+    add_action(HomeTabsStore::SlotVisible(slot) ? tr("vsh.tiles.hide_tab")
+                                                : tr("vsh.tiles.show_tab"),
+               OptionId::HomeTabToggle);
+    add_action(tr("vsh.tiles.move_left"), OptionId::HomeTabMoveLeft);
+    add_action(tr("vsh.tiles.move_right"), OptionId::HomeTabMoveRight);
+    add_action(tr("vsh.tiles.delete_tab"), OptionId::HomeTabDelete);
+    break;
+  }
   case Page::ShellTiles:
     options = {
         toggle(tr("vsh.tiles.circular"), OptionId::ShellTilesCircular,

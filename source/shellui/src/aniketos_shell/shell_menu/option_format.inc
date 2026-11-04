@@ -26,6 +26,7 @@ const char *page_title(Page page) {
   case Page::HomeParticles: return tr("vsh.m.home_particles");
   case Page::ShellClock: return tr("vsh.m.clock");
   case Page::HomeTabs: return tr("vsh.m.tabs");
+  case Page::HomeTabDetail: return tr("vsh.m.tab_detail");
   case Page::ShellTiles: return tr("vsh.m.tiles");
   case Page::HomeProfile: return tr("vsh.m.profile");
   case Page::SystemCustomize: return tr("vsh.m.system_look");

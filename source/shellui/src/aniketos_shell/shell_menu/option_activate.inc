@@ -75,19 +75,9 @@ void after_home_toggle(OptionId id, bool on) {
     shellui_request_home_reload();
     notify(on ? "notify.vsh.tiles.circular" : "notify.vsh.tiles.stock");
     break;
-  case OptionId::HomeBookmark:
-    /* Home takes the tab in, or leaves it out, as it starts */
-    shellui_request_home_reload();
-    LOG_INFO("[BOOKMARK] enabled=%d", on ? 1 : 0);
-    break;
   case OptionId::HomeHideApps:
     shellui_request_home_reload();
     LOG_INFO("[HIDDEN] filter enabled=%d", on ? 1 : 0);
-    break;
-  case OptionId::HomeEmulatorsTab:
-    /* the same for the Emulators tab, whose titles go back to Games */
-    shellui_request_home_reload();
-    LOG_INFO("[HOMETABS] emulators tab enabled=%d", on ? 1 : 0);
     break;
   case OptionId::HomeTabIcons:
     /* the captions are made as Home starts */
@@ -363,11 +353,6 @@ void run_controller_action(OptionId id) {
 
 void run_home_action(const Option &option) {
   switch (option.id) {
-  case OptionId::HomeBookmarkRename:
-    /* the system's prompt, on Home once this menu is gone */
-    Hide();
-    HomeBookmark::RequestRename();
-    break;
   case OptionId::HiddenAppShow:
     HiddenApps::Show(option.external_key);
     break;
@@ -384,6 +369,42 @@ void run_home_action(const Option &option) {
   case OptionId::HomeTabRestoreNames:
     /* Home reloads behind the menu, as Refresh Home does */
     HomeTabs::RestoreNames();
+    break;
+  case OptionId::HomeTabIconGames:
+  case OptionId::HomeTabIconMedia:
+    Hide();
+    HomeTabs::RequestIcon(option.id == OptionId::HomeTabIconGames
+                              ? HomeTabs::StockTab::Games
+                              : HomeTabs::StockTab::Media);
+    break;
+  case OptionId::HomeTabCreate:
+    if (HomeTabsStore::FirstFreeSlot() < 0) {
+      notify("%s", toolbox_i18n::tr("home_tabs.tab_full"));
+      break;
+    }
+    Hide();
+    HomeTabsStore::RequestCreate(static_cast<int>(option.payload));
+    break;
+  case OptionId::HomeTabRename:
+    Hide();
+    HomeTabsStore::RequestRename(static_cast<int>(option.payload));
+    break;
+  case OptionId::HomeTabIcon:
+    Hide();
+    HomeTabsStore::RequestIcon(static_cast<int>(option.payload));
+    break;
+  case OptionId::HomeTabToggle:
+    HomeTabsStore::ToggleVisible(static_cast<int>(option.payload));
+    break;
+  case OptionId::HomeTabDelete:
+    Hide();
+    HomeTabsStore::RequestDelete(static_cast<int>(option.payload));
+    break;
+  case OptionId::HomeTabMoveLeft:
+    HomeTabsStore::MoveSlot(static_cast<int>(option.payload), -1);
+    break;
+  case OptionId::HomeTabMoveRight:
+    HomeTabsStore::MoveSlot(static_cast<int>(option.payload), 1);
     break;
   case OptionId::RefreshHome:
     // Keep the overlay open until ReloadApp consumes this Cross press. Its
@@ -442,9 +463,32 @@ void run_power_action(const Option &option) {
   }
 }
 
+void remember_tab_detail(const Option &option) {
+  switch (option.id) {
+  case OptionId::HomeTabOpenGames:
+    s_home_tab_detail.kind = HomeTabDetailKind::Games;
+    s_home_tab_detail.slot = 0;
+    break;
+  case OptionId::HomeTabOpenMedia:
+    s_home_tab_detail.kind = HomeTabDetailKind::Media;
+    s_home_tab_detail.slot = 0;
+    break;
+  case OptionId::HomeTabOpenCustom:
+    s_home_tab_detail.kind = HomeTabDetailKind::Custom;
+    s_home_tab_detail.slot =
+        std::clamp(static_cast<int>(option.payload), 0,
+                   HomeTabsStore::kMaxCustomTabs - 1);
+    break;
+  default:
+    break;
+  }
+}
+
 void activate(const Option &option) {
   switch (option.type) {
   case OptionType::Submenu:
+    if (option.target == Page::HomeTabDetail)
+      remember_tab_detail(option);
     begin_page_transition(PageTransitionAction::Push, option.target);
     break;
   case OptionType::Toggle:

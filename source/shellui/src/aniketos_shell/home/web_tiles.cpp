@@ -1,6 +1,6 @@
 #include "aniketos_shell/home/web_tiles.hpp"
 
-#include "aniketos_shell/home/home_bookmark.hpp"
+#include "aniketos_shell/home/home_tabs_store.hpp"
 #include "aniketos_shell/rn_scripts/js_string.hpp"
 #include "aniketos_ui/small_file.hpp"
 #include "hooked_funcs.hpp"
@@ -157,9 +157,9 @@ void add_tile(const std::string &url, const std::string &title) {
     }
     tile.id = next_id_locked();
     tile.url = url;
-    tile.name = HomeBookmark::CleanName(title);
+    tile.name = HomeTabsStore::CleanName(title);
     if (tile.name.empty())
-      tile.name = HomeBookmark::CleanName(host_of(url));
+      tile.name = HomeTabsStore::CleanName(host_of(url));
     s_tiles.insert(s_tiles.begin(), tile);
     changed_locked();
   }

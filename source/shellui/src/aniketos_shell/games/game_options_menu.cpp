@@ -2,7 +2,7 @@
 
 #include "aniketos_shell/games/trophy_tools.hpp"
 #include "aniketos_shell/home/hidden_apps.hpp"
-#include "aniketos_shell/home/home_bookmark.hpp"
+#include "aniketos_shell/home/home_tabs_store.hpp"
 #include "hooked_funcs.hpp"
 #include "toolbox_i18n.hpp"
 
@@ -71,13 +71,13 @@ void add_row(const Entry &entry, const char *id, const char *label,
              entry.sub_menu, entry.enable);
 }
 
-void add_bookmark_row(const Entry &entry, const std::string &title) {
-  if (!HomeBookmark::Allowed(title))
+void add_tabs_row(const Entry &entry, const std::string &title) {
+  if (!HomeTabsStore::Allowed(title))
     return;
-  const std::string label = std::string(HomeBookmark::kGlyph) + " " +
-                            toolbox_i18n::tr("bookmark.menu_tabs");
-  add_row(entry, "MENU_ID_ANIKETOS_BOOKMARK", label.c_str(),
-          HomeBookmark::kMenuUri);
+  const std::string label = std::string(HomeTabsStore::kGlyph) + " " +
+                            toolbox_i18n::tr("home_tabs.menu_tabs");
+  add_row(entry, "MENU_ID_ANIKETOS_TABS", label.c_str(),
+          HomeTabsStore::kMenuUri);
 }
 } // namespace
 
@@ -94,7 +94,7 @@ void OnEntry(const Entry &entry) {
           "OnionHEN?Cheats_not_open");
   add_row(entry, "MENU_ID_TROPHY_UNLOCK_ALL",
           toolbox_i18n::tr("trophy.game_menu"), TrophyTools::kUnlockAllUri);
-  add_bookmark_row(entry, title);
+  add_tabs_row(entry, title);
   if (HiddenApps::FilterEnabled() && HiddenApps::Allowed(title))
     add_row(entry, "MENU_ID_ANIKETOS_HIDE",
             toolbox_i18n::tr("hideapp.game_menu"), HiddenApps::kMenuUri);
@@ -105,7 +105,7 @@ void OnEntry(const Entry &entry) {
 
 void OnEntryOptionsOff(const Entry &entry) {
   if (entry.id == "MENU_ID_APPLICATION_DELETE")
-    add_bookmark_row(entry, note_title(entry));
+    add_tabs_row(entry, note_title(entry));
 }
 
 } // namespace GameOptionsMenu

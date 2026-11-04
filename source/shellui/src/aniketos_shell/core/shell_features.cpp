@@ -9,9 +9,9 @@
 #include "aniketos_shell/hardware/telemetry.hpp"
 #include "aniketos_shell/home/control_center_entry.hpp"
 #include "aniketos_shell/home/hen_menu.hpp"
-#include "aniketos_shell/home/home_bookmark.hpp"
 #include "aniketos_shell/home/home_particles.hpp"
 #include "aniketos_shell/home/home_tabs.hpp"
+#include "aniketos_shell/home/home_tabs_store.hpp"
 #include "aniketos_shell/home/home_video.hpp"
 #include "aniketos_shell/home/web_tiles.hpp"
 #include "aniketos_shell/input/kbm_capture.hpp"
@@ -51,7 +51,7 @@ void Install(MonoImage *react_pui, MonoImage *pui) {
   SystemDialogs::Install(pui);
   ControlCenterEntry::Install(react_pui);
   HomeTabs::Install(pui);
-  HomeBookmark::Install();
+  HomeTabsStore::Install();
   OskGlyphs::Install();
   ScriptInjector::Install(react_pui);
   AccountAvatar::Install(pui);
@@ -94,7 +94,7 @@ void BeforeNativeFrame() {
     ControlCenterEntry::Tick();
     MigrationNotice::Tick();
     HomeTabs::Tick();
-    HomeBookmark::Tick();
+    HomeTabsStore::Tick();
     WebTiles::Tick();
   }
   {

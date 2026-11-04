@@ -3,7 +3,7 @@
 #include "aniketos_shell/games/trophy_tools.hpp"
 #include "aniketos_shell/home/hen_menu.hpp"
 #include "aniketos_shell/home/hidden_apps.hpp"
-#include "aniketos_shell/home/home_bookmark.hpp"
+#include "aniketos_shell/home/home_tabs_store.hpp"
 #include "debug_settings_route_runtime.hpp"
 #include "hooked_funcs.hpp"
 
@@ -28,7 +28,7 @@ bool shellui_open_toolbox() {
 namespace BootUri {
 
 bool Handle(const std::string &uri, bool is_top_nav, int opt) {
-  if (HomeBookmark::HandleUri(uri, g_ui.current_menu_tid))
+  if (HomeTabsStore::HandleUri(uri, g_ui.current_menu_tid))
     return true;
   if (uri == HiddenApps::kMenuUri) {
     HiddenApps::Hide(g_ui.current_menu_tid);

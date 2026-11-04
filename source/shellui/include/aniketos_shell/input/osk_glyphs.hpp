@@ -10,4 +10,7 @@ namespace OskGlyphs {
 void Install();
 /* UI thread, once a frame: installs once the keyboard's code is loaded. */
 void Tick();
+/* Whether `codepoint` is one of the console's glyphs the keyboard's glyph
+ * pages offer (any thread). */
+bool HasGlyph(uint32_t codepoint);
 }

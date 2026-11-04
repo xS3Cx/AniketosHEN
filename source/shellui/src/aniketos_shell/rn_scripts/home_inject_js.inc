@@ -1,10 +1,10 @@
 /* JavaScript evaluated in Home's runtime right before its bundle (see
  * script_injector.cpp). `__aniketosConfig` is defined by the native side just
- * ahead of it: {app, space, emulators, caption, label, limit, icon, presence,
- * clock, stockCaptions, webTiles, and the bookmark's}; app is 'home' or
- * 'control-center', space is empty in the Control Center, where only the
- * presence dot, the clock and the size limit of action cards are touched, and
- * emulators is false when the Emulators tab is switched off.
+ * ahead of it: {app, tabs, tabsWatch, icon, presence, clock, stockCaptions,
+ * webTiles}; app is 'home' or 'control-center', and tabs holds one
+ * {id, caption, label, limit} entry for every visible custom tab, after Games
+ * and Media. In the Control Center only the presence dot, the clock and the
+ * size limit of action cards are touched.
  *
  * Home is a webpack bundle whose screens are driven by data: the tab bar is
  * `spaceIds.map(...)`, a tab's caption is `textBySpaceId[id]`, and each
@@ -19,7 +19,7 @@ R"JS((function () {
   var cfg = globalThis.__aniketosConfig;
   if (!cfg || globalThis.__aniketos) return;
   var A = globalThis.__aniketos = { patched: {}, errors: 0 };
-  var SPACE = cfg.space;
+  var HOME = cfg.app === 'home';
   function log(message) {
     try {
       console.log(message.charAt(0) === ':' ? 'ANIKETOS' + message
@@ -33,15 +33,8 @@ R"JS((function () {
     return true;
   }
 
-  /* Our spaces after Games and Media: Emulators unless switched off, and
-     the user's bookmark while it holds a game. */
-  var EXTRA = [];
-  if (SPACE && cfg.emulators)
-    EXTRA.push({ id: SPACE, caption: cfg.caption, label: cfg.label,
-                 limit: cfg.limit });
-  if (SPACE && cfg.bookmark)
-    EXTRA.push({ id: 'bookmark', caption: cfg.bookmark,
-                 label: cfg.bookmarkLabel, limit: cfg.bookmarkLimit });
+  /* The user's custom tabs, after Games and Media, in their order. */
+  var EXTRA = HOME && Array.isArray(cfg.tabs) ? cfg.tabs : [];
   function extraSpace(name) {
     for (var i = 0; i < EXTRA.length; i++)
       if (EXTRA[i].id === name) return EXTRA[i];
@@ -78,7 +71,7 @@ R"JS((function () {
      instead of being moved after each of React's layouts. */
   function captionStockTabs(text, id) {
     var stock = cfg.stockCaptions;
-    if (!SPACE || !stock || !text || typeof text !== 'object') return;
+    if (!HOME || !stock || !text || typeof text !== 'object') return;
     for (var key in stock) {
       var name = stock[key][0], glyph = stock[key][1];
       if (!name && !glyph) continue;
@@ -221,19 +214,19 @@ R"JS((function () {
     if (o.default === view) once('lamps', id);
   }
 
-  /* The bookmark tab's row is the native side's query, which a change of
-     the bookmark (a game added from the Options menu, one taken out) does
+  /* A custom tab's row is the native side's query, which a change of the
+     tab's titles (a game added from the Options menu, one taken out) does
      not make Home ask again. Home's store of titles is told to fetch every
      row again, as Home does itself when its apps change: by calling the
-     listeners Home gave it. When to: the bookmark's revision, read through
+     listeners Home gave it. When to: the tabs revision, read through
      Home's registry module, which the native side answers for our key. */
-  var F = { watch: !!cfg.bookmarkWatch, rev: -1, listeners: [], nm: null,
+  var F = { watch: !!cfg.tabsWatch, rev: -1, listeners: [], nm: null,
             asking: false };
-  function bookmarkRevision() {
+  function tabsRevision() {
     var nm = F.nm;
     if (!nm || typeof nm.Get !== 'function') return Promise.resolve(null);
     var asked;
-    try { asked = nm.Get({ keys: ['aniketos.home_bookmark'] }); }
+    try { asked = nm.Get({ keys: ['aniketos.home_tabs'] }); }
     catch (e) { return Promise.resolve(null); }
     return Promise.resolve(asked).then(function (answer) {
       if (typeof answer !== 'string') return null;
@@ -243,13 +236,13 @@ R"JS((function () {
   }
   function refreshRows() {
     for (var i = 0; i < F.listeners.length; i++) {
-      try { F.listeners[i](); } catch (e) { log('bookmark: refresh ' + e); }
+      try { F.listeners[i](); } catch (e) { log('tabs: refresh ' + e); }
     }
   }
-  function askBookmark() {
+  function askTabs() {
     if (F.asking) return;
     F.asking = true;
-    bookmarkRevision().then(function (rev) {
+    tabsRevision().then(function (rev) {
       F.asking = false;
       if (rev === null) return;
       if (F.rev >= 0 && rev !== F.rev) refreshRows();
@@ -262,7 +255,7 @@ R"JS((function () {
      gives, and pressing it opens deeplinkUri, here the browser with the
      marker that makes its card (web_browser_inject_js.inc) full screen. The
      list is read through the registry module, which the native side answers
-     (aniketos.web_tiles), as the bookmark's revision is. */
+     (aniketos.web_tiles), as the tabs revision is. */
   var W = { rev: cfg.webTiles ? cfg.webTiles.rev : 0,
             tiles: cfg.webTiles ? cfg.webTiles.tiles : [], asking: false,
             raw: '' };
@@ -314,21 +307,21 @@ R"JS((function () {
       refreshRows();
     }).then(null, function (e) { W.asking = false; log('tiles: ' + e); });
   }
-  /* The bookmark's revision and the websites, asked together every 2 s
-     while Home has rows to fetch again, and not in the background. */
+  /* The tabs revision and the websites, asked together every 2 s while Home
+     has rows to fetch again, and not in the background. */
   function watchRows() {
     var ask = function () {
       if (away(ask)) return;
       setTimeout(ask, 2000);
       if (!F.listeners.length) return;
-      if (F.watch) askBookmark();
+      if (F.watch) askTabs();
       askTiles();
     };
     setTimeout(ask, 2000);
   }
   function patchTitles(o, id) {
     var store = o && o.default;
-    if (!SPACE || A.patched.titles || !store ||
+    if (!HOME || A.patched.titles || !store ||
         typeof store.fetchTitleByUserId !== 'function' ||
         typeof store.addListener !== 'function') return;
     var query = store.fetchTitleByUserId;
@@ -411,7 +404,7 @@ R"JS((function () {
 
   /* L1 and R1 move between the spaces of the tab bar. Home's own handlers
      know two (R1 from Games to Media, L1 back); with ours they go on through
-     our spaces (Media, Emulators, the bookmark) and back, with the same sound
+     our spaces (Media, the custom tabs) and back, with the same sound
      and the same move. */
   function neighbour(step) {
     var ids = A.spaceIds;
@@ -423,7 +416,7 @@ R"JS((function () {
   }
   function patchSpaceFocus(o, id) {
     var use = o && o.useSpaceFocus;
-    if (!SPACE || A.patched.spaceFocus || typeof use !== 'function') return;
+    if (!HOME || A.patched.spaceFocus || typeof use !== 'function') return;
     var cache = { right: null, left: null, go: null, value: null };
     var move = function (go, space) {
       try {
@@ -900,5 +893,5 @@ R"JS((function () {
         ' clock=' + (CK.failed ? 'failed' : CK.told ? 'drawn' : 'stock') +
         ' spaces=' + JSON.stringify(A.spaceIds || null));
   }, 8000);
-  log('installed for space ' + SPACE);
+  log('installed app=' + cfg.app);
 })();)JS"

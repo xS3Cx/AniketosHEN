@@ -153,7 +153,7 @@ minutes.
 
 - **Settings** come from `ShellClock::ScriptConfig()`: in the script's config
   at the app's start, then every 2 s through its registry module
-  (`aniketos.clock`, answered in `home_bookmark.cpp`), so a change in the
+  (`aniketos.clock`, answered in `home_tabs_store.cpp`), so a change in the
   Shell Menu shows without reloading Home. The JSON is plain ASCII: the
   script executor cuts a source holding other text short.
 - **Font sizes**: Sony's Text accepts only the sizes of react-native's
@@ -216,90 +216,61 @@ is a value type; writing into the Lazy is unsafe, so the renderer path
 
 ## Home tabs
 
-*Appearance → System customize → Game tiles → Rename Games tab* and
-*Rename Media tab* ask for a new name with the system keyboard; Home reloads
-with it, the glyph in front kept. The field starts with the tab's current
-name of the user's, empty while it has the system's. An empty name, or the
-system's own, gives the tab back the system's caption, which follows the
-console's language; *Restore system tab names* does that for both tabs at
-once. *Emulators tab* (on by default) takes the Emulators tab out of Home:
-the emulators go back to the Games row, and L1 and R1 move through the tabs
-that are left. *Tab icons* (on by default) takes the glyph off the front of
-Games, Media and Emulators (the bookmark always shows its name as typed); a
-name that starts with a glyph of the user's shows that one instead of ours.
+*Home screen → Tabs* lists one row per tab, in the order of the tab bar:
+*Games* is *Tab 1*, *Media* is *Tab 2*, and every custom tab is
+*Tab 3: Name* or *Tab 4: Name*, with *(hidden)* after a
+hidden one. An empty slot offers *Create tab %d*; *Restore system tab names*
+clears Games' and Media's names and *Tab icons* switches the icon in front of
+every caption on or off.
+
+A tab's row opens its detail page, with the tab's icon and name at the top.
+Games and Media offer *Rename Games tab* / *Rename Media tab* and *Games tab
+icon* / *Media tab icon*; a custom tab offers *Rename tab*, *Tab icon*, *Show
+tab* or *Hide tab*, *Move left*, *Move right* and *Delete tab*. Rename and icon
+open a system prompt for one system glyph; an empty field restores `U+EFCE`
+(controller) and `U+F871` (TV). Create and Rename use the system keyboard;
+Delete asks for confirmation and returns the menu to the list of tabs.
+Custom tabs default to `U+EFAA` (the Aniketos star). The four-tab limit is
+enforced with a notification. Hide, show, delete and reorder keep the no-lost
+apps invariant: a title moved to a tab returns to its stock row when no visible
+custom tab holds it.
+
+The same tabs appear in a game's Options menu under **★ Copy / Move**, with
+*Copy to*, *Move to*, *Remove from* and **New tab...**. The Options menu is the
+quickest way to fill a tab: choosing *New tab...* asks for its name and puts
+the title in it, copied or moved as chosen.
 
 - **Settings:** `home_tab_games_name` and `home_tab_media_name` (empty: the
-  system's name), `home_tab_emulators` and `home_tab_icons` in
-  `[shell_menu]`.
-- **How it works:** Home's script (`rn_scripts/home_inject_js.inc`) gives React the
-  captions Games and Media show: the user's name with its glyph, or the
-  glyph in front of the system's own translated caption (a text element the
-  system translates, so the console's language still applies). React then
-  lays the tab bar out for the text the tabs really show; before that, its
-  layout was a frame behind on every page switch and the tabs jumped. The
-  text hook that
-  puts the glyph in front of Games and Media (`space_switcher_labels.cpp`) hands each
-  label it dresses to `home_tabs.cpp`, which writes the user's name into it
-  once the label turns out to sit in the tab bar's `space-switcher-game` or
-  `space-switcher-media` panel (Search shows the same words, and its labels
-  are left alone), then fits the tab to the new width. When React sets the
-  system's caption on a known tab label again (it does as the focus moves),
-  the hook hands it the name straight away. A Home reload or a new language
-  goes down the same path. Without the Emulators tab, the script in Home
-  (`rn_scripts/home_inject_js.inc`) leaves that space out, and the query hook of
-  `home_rows.cpp` stops taking the emulators out of Games.
-- **Safety:** with `no_home_js` in `/data/AniketosHEN` there is no Emulators
-  tab, and the Games row keeps its emulators. A Home reload asked for within
-  4 s of Home starting (switches flipped in a row) waits until Home is up
-  (`rn_reload.cpp`).
-
-## Bookmark tab, and copying or moving between tabs
-
-A game's or app's Options menu has *Copy / Move*, with AniketosHEN's star
-in front. It opens a menu like the HEN button's: *Copy to*, *Move to* and
-*Remove from*, each opening the tabs under the names they have now: Games,
-Media (a name of the user's if they were renamed) and the bookmark. A copy
-shows in both places; a moved title leaves the row it was in. *Remove from*
-lists only the tabs the title was put in (a moved title then goes back to
-its own row); a tab it was put in is not offered again.
-
-The first title copied or moved to the bookmark (*New Bookmark* in the
-submenu) asks for a name with the system keyboard: the bookmark becomes a
-tab of its own after Emulators (after Media while the Emulators tab is off),
-captioned with that name as typed (a glyph the user types in front of it
-shows too). One bookmark for now; removing its
-last game removes it. L1 and R1 move through all the tabs (Games, Media,
-Emulators, the bookmark).
-
-- **Settings:** *Appearance → System customize → Game tiles → Bookmark tab*
-  (`home_bookmark` in `[shell_menu]`, on by default) and *Rename bookmark*.
-  The bookmark and the titles put in Games or Media are kept in
-  `/data/AniketosHEN/home_bookmark.json`.
-- **How it works:** `game_options_menu.cpp` adds the one entry; its URI comes
-  back through the boot hook, and `home_bookmark.cpp` opens the menu with
-  the same native pop-up the HEN button uses (`popup_menu.cpp`), keeps
-  the lists and asks for the bookmark's name. The tab is made the same way
-  as Emulators: the
-  script in Home (`rn_scripts/home_inject_js.inc`) adds the space, and the query hook
-  of `home_rows.cpp` gives its list the bookmark's title ids, lets the
-  titles copied or moved into Games or Media into those rows, and leaves the
-  moved ones out of the rows they left. A moved title is left out only while
-  it shows somewhere else in Home. Home is reloaded when the tab comes, goes
-  or is renamed; while it is there, the rows are fetched again when anything
-  changes (the script follows a revision read through Home's registry
-  module). The system's own app database is only read: a copy or a move is
-  a list in `home_bookmark.json` and a filter on the queries.
-- **Safety:** with the setting off, or `no_home_js` in `/data/AniketosHEN`,
-  Home stays as the system has it, moved titles back in their rows.
+  system's name), `home_tab_games_icon`, `home_tab_media_icon` and
+  `home_tab_icons` in `[shell_menu]`. The custom tabs, their icons and their
+  titles are kept in `/data/AniketosHEN/home_tabs.json`; see
+  [home-tabs.md](home-tabs.md).
+- **How it works:** Home's script (`rn_scripts/home_inject_js.inc`) adds one
+  React space for each visible custom tab after Games and Media, with a content
+  limit of 7780 or 7781. The query hook of `home_rows.cpp` recognises
+  that limit before looking at the space and gives the list the tab's title
+  ids. The Games and Media rows get the titles copied or moved into them and
+  lose the moved ones while a visible custom tab holds them. Games and Media
+  captions are given to React by the script, so its layout is right from the
+  first frame; the text hook (`space_switcher_labels.cpp`) writes the user's
+  caption into the labels that turn out to sit in the tab bar.
+- **Reloads:** a change of the tab set, a name, an icon, visibility or order
+  reloads Home. A change of a tab's titles only bumps a revision that the
+  script reads through Home's registry module (`aniketos.home_tabs`) every two
+  seconds and turns into a refetch of the rows.
+- **Safety:** with `no_home_js` in `/data/AniketosHEN` Home stays as the system
+  has it, without custom tabs. A corrupt `home_tabs.json` behaves as empty and
+  is logged, never fatal. A leftover `home_bookmark.json` is deleted at
+  startup and is not migrated.
 
 ## Hidden apps
 
 A game's or app's Options menu has *Hide App*, with the same star as the
 other AniketosHEN entries, after *Copy / Move* and before Sony's *Delete*. It
-takes the tile out of Home's Games, Media, Emulators and
-bookmark rows without uninstalling anything and without writing to the system's
+takes the tile out of Home's Games and Media rows and every custom tab
+without uninstalling anything and without writing to the system's
 app database: the query hook of `home_rows.cpp` adds
-`AND (icon.titleId NOT IN (...))` to those four queries. The app stays
+`AND (icon.titleId NOT IN (...))` to those queries. The app stays
 launchable from Search and the library, which is the safety net.
 
 *Console → Hidden apps* keeps the list:
