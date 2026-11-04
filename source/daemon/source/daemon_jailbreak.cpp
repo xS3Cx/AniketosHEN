@@ -162,9 +162,11 @@ ExecIdentity read_exec_identity(pid_t pid) {
 }
 
 bool identity_is_shellui(const ExecIdentity &id) {
-  if (id.name_rc == 0 &&
-      std::strcmp(id.process_name, kShellUiProcessName) == 0) {
-    return true;
+  /* ShellUI's WebKit processes (SceNKUIProcess, SceNKNetworkProcess) carry
+     its title id too; taking them for a new ShellUI cleared the toolbox
+     marker, so the next resume injected a second toolbox. */
+  if (id.name_rc == 0) {
+    return std::strcmp(id.process_name, kShellUiProcessName) == 0;
   }
   return id.app_info_rc == 0 && id.tid == kShellUiTitleId;
 }
