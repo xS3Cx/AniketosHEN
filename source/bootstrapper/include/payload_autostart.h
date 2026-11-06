@@ -6,7 +6,7 @@ extern "C" {
 #endif
 
 /** Launch user Payloads whose adjacent .auto_start marker is present. */
-void bootstrap_payload_autostart(void);
+void bootstrap_payload_autostart(bool enabled);
 
 #ifdef __cplusplus
 }

@@ -70,5 +70,6 @@ bool bootstrap_config_load(BootstrapConfig *config) {
                 (version.version >> 16) & 0xffu);
   config->shadowmount_autoload = settings.shadowmount_autoload;
   config->kstuff_autoload = settings.kstuff_autoload;
+  config->payload_autostart_enabled = settings.payload_autostart_enabled;
   return true;
 }

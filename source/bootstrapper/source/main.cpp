@@ -97,7 +97,7 @@ int main(void) {
   }
 
   if (level == ONION_BOOT_NORMAL)
-    bootstrap_payload_autostart();
+    bootstrap_payload_autostart(config.payload_autostart_enabled);
   else
     LOG_WARN("%s start: payload autostart skipped",
              onion_boot_level_name(level));

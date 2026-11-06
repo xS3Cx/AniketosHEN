@@ -25,6 +25,7 @@ file(GLOB SrcFiles CONFIGURE_DEPENDS
   ${D_SRC}/cheats/*.c
   ${D_SRC}/cheats/*.cpp
   ${D_SRC}/cheats/sync/*.cpp
+  ${D_SRC}/payload_center/*.cpp
   ${ONIONHEN_THIRD_PARTY_DIR}/cheat_support/*.c
   ${D_SRC}/../include/*.h
   ${D_SRC}/../include/*.hpp
@@ -51,6 +52,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
   "${ONIONHEN_THIRD_PARTY_DIR}/keystone/include"
   "${PROJECT_ROOT}/libhijacker/include"
   "${PROJECT_ROOT}/libonion_settings/include"
+  "${PROJECT_ROOT}/libonion_payload_catalog/include"
   "${PROJECT_ROOT}/libonion_ipc/include"
   "${PROJECT_ROOT}/libonion_proc/include"
   "${PROJECT_ROOT}/libonion_platform/include"
@@ -88,7 +90,7 @@ target_link_directories(${PROJECT_NAME} PUBLIC
   "${PS5_PAYLOAD_SDK}/target/lib"
 )
 target_link_options(${PROJECT_NAME} PRIVATE "-Wl,--gc-sections" "-Wl,--icf=safe")
-add_dependencies(${PROJECT_NAME} hijacker onion_settings onion_ipc onion_proc onion_platform onion_payload onion_ready onion_elfldr)
+add_dependencies(${PROJECT_NAME} hijacker onion_settings onion_ipc onion_proc onion_platform onion_payload onion_ready onion_elfldr onion_payload_catalog)
 if(TARGET onion_version)
   add_dependencies(${PROJECT_NAME} onion_version)
 endif()
@@ -96,6 +98,7 @@ endif()
 target_link_libraries(${PROJECT_NAME} PUBLIC
     onion_ipc
     onion_settings
+    onion_payload_catalog
     onion_proc
     onion_platform
     onion_payload

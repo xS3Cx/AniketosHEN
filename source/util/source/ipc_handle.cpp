@@ -25,6 +25,8 @@ extern "C" {
 #include "cheats/cheat_service.hpp"
 #include "cheats/runtime.h"
 #include "cheats/sync/cheat_sync_service.hpp"
+#include "payload_center/payload_center_service.hpp"
+#include "payload_center/payload_center_install.hpp"
 #include "web_tile_icon.hpp"
 #include <cstdio>
 #include <cerrno>
@@ -72,9 +74,44 @@ std::string make_state_json(const char *state, uint32_t task_id = 0) {
   return onion_cjson::print_owned(root);
 }
 
-std::string make_sync_status_json(
-    const onion::cheats::sync::CheatSyncStatus &status, const char *state) {
+const char *payload_state_name(onion::payload_center::Status::State state) {
+  using State = onion::payload_center::Status::State;
+  switch (state) {
+  case State::Running:
+    return "running";
+  case State::Ok:
+    return "ok";
+  case State::Error:
+    return "error";
+  case State::Idle:
+  default:
+    return "idle";
+  }
+}
+
+std::string make_payload_status_json(
+    const onion::payload_center::Status &status) {
   cJSON *root = cJSON_CreateObject();
+  if (!root ||
+      !cJSON_AddNumberToObject(root, "task_id", status.task_id) ||
+      !cJSON_AddStringToObject(root, "state",
+                               payload_state_name(status.state)) ||
+      !cJSON_AddStringToObject(root, "phase", status.phase.c_str()) ||
+      !cJSON_AddNumberToObject(root, "progress", status.progress) ||
+      !cJSON_AddNumberToObject(root, "completed",
+                               static_cast<double>(status.completed)) ||
+      !cJSON_AddNumberToObject(root, "total",
+                               static_cast<double>(status.total)) ||
+      !cJSON_AddStringToObject(root, "error", status.error.c_str()) ||
+      !cJSON_AddStringToObject(root, "item", status.item.c_str())) {
+    cJSON_Delete(root);
+    return {};
+  }
+  return onion_cjson::print_owned(root);
+}
+
+std::string make_sync_status_json(
+    const onion::cheats::sync::CheatSyncStatus &status, const char *state) {  cJSON *root = cJSON_CreateObject();
   const char *mirror = status.mirror == onion::cheats::sync::CheatMirrorId::Cnb
                            ? "cnb"
                            : "github";
@@ -330,6 +367,85 @@ void handleIPC(clientArgs *client, std::string &inputStr,
         requested ? "cancel_requested" : "cancel_ignored",
         requested_task_id > 0 ? static_cast<uint32_t>(requested_task_id) : 0);
     reply(sender_app, body.empty(), body);
+    break;
+  }
+  case BREW_UTIL_PAYLOAD_CATALOG_REFRESH: {
+    const std::string source_id = onion_cjson::string_item(
+        my_json.get(), "source_id", "");
+    uint32_t task_id = 0;
+    const auto started =
+        onion::payload_center::Service::instance().refresh(source_id, &task_id);
+    const std::string body = make_state_json(
+        started == onion::payload_center::Service::StartResult::Started
+            ? "started"
+            : started ==
+                      onion::payload_center::Service::StartResult::AlreadyRunning
+                  ? "already_running"
+                  : "rejected",
+        task_id);
+    reply(sender_app, started ==
+                              onion::payload_center::Service::StartResult::Rejected,
+          body);
+    break;
+  }
+  case BREW_UTIL_PAYLOAD_INSTALL: {
+    using onion::payload_center::Service;
+    const std::string source_id = onion_cjson::string_item(
+        my_json.get(), "source_id", "");
+    const std::string item_id =
+        onion_cjson::string_item(my_json.get(), "item_id", "");
+    const std::string url = onion_cjson::string_item(my_json.get(), "url", "");
+    const bool replace = onion_cjson::bool_item(my_json.get(), "replace");
+    uint32_t task_id = 0;
+    const auto started = url.empty()
+                             ? Service::instance().install(source_id, item_id,
+                                                           replace, &task_id)
+                             : Service::instance().install_url(url, replace,
+                                                               &task_id);
+    const std::string body = make_state_json(
+        started == Service::StartResult::Started
+            ? "started"
+            : started == Service::StartResult::AlreadyRunning ? "already_running"
+                                                              : "rejected",
+        task_id);
+    reply(sender_app, started == Service::StartResult::Rejected, body);
+    break;
+  }
+  case BREW_UTIL_PAYLOAD_STATUS: {
+    const auto status = onion::payload_center::Service::instance().status();
+    const std::string body = make_payload_status_json(status);
+    reply(sender_app, body.empty(), body);
+    break;
+  }
+  case BREW_UTIL_PAYLOAD_CANCEL: {
+    const int requested_task_id =
+        onion_cjson::int_item(my_json.get(), "task_id", 0);
+    const bool requested =
+        requested_task_id > 0 &&
+        onion::payload_center::Service::instance().cancel(
+            static_cast<uint32_t>(requested_task_id));
+    const std::string body = make_state_json(
+        requested ? "cancel_requested" : "cancel_ignored",
+        requested_task_id > 0 ? static_cast<uint32_t>(requested_task_id) : 0);
+    reply(sender_app, body.empty(), body);
+    break;
+  }
+  case BREW_UTIL_PAYLOAD_REMOVE: {
+    const std::string identity =
+        onion_cjson::string_item(my_json.get(), "identity", "");
+    const auto removed =
+        onion::payload_center::remove_payload_by_identity(identity);
+    cJSON *root = cJSON_CreateObject();
+    if (!root || !cJSON_AddStringToObject(root, "state",
+                                          removed.ok ? "ok" : "error") ||
+        !cJSON_AddStringToObject(root, "error", removed.error.c_str()) ||
+        !cJSON_AddStringToObject(root, "item", identity.c_str())) {
+      cJSON_Delete(root);
+      reply(sender_app, true);
+      break;
+    }
+    const std::string body = onion_cjson::print_owned(root);
+    reply(sender_app, !removed.ok, body);
     break;
   }
   case BREW_UTIL_WEB_TILE_ICON:

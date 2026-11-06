@@ -26,6 +26,7 @@ COMMON_FLAGS := -Wall -Wextra -g -O0 $(DEPFLAGS) -DONION_HOST_TEST=1 -DCBC=1 \
 	-I$(UTIL_ROOT)/tests \
 	-I$(REPO_ROOT)/source/include \
 	-I$(REPO_ROOT)/source/libonion_settings/include \
+	-I$(REPO_ROOT)/source/libonion_payload_catalog/include \
 	-I$(REPO_ROOT)/source/libonion_platform/include \
 	-I$(REPO_ROOT)/source/libonion_payload/include \
 	-I$(REPO_ROOT)/source/libonion_conflict/include \
@@ -128,8 +129,7 @@ TEST_C_SRCS := \
 	test_payload.c \
 	test_payload_config.c \
 	test_payload_autostart.c \
-	test_conflict.c \
-	test_base64.c \
+	test_conflict.c \	test_base64.c \
 	test_aes_cbc.c \
 	test_hde64.c \
 	test_reg_entity.c \
@@ -153,6 +153,9 @@ TEST_CXX_SRCS := \
 	test_settings.cpp \
 	test_migration.cpp \
 	test_msg_protocol.cpp \
+	test_payload_catalog.cpp \
+	test_payload_version.cpp \
+	test_payload_install.cpp \
 	test_app_jailbreak_policy.cpp \
 	test_big_app_collect_policy.cpp \
 	test_debug_settings_route_policy.cpp \
@@ -214,6 +217,9 @@ CHEAT_SUPPORT_OBJS := $(patsubst $(THIRD_PARTY_ROOT)/cheat_support/%.c,$(BUILD_D
 PROD_CXX_OBJS := $(patsubst $(UTIL_ROOT)/%.cpp,$(BUILD_DIR)/prod/%.o,$(filter $(UTIL_ROOT)/%,$(PROD_CXX_SRCS)))
 PROD_CXX_OBJS += $(BUILD_DIR)/prod/third_party/cjson.o
 PROD_CXX_OBJS += $(BUILD_DIR)/prod/libonion_settings/settings.o
+PROD_CXX_OBJS += $(BUILD_DIR)/prod/libonion_payload_catalog/payload_catalog.o
+PROD_CXX_OBJS += $(BUILD_DIR)/prod/libonion_payload_catalog/payload_catalog_policy.o
+PROD_CXX_OBJS += $(BUILD_DIR)/prod/libonion_payload_catalog/payload_sources_json.o
 PROD_CXX_OBJS += $(BUILD_DIR)/prod/libonion_ipc/ipc_server.o
 PROD_CXX_OBJS += $(BUILD_DIR)/prod/libonion_plugin_manager/plugin_descriptor.o
 PROD_CXX_OBJS += $(BUILD_DIR)/prod/libonion_plugin_manager/plugin_manager.o
@@ -287,6 +293,10 @@ $(BUILD_DIR)/prod/third_party/cjson.o: $(THIRD_PARTY_ROOT)/cjson/cJSON.cpp | $(B
 	$(HOST_CXX) $(CXXFLAGS) $(THIRD_PARTY_FLAGS) -c -o $@ $<
 
 $(BUILD_DIR)/prod/libonion_settings/settings.o: $(REPO_ROOT)/source/libonion_settings/source/settings.cpp | $(BUILD_DIR)
+	@mkdir -p $(dir $@)
+	$(HOST_CXX) $(CXXFLAGS) -c -o $@ $<
+
+$(BUILD_DIR)/prod/libonion_payload_catalog/%.o: $(REPO_ROOT)/source/libonion_payload_catalog/source/%.cpp | $(BUILD_DIR)
 	@mkdir -p $(dir $@)
 	$(HOST_CXX) $(CXXFLAGS) -c -o $@ $<
 

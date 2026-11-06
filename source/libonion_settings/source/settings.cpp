@@ -696,6 +696,9 @@ bool apply_parser(IniParser *parser, Settings *out) {
                              out->toolbox_shortcut_opt);
   out->kstuff_autoload =
       parse_bool(ini_get(parser, "kstuff.autoload"), out->kstuff_autoload);
+  out->payload_autostart_enabled =
+      parse_bool(ini_get(parser, "payload_center.autostart_enabled"),
+                 out->payload_autostart_enabled);
   apply_shell_menu_section(parser, out);
   return true;
 }
@@ -880,6 +883,11 @@ std::string settings_serialize(const Settings &in) {
   b += "# Available values: off, l2_r3, long_share, share\n";
   b += "toolbox=" + std::string(toolbox_shortcut_name(in.toolbox_shortcut_opt)) +
        "\n";
+  b += "\n";
+  b += "[payload_center]\n";
+  b += "# autostart_enabled starts payloads with a .auto_start marker on boot.\n";
+  b += "# Available values: true, false\n";
+  b += "autostart_enabled=" + bool_text(in.payload_autostart_enabled) + "\n";
   b += "\n";
   b += "[kstuff]\n";
   b += "# autoload loads kstuff when " ONION_DIST_NAME " starts.\n";

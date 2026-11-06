@@ -256,6 +256,11 @@ SyncStatus Ps5HttpTransport::perform(
                                                        : ONION_DIST_NAME);
   curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
   curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 3L);
+#if LIBCURL_VERSION_NUM >= 0x075500
+  curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "https");
+#else
+  curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTPS);
+#endif
   curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
   const size_t ca_bundle_size = static_cast<size_t>(
       reinterpret_cast<uintptr_t>(onion_curl_ca_bundle_end) -
@@ -309,11 +314,13 @@ SyncStatus Ps5HttpTransport::perform(
   const CURLcode rc = curl_easy_perform(curl);
   long http_code = 0;
   char *primary_ip = nullptr;
+  char *effective_url = nullptr;
   double namelookup = 0;
   double connect = 0;
   double total = 0;
   long ssl_verify = 0;
   curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
+  curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &effective_url);
   curl_easy_getinfo(curl, CURLINFO_PRIMARY_IP, &primary_ip);
   curl_easy_getinfo(curl, CURLINFO_NAMELOOKUP_TIME, &namelookup);
   curl_easy_getinfo(curl, CURLINFO_CONNECT_TIME, &connect);
@@ -323,10 +330,11 @@ SyncStatus Ps5HttpTransport::perform(
   }
 
   LOG_DEBUG("http result url=%s curl=%s(%d) http=%ld ip=%s dns=%.3fs "
-            "connect=%.3fs total=%.3fs bytes=%zu xfer=%s",
+            "connect=%.3fs total=%.3fs bytes=%zu xfer=%s final=%s",
             url, curl_easy_strerror(rc), static_cast<int>(rc), http_code,
             primary_ip && primary_ip[0] ? primary_ip : "-", namelookup,
-            connect, total, xfer.bytes, sync_status_name(xfer.st));
+            connect, total, xfer.bytes, sync_status_name(xfer.st),
+            effective_url && effective_url[0] ? effective_url : "-");
 
   if (headers) {
     curl_slist_free_all(headers);

@@ -1,0 +1,38 @@
+{
+  "name": "PS5 Payloads",
+  "icons_url": "https://itsplk.github.io/ps5-payloads-mirror/icons/",
+  "payloads": [
+    {
+      "name": "ftpsrv",
+      "filename": "ftpsrv_v0.21.1.elf",
+      "url": "https://github.com/ps5-payload-dev/ftpsrv/releases/download/v0.21.1/ftpsrv_v0.21.1.elf",
+      "source": "https://github.com/ps5-payload-dev/ftpsrv/releases",
+      "description": "FTP server for the PlayStation 5.",
+      "last_update": "2026-08-20",
+      "version": "v0.21.1",
+      "category": "Networking & Servers",
+      "checksum": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "icon_key": "ftpsrv"
+    },
+    {
+      "name": "Insecure",
+      "filename": "insecure.elf",
+      "url": "http://example.com/insecure.elf",
+      "description": "A plain HTTP entry.",
+      "category": "Tools"
+    },
+    {
+      "name": "Badsum",
+      "filename": "badsum.elf",
+      "url": "https://example.com/badsum.elf",
+      "checksum": "not-a-sha256"
+    },
+    {
+      "name": "No Checksum",
+      "filename": "nochecksum.elf",
+      "url": "https://example.com/nochecksum.elf",
+      "version": "1.0",
+      "category": "Tools"
+    }
+  ]
+}

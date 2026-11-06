@@ -297,11 +297,15 @@ struct Settings {
 
   // [kstuff]
   // Load the embedded/override kstuff payload when AniketosHEN starts.
-  bool kstuff_autoload = true;
+  bool kstuff_autoload = false;
 
   // [shadowmount]
   // Load ShadowMountPlus before kstuff when AniketosHEN starts.
-  bool shadowmount_autoload = true;
+  bool shadowmount_autoload = false;
+
+  // [payload_center]
+  // Start payloads whose .auto_start marker exists when AniketosHEN starts.
+  bool payload_autostart_enabled = true;
 
   // [toolbox]
   // 0 = system (default), 1 = zh-Hans, 2 = en, 3 = ar, 4 = zh-Hant,

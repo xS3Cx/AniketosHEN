@@ -77,6 +77,18 @@ static int test_util_command_base(void) {
                      static_cast<unsigned>(BREW_UTIL_UNUSED_DPI_STATUS));
   TEST_ASSERT_EQ_U64(0x8000019u,
                      static_cast<unsigned>(BREW_UTIL_SET_SYSTEM_LANG));
+  TEST_ASSERT_EQ_U64(0x800001Au,
+                     static_cast<unsigned>(BREW_UTIL_WEB_TILE_ICON));
+  TEST_ASSERT_EQ_U64(0x800001Bu,
+                     static_cast<unsigned>(BREW_UTIL_PAYLOAD_CATALOG_REFRESH));
+  TEST_ASSERT_EQ_U64(0x800001Cu,
+                     static_cast<unsigned>(BREW_UTIL_PAYLOAD_INSTALL));
+  TEST_ASSERT_EQ_U64(0x800001Du,
+                     static_cast<unsigned>(BREW_UTIL_PAYLOAD_STATUS));
+  TEST_ASSERT_EQ_U64(0x800001Eu,
+                     static_cast<unsigned>(BREW_UTIL_PAYLOAD_CANCEL));
+  TEST_ASSERT_EQ_U64(0x800001Fu,
+                     static_cast<unsigned>(BREW_UTIL_PAYLOAD_REMOVE));
   return 0;
 }
 

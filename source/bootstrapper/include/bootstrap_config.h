@@ -13,6 +13,7 @@ typedef struct BootstrapConfig {
   char firmware_text[32]; /* e.g. "11.40", for reports */
   bool shadowmount_autoload;
   bool kstuff_autoload;
+  bool payload_autostart_enabled;
 } BootstrapConfig;
 
 /** Configure notifications/logging and resolve the startup settings. */

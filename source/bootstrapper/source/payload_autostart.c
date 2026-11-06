@@ -160,7 +160,11 @@ static PayloadList find_autostart_payloads(void) {
   return list;
 }
 
-void bootstrap_payload_autostart(void) {
+void bootstrap_payload_autostart(bool enabled) {
+  if (!enabled) {
+    LOG_INFO("Skipping user payload autostart: disabled in config.ini");
+    return;
+  }
   if (!elfldr_remote_onion_available()) {
     LOG_WARN("Skipping user payload autostart: private elfldr :9020 unavailable");
     bootstrap_notify("notify.payload.autostart_skipped");

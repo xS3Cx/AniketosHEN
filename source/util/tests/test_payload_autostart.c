@@ -130,12 +130,16 @@ static int test_autostart_schedule(void) {
   loader_available = false;
   wait_count = launch_count = event_count = 0;
   failures_notified = invalid_launches = 0;
-  bootstrap_payload_autostart();
+  bootstrap_payload_autostart(true);
   TEST_ASSERT_EQ_INT(0, (int)event_count);
 
   loader_available = true;
+  wait_count = launch_count = event_count = 0;
+  bootstrap_payload_autostart(false);
+  TEST_ASSERT_EQ_INT(0, (int)event_count);
+  TEST_ASSERT_EQ_INT(0, (int)launch_count);
   interrupt_wait = true;
-  bootstrap_payload_autostart();
+  bootstrap_payload_autostart(true);
   TEST_ASSERT_EQ_INT(3, (int)launch_count);
   TEST_ASSERT_EQ_INT(3, (int)wait_count);
   TEST_ASSERT_EQ_INT(5, (int)waits[0]);

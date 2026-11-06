@@ -119,6 +119,15 @@ public:
   /** Util fetches a website's icon for its Home tile; returns at once. */
   bool WebTileIcon(const std::string &id, const std::string &url,
                    const std::string &title);
+  bool RefreshPayloadCatalog(const std::string &source_id, std::string &out);
+  bool InstallPayload(const std::string &source_id,
+                      const std::string &item_id, bool replace,
+                      std::string &out);
+  bool InstallPayloadFromUrl(const std::string &url, bool replace,
+                             std::string &out);
+  bool PayloadInstallStatus(std::string &out);
+  bool CancelPayloadInstall(uint32_t task_id, std::string &out);
+  bool RemovePayload(const std::string &identity, std::string &out);
   void Reload_Daemon_Settings();
   bool Launch_Elfldr();
   bool Set_Fan_Threshold(int temp, bool enabled);
