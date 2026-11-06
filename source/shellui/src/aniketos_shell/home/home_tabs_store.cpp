@@ -442,6 +442,7 @@ Request s_request;
 enum class Step { Idle, Create, Rename, Icon };
 
 Step s_step = Step::Idle;
+uint64_t s_prompt_token = 0;
 int s_step_slot = -1;
 std::string s_pending_title;
 bool s_pending_moved = false;
@@ -470,7 +471,7 @@ void open_prompt(Step step, int slot, const std::string &text) {
   options.text = text;
   options.negative = tr("home_tabs.cancel");
   std::string failure;
-  if (!SystemDialogs::ShowPrompt(options, &failure)) {
+  if (!SystemDialogs::ShowPrompt(options, &failure, nullptr, &s_prompt_token)) {
     LOG_WARN("[HOMETABS] prompt: %s", failure.c_str());
     s_step = Step::Idle;
     s_step_slot = -1;
@@ -1123,7 +1124,7 @@ void Tick() {
   if (s_step != Step::Idle) {
     bool confirmed = false;
     std::string typed;
-    if (SystemDialogs::PollPrompt(&confirmed, &typed)) {
+    if (SystemDialogs::PollPrompt(s_prompt_token, &confirmed, &typed)) {
       finish_prompt(confirmed, typed);
     } else if (request.kind != RequestKind::None) {
       LOG_INFO("[HOMETABS] the last prompt never answered; dropped");
