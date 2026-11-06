@@ -3,6 +3,7 @@
 #include "external_symbols.hpp"
 #include "hooked_funcs.hpp"
 #include "ipc.hpp"
+#include "payload_center.hpp"
 #include "onion_cjson.hpp"
 #include "progress_auto_return.hpp"
 #include "progress_ui3.hpp"
@@ -41,6 +42,7 @@ struct ProgressState {
   std::string phase;
   std::string error;
   std::string item;
+  std::string identity;
   uint32_t task_id = 0;
   bool task_may_be_running = false;
   progress_ui3::Panel panel;
@@ -95,6 +97,7 @@ void reset_locked() {
   g_progress.phase.clear();
   g_progress.error.clear();
   g_progress.item.clear();
+  g_progress.identity.clear();
   g_progress.task_id = 0;
   g_progress.task_may_be_running = false;
   progress_ui3::release_widget(g_progress.page);
@@ -303,6 +306,8 @@ void *poll_worker(void *raw) {
     const char *phase = onion_cjson::string_item(root.get(), "phase", "");
     const char *error = onion_cjson::string_item(root.get(), "error", "");
     const char *item = onion_cjson::string_item(root.get(), "item", "");
+    const char *identity =
+        onion_cjson::string_item(root.get(), "identity", "");
     const int progress = onion_cjson::int_item(root.get(), "progress", -1);
     const int completed = onion_cjson::int_item(root.get(), "completed", 0);
     const int total = onion_cjson::int_item(root.get(), "total", 0);
@@ -319,6 +324,8 @@ void *poll_worker(void *raw) {
       g_progress.error = error ? error : "";
       if (item && item[0])
         g_progress.item = item;
+      if (identity && identity[0])
+        g_progress.identity = identity;
       g_progress.progress = progress < 0 ? -1 : std::clamp(progress, 0, 100);
       g_progress.completed = std::max(completed, 0);
       g_progress.total = std::max(total, 0);
@@ -331,6 +338,9 @@ void *poll_worker(void *raw) {
         g_progress.state = State::Ok;
         g_progress.progress = 100;
         g_progress.task_may_be_running = false;
+        if (!g_progress.identity.empty())
+          onion::shellui::payload_center::request_post_install(
+              g_progress.identity, g_progress.item);
         terminal = true;
       } else if (state && std::strcmp(state, "error") == 0) {
         g_progress.state = State::Error;

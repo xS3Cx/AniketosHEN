@@ -293,6 +293,7 @@ InstallResult install_payload(const InstallRequest &request,
   meta.checksum = actual;
   meta.last_update = request.last_update;
   meta.category = request.category;
+  meta.icon_key = request.icon_key;
   meta.installed_at = static_cast<long long>(time(nullptr));
   if (!write_meta(target, meta)) {
     unlink(target.c_str());

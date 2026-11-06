@@ -452,11 +452,6 @@ static bool payload_config_model(ps5ui::Node& model,
                                      found->name.c_str()),
                 toolbox_i18n::confirm_phrase());
   }
-  page.text_field("id_payload_delay_" + found->id,
-                  toolbox_i18n::tr("payload.delay"),
-                  toolbox_i18n::tr("payload.delay.sub"), "number", "1", "3",
-                  std::nullopt, std::nullopt, std::nullopt,
-                  std::to_string(found->config.delay_seconds));
   model = page.root();
   return true;
 }
@@ -798,7 +793,7 @@ void append_toolbox_pkg_group(ps5ui::Group& g) {
 
 void append_toolbox_payloads_group(ps5ui::Group& g) {
   g.link("id_payload_center", toolbox_i18n::tr("payload_center.link"),
-         "pldc_center.xml", toolbox_i18n::tr("payload_center.link.sub"),
+         "payloads.xml", toolbox_i18n::tr("payload_center.link.sub"),
          kIconPlugins)
       .link("id_plugins", toolbox_i18n::tr("plugins.link"), "plugins.xml",
             toolbox_i18n::tr("plugins.link.sub"), kIconPlugins);

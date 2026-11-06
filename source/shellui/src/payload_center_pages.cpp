@@ -1,14 +1,18 @@
 #include "payload_center.hpp"
 
-#include "shellui_payloads.hpp"
-#include "shellui_state.hpp"
 #include "ps5_settings_ui.hpp"
 #include "settings_page_refresh.hpp"
+#include "shellui_payload_state.hpp"
+#include "shellui_payloads.hpp"
+#include "shellui_state.hpp"
 #include "toolbox_i18n.hpp"
+#include "toolbox_route.hpp"
 
 #include <onion/distribution.h>
 #include <onion/fs.h>
+#include <onion/net.h>
 #include <onion/payload_catalog_policy.hpp>
+#include <onion/payload_config.h>
 
 #include <onion_cjson.hpp>
 
@@ -22,14 +26,29 @@
 namespace onion::shellui::payload_center {
 namespace {
 
+constexpr const char *kIconPlugins =
+    ONION_DIST_USER_DATA_ROOT "/assets/icon_xml_plugins.png";
+
 bool marker_present(const PayloadEntry &entry) {
   return if_exists((entry.shellui_path + ".auto_start").c_str());
 }
 
-std::string display_name(const PayloadEntry &entry) {
-  FILE *file = std::fopen((entry.shellui_path + ".meta.json").c_str(), "rb");
+struct MetaView {
+  std::string id;
+  std::string name;
+  std::string version;
+  std::string source_name;
+  std::string last_update;
+  std::string category;
+  std::string icon_key;
+  bool present = false;
+};
+
+MetaView meta_view(const std::string &shellui_path) {
+  MetaView view;
+  FILE *file = std::fopen((shellui_path + ".meta.json").c_str(), "rb");
   if (!file)
-    return entry.name;
+    return view;
   std::string raw;
   char buffer[4096];
   std::size_t read_bytes = 0;
@@ -37,13 +56,26 @@ std::string display_name(const PayloadEntry &entry) {
     raw.append(buffer, read_bytes);
   std::fclose(file);
   if (raw.empty())
-    return entry.name;
+    return view;
   onion_cjson::Root root(raw);
   if (!root)
-    return entry.name;
-  const std::string meta_name =
-      onion_cjson::string_item(root.get(), "name", "");
-  return meta_name.empty() ? entry.name : meta_name;
+    return view;
+  view.id = onion_cjson::string_item(root.get(), "id", "");
+  view.name = onion_cjson::string_item(root.get(), "name", "");
+  view.version = onion_cjson::string_item(root.get(), "item_version", "");
+  if (view.version.empty())
+    view.version = onion_cjson::string_item(root.get(), "version", "");
+  view.source_name = onion_cjson::string_item(root.get(), "source_name", "");
+  view.last_update = onion_cjson::string_item(root.get(), "last_update", "");
+  view.category = onion_cjson::string_item(root.get(), "category", "");
+  view.icon_key = onion_cjson::string_item(root.get(), "icon_key", "");
+  view.present = !view.id.empty();
+  return view;
+}
+
+std::string display_name(const PayloadEntry &entry) {
+  const std::string name = meta_view(entry.shellui_path).name;
+  return name.empty() ? entry.name : name;
 }
 
 int enabled_position(const std::vector<PayloadEntry> &list,
@@ -70,26 +102,27 @@ std::string status_text(const Entry &entry) {
     return toolbox_i18n::tr("payload_center.status.update");
   if (entry.installed)
     return toolbox_i18n::tr("payload_center.status.installed");
-  return toolbox_i18n::tr("payload_center.status.available");
+  return toolbox_i18n::tr("payload_center.status.install");
 }
 
 std::string or_dash(const std::string &text) {
   return text.empty() ? "-" : text;
 }
 
-std::optional<std::string> icon_for(const Entry &entry) {
-  if (entry.item.icon_key.empty())
+std::optional<std::string> icon_for_key(const std::string &icon_key) {
+  if (icon_key.empty())
     return std::nullopt;
   const std::string path =
       std::string(ONION_DIST_USER_DATA_ROOT) + "/payload_center/icons/" +
-      onion::payload_catalog::icon_cache_name(entry.item.icon_key) + ".png";
+      onion::payload_catalog::icon_cache_name(icon_key) + ".png";
   if (access(path.c_str(), F_OK) != 0)
     return std::nullopt;
   return path;
 }
 
-std::string subtitle_for(const Entry &entry) {
-  return version_text(entry) + " · " + status_text(entry);
+std::string row_icon(const std::string &icon_key) {
+  const auto icon = icon_for_key(icon_key);
+  return icon ? *icon : kIconPlugins;
 }
 
 bool unmanaged_target(const Entry &entry) {
@@ -123,23 +156,158 @@ std::string install_confirm(const Entry &entry) {
   return text;
 }
 
+struct InstalledRow {
+  const PayloadEntry *entry = nullptr;
+  std::string display;
+  std::string version;
+  std::string icon_key;
+  int position = 0;
+  bool enabled = false;
+  bool running = false;
+  bool update = false;
+};
+
+bool identity_has_update(const std::string &identity) {
+  for (const auto &entry : entries())
+    if (entry.identity == identity)
+      return entry.update_available;
+  return false;
 }
 
-void generate_center_xml(std::string &xml) {
+std::vector<InstalledRow> installed_rows() {
+  g_ui.payloads_list = shellui_scan_payloads();
+  std::vector<InstalledRow> rows;
+  rows.reserve(g_ui.payloads_list.size());
+  for (const auto &entry : g_ui.payloads_list) {
+    const MetaView meta = meta_view(entry.shellui_path);
+    InstalledRow row;
+    row.entry = &entry;
+    row.display = meta.name.empty() ? entry.name : meta.name;
+    row.version =
+        meta.version.empty() ? toolbox_i18n::tr("payload_center.version_unknown")
+                             : meta.version;
+    row.icon_key = meta.icon_key;
+    row.enabled = marker_present(entry);
+    row.running = shellui_payload_is_running(entry.tid.c_str());
+    row.position = row.enabled ? enabled_position(g_ui.payloads_list, entry) : 0;
+    row.update = identity_has_update(entry.id);
+    rows.push_back(std::move(row));
+  }
+  std::sort(rows.begin(), rows.end(), [](const InstalledRow &a,
+                                         const InstalledRow &b) {
+    const std::string left = onion::payload_catalog::ascii_lower(a.display);
+    const std::string right = onion::payload_catalog::ascii_lower(b.display);
+    if (left != right)
+      return left < right;
+    return a.entry->shellui_path < b.entry->shellui_path;
+  });
+  return rows;
+}
+
+bool row_visible(const InstalledRow &row, InstalledFilter filter) {
+  switch (filter) {
+  case InstalledFilter::Enabled:
+    return row.enabled;
+  case InstalledFilter::Updates:
+    return row.update;
+  case InstalledFilter::All:
+  default:
+    return true;
+  }
+}
+
+std::string installed_header() {
+  char address[64] = {};
+  const bool has_ip =
+      onion_net_get_ip_address(address, sizeof(address)) == 0 && address[0];
+  std::string text;
+  if (has_ip)
+    text = toolbox_i18n::format("payload_center.installed.ftp_fmt", address);
+  else
+    text = toolbox_i18n::tr("payload_center.installed.ftp_path");
+  text += std::string("\n") + toolbox_i18n::tr("payload_center.installed.usb");
+  return text;
+}
+
+std::string installed_subtitle(const InstalledRow &row) {
+  std::string text =
+      row.version + " \xC2\xB7 " +
+      toolbox_i18n::tr(row.enabled ? "payload_center.enabled"
+                                   : "payload_center.disabled") +
+      " \xC2\xB7 " +
+      toolbox_i18n::tr(row.running ? "payload_center.running"
+                                   : "payload_center.stopped");
+  if (row.position > 0)
+    text += std::string(" \xC2\xB7 ") +
+            toolbox_i18n::format("payload_center.position_fmt", row.position);
+  return text;
+}
+
+std::string browse_subtitle(const Entry &entry) {
+  return or_dash(entry.item.category) + " \xC2\xB7 " + version_text(entry) +
+         " \xC2\xB7 " + status_text(entry);
+}
+
+bool installed_model(ps5ui::Node &model, InstalledFilter filter) {
   reload(false);
-  ps5ui::Page page("id_pldc_center",
-                   toolbox_i18n::tr("payload_center.title"));
-  page.link("id_pldc_manage", toolbox_i18n::tr("payload_center.manage"),
-            "payloads.xml", toolbox_i18n::tr("payload_center.manage.sub"))
+  const std::vector<InstalledRow> all = installed_rows();
+  const std::string root_id =
+      filter == InstalledFilter::Enabled
+          ? "id_pldc_installed_enabled"
+          : filter == InstalledFilter::Updates ? "id_pldc_installed_updates"
+                                               : "id_pldc_installed";
+  ps5ui::Page page(root_id, toolbox_i18n::tr("payload_center.manage"));
+  page.label("id_pldc_installed_header", installed_header(),
+             ps5ui::Style::Center)
+      .button("id_pldc_refresh_list",
+              toolbox_i18n::tr("payload_center.refresh_list"))
+      .label("id_pldc_installed_summary",
+             toolbox_i18n::format(
+                 "payload_center.installed.summary_fmt",
+                 static_cast<int>(all.size()),
+                 static_cast<int>(std::count_if(
+                     all.begin(), all.end(),
+                     [](const InstalledRow &row) { return row.enabled; })),
+                 updates_available()),
+             ps5ui::Style::Center)
+      .link("id_pldc_filter_all", toolbox_i18n::tr("payload_center.filter.all"),
+            "payloads.xml")
+      .link("id_pldc_filter_enabled",
+            toolbox_i18n::tr("payload_center.filter.enabled"),
+            "pldc_installed_enabled.xml")
+      .link("id_pldc_filter_updates",
+            toolbox_i18n::tr("payload_center.filter.updates"),
+            "pldc_installed_updates.xml");
+  if (filter != InstalledFilter::All)
+    page.link("id_pldc_show_all",
+              toolbox_i18n::tr("payload_center.filter.show_all"),
+              "payloads.xml");
+  page.link("id_pldc_browse", toolbox_i18n::tr("payload_center.browse"),
+            "pldc_browse.xml", toolbox_i18n::tr("payload_center.browse.sub"))
       .link("id_pldc_autostart", toolbox_i18n::tr("payload_center.autostart"),
             "pldc_autostart.xml",
-            toolbox_i18n::tr("payload_center.autostart.sub"))
-      .link("id_pldc_browse", toolbox_i18n::tr("payload_center.browse"),
-            "pldc_browse.xml", toolbox_i18n::tr("payload_center.browse.sub"))
-      .link("id_pldc_settings", toolbox_i18n::tr("payload_center.settings"),
-            "pldc_settings.xml",
-            toolbox_i18n::tr("payload_center.settings.sub"));
-  xml = page.build();
+            toolbox_i18n::tr("payload_center.autostart.sub"));
+
+  int visible = 0;
+  for (const auto &row : all) {
+    if (!row_visible(row, filter))
+      continue;
+    ++visible;
+    page.link("id_payload_item_" + row.entry->id, row.display,
+              toolbox::payload_config_xml(row.entry->id),
+              installed_subtitle(row), row_icon(row.icon_key));
+  }
+  if (visible == 0) {
+    page.label("id_pldc_installed_empty",
+               toolbox_i18n::tr("payload_center.manage.empty"),
+               ps5ui::Style::Center)
+        .link("id_pldc_empty_browse", toolbox_i18n::tr("payload_center.browse"),
+              "pldc_browse.xml")
+        .button("id_pldc_empty_refresh",
+                toolbox_i18n::tr("payload_center.refresh_list"));
+  }
+  model = page.root();
+  return true;
 }
 
 bool autostart_model(ps5ui::Node &model) {
@@ -169,13 +337,7 @@ bool autostart_model(ps5ui::Node &model) {
   return true;
 }
 
-void generate_autostart_xml(std::string &xml) {
-  ps5ui::Node model;
-  autostart_model(model);
-  xml = onion::shellui::settings::publish(model, autostart_model);
-}
-
-void generate_order_xml(std::string &xml) {
+bool order_model(ps5ui::Node &model) {
   g_ui.payloads_list = shellui_scan_payloads();
   const PayloadEntry *selected = nullptr;
   for (const auto &entry : g_ui.payloads_list) {
@@ -184,90 +346,77 @@ void generate_order_xml(std::string &xml) {
       break;
     }
   }
-  ps5ui::Page page("id_pldc_order", toolbox_i18n::tr("payload_center.order.title"));
   if (!selected) {
+    ps5ui::Page page("id_pldc_order",
+                     toolbox_i18n::tr("payload_center.order.title"));
     page.label("id_pldc_order_missing",
                toolbox_i18n::tr("payload_center.order.missing"),
                ps5ui::Style::Center);
-    xml = page.build();
-    return;
+    model = page.root();
+    return true;
   }
-  int count = 0;
+
+  std::vector<const PayloadEntry *> ordered;
   for (const auto &entry : g_ui.payloads_list)
     if (marker_present(entry))
-      ++count;
-  const int current = enabled_position(g_ui.payloads_list, *selected);
-  page.label("id_pldc_order_name", display_name(*selected))
-      .list(
-          "id_pldc_order", toolbox_i18n::tr("payload_center.order.position"),
-          [count](ps5ui::ListBuilder &L) {
-            for (int i = 1; i <= count; ++i)
-              L.item("id_pldc_order_" + std::to_string(i), std::to_string(i),
-                     std::to_string(i));
-          },
-          toolbox_i18n::tr("payload_center.order.sub"),
-          std::to_string(current));
-  xml = page.build();
+      ordered.push_back(&entry);
+
+  int current = 0;
+  for (std::size_t i = 0; i < ordered.size(); ++i)
+    if (ordered[i]->id == selected->id)
+      current = static_cast<int>(i) + 1;
+
+  const PayloadEntry &entry = *selected;
+  OnionPayloadConfig config{};
+  onion_payload_config_load(entry.shellui_path.c_str(), &config);
+  ps5ui::Page page("id_pldc_order", display_name(entry));
+  page.label("id_pldc_order_position",
+             toolbox_i18n::format("payload_center.order.position_fmt", current,
+                                  static_cast<int>(ordered.size())),
+             ps5ui::Style::Center);
+  if (current > 1)
+    page.button("id_pldc_move_up", toolbox_i18n::tr("payload_center.order.up"));
+  if (current < static_cast<int>(ordered.size()))
+    page.button("id_pldc_move_down",
+                toolbox_i18n::tr("payload_center.order.down"));
+  page.text_field("id_payload_delay_" + entry.id,
+                  toolbox_i18n::tr("payload_center.order.delay"),
+                  toolbox_i18n::tr("payload_center.order.delay.sub"), "number",
+                  "1", "3", std::nullopt, std::nullopt, std::nullopt,
+                  std::to_string(config.delay_seconds));
+  model = page.root();
+  return true;
 }
 
 bool browse_model(ps5ui::Node &model) {
   reload(false);
   ps5ui::Page page("id_pldc_browse",
                    toolbox_i18n::tr("payload_center.browse"));
-  page.link("id_pldc_cat_all", toolbox_i18n::tr("payload_center.all"),
-            "pldc_list.xml")
-      .button("id_pldc_search", toolbox_i18n::tr("payload_center.search"),
+  page.button("id_pldc_search", toolbox_i18n::tr("payload_center.search"),
               toolbox_i18n::tr("payload_center.search.sub"));
-  const auto category_list = categories();
-  for (std::size_t i = 0; i < category_list.size(); ++i) {
-    page.link("id_pldc_cat_" + std::to_string(i), category_list[i],
-              "pldc_list.xml");
-  }
-  if (category_list.empty())
-    page.label("id_pldc_browse_empty",
-               toolbox_i18n::tr("payload_center.browse.empty"),
-               ps5ui::Style::Center)
-        .button("id_pldc_refresh",
-                toolbox_i18n::tr("payload_center.refresh"), std::nullopt);
-  model = page.root();
-  return true;
-}
-
-void generate_browse_xml(std::string &xml) {
-  ps5ui::Node model;
-  browse_model(model);
-  xml = onion::shellui::settings::publish(model, browse_model);
-}
-
-bool list_model(ps5ui::Node &model) {
-  reload(false);
-  const auto visible = visible_entries();
-  ps5ui::Page page("id_pldc_list",
-                   toolbox_i18n::tr("payload_center.list"));
-  page.label("id_pldc_list_count",
-             toolbox_i18n::format("payload_center.list_count_fmt",
-                                  static_cast<int>(visible.size())),
-             ps5ui::Style::Center);
   if (!g_ui.pldc_query.empty())
     page.button("id_pldc_clear_filter",
-                toolbox_i18n::tr("payload_center.clear_filter"), std::nullopt);
+                toolbox_i18n::tr("payload_center.clear_filter"));
+  const auto visible = visible_entries();
   for (std::size_t i = 0; i < visible.size(); ++i) {
-    page.link("id_pldc_pick_" + std::to_string(i), visible[i]->item.name,
-              "pldc_detail.xml", subtitle_for(*visible[i]),
-              icon_for(*visible[i]));
+    const Entry &entry = *visible[i];
+    page.link("id_pldc_pick_" + std::to_string(i), entry.item.name,
+              "pldc_detail.xml", browse_subtitle(entry),
+              row_icon(entry.item.icon_key.empty() ? entry.icon_key
+                                                   : entry.item.icon_key));
   }
   if (visible.empty())
-    page.label("id_pldc_list_empty",
+    page.label("id_pldc_browse_empty",
                toolbox_i18n::tr("payload_center.list.empty"),
                ps5ui::Style::Center);
+  page.link("id_pldc_settings",
+            toolbox_i18n::tr("payload_center.catalog_settings"),
+            "pldc_settings.xml",
+            toolbox_i18n::tr("payload_center.catalog_settings.sub"))
+      .button("id_pldc_refresh", toolbox_i18n::tr("payload_center.refresh"),
+              std::nullopt);
   model = page.root();
   return true;
-}
-
-void generate_list_xml(std::string &xml) {
-  ps5ui::Node model;
-  list_model(model);
-  xml = onion::shellui::settings::publish(model, list_model);
 }
 
 bool detail_model(ps5ui::Node &model) {
@@ -320,16 +469,10 @@ bool detail_model(ps5ui::Node &model) {
   return true;
 }
 
-void generate_detail_xml(std::string &xml) {
-  ps5ui::Node model;
-  detail_model(model);
-  xml = onion::shellui::settings::publish(model, detail_model);
-}
-
 bool settings_model(ps5ui::Node &model) {
   reload(false);
   ps5ui::Page page("id_pldc_settings",
-                   toolbox_i18n::tr("payload_center.settings"));
+                   toolbox_i18n::tr("payload_center.catalog_settings"));
   page.label("id_pldc_last_refresh", last_refresh_text(), ps5ui::Style::Center)
       .button("id_pldc_refresh",
               toolbox_i18n::tr("payload_center.refresh"), std::nullopt)
@@ -356,10 +499,73 @@ bool settings_model(ps5ui::Node &model) {
   return true;
 }
 
+bool post_install_model(ps5ui::Node &model) {
+  ps5ui::Page page("id_pldc_post",
+                   toolbox_i18n::tr("payload_center.post.title"));
+  std::string name = post_install_name();
+  if (name.empty())
+    name = post_install_identity();
+  page.label("id_pldc_post_installed",
+             toolbox_i18n::format("payload_center.post.installed_fmt",
+                                  name.c_str()),
+             ps5ui::Style::Center)
+      .toggle("id_pldc_post_autostart",
+              toolbox_i18n::tr("payload_center.post.autostart"),
+              post_install_autostart_enabled(),
+              toolbox_i18n::tr("payload_center.post.autostart.sub"))
+      .button("id_pldc_post_done",
+              toolbox_i18n::tr("payload_center.post.done"))
+      .button("id_pldc_post_installed",
+              toolbox_i18n::tr("payload_center.post.installed"));
+  model = page.root();
+  return true;
+}
+
+} // namespace
+
+void generate_installed_xml(std::string &xml, InstalledFilter filter) {
+  ps5ui::Node model;
+  installed_model(model, filter);
+  xml = onion::shellui::settings::publish(
+      model, [filter](ps5ui::Node &next) {
+        return installed_model(next, filter);
+      });
+}
+
+void generate_autostart_xml(std::string &xml) {
+  ps5ui::Node model;
+  autostart_model(model);
+  xml = onion::shellui::settings::publish(model, autostart_model);
+}
+
+void generate_order_xml(std::string &xml) {
+  ps5ui::Node model;
+  order_model(model);
+  xml = onion::shellui::settings::publish(model, order_model);
+}
+
+void generate_browse_xml(std::string &xml) {
+  ps5ui::Node model;
+  browse_model(model);
+  xml = onion::shellui::settings::publish(model, browse_model);
+}
+
+void generate_detail_xml(std::string &xml) {
+  ps5ui::Node model;
+  detail_model(model);
+  xml = onion::shellui::settings::publish(model, detail_model);
+}
+
 void generate_settings_xml(std::string &xml) {
   ps5ui::Node model;
   settings_model(model);
   xml = onion::shellui::settings::publish(model, settings_model);
 }
 
+void generate_post_install_xml(std::string &xml) {
+  ps5ui::Node model;
+  post_install_model(model);
+  xml = onion::shellui::settings::publish(model, post_install_model);
 }
+
+} // namespace onion::shellui::payload_center

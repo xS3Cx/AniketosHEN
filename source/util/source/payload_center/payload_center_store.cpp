@@ -285,6 +285,7 @@ bool read_meta(const std::string &payload_path, ItemMeta *meta) {
   parsed.checksum = json_string(root, "checksum");
   parsed.last_update = json_string(root, "last_update");
   parsed.category = json_string(root, "category");
+  parsed.icon_key = json_string(root, "icon_key");
   parse_number(root, "installed_at", &parsed.installed_at);
   cJSON_Delete(root);
   if (parsed.name.empty() || parsed.match_key.empty())
@@ -308,6 +309,7 @@ bool write_meta(const std::string &payload_path, const ItemMeta &meta) {
   cJSON_AddStringToObject(root, "checksum", meta.checksum.c_str());
   cJSON_AddStringToObject(root, "last_update", meta.last_update.c_str());
   cJSON_AddStringToObject(root, "category", meta.category.c_str());
+  cJSON_AddStringToObject(root, "icon_key", meta.icon_key.c_str());
   cJSON_AddNumberToObject(root, "installed_at",
                           static_cast<double>(meta.installed_at));
   char *text = cJSON_PrintUnformatted(root);

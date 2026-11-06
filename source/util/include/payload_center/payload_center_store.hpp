@@ -43,6 +43,7 @@ struct ItemMeta {
   std::string checksum;
   std::string last_update;
   std::string category;
+  std::string icon_key;
   long long installed_at = 0;
 };
 

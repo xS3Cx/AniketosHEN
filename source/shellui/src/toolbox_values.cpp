@@ -6,6 +6,7 @@
 
 #include "hooked_funcs.hpp"
 #include "external_symbols.hpp"
+#include "payload_center.hpp"
 #include "shellui_payload_state.hpp"
 #include "shellui_state.hpp"
 #include "toolbox_i18n.hpp"
@@ -64,6 +65,11 @@ const ExactValueEntry kExactValues[] = {
     {"id_pldc_master",
      +[]() -> std::string {
        return bool_str(g_settings.payload_autostart_enabled);
+     }},
+    {"id_pldc_post_autostart",
+     +[]() -> std::string {
+       return bool_str(
+           onion::shellui::payload_center::post_install_autostart_enabled());
      }},
     {"id_disp_titleids",
      +[]() -> std::string { return bool_str(g_settings.display_tids); }},

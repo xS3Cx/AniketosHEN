@@ -10,6 +10,7 @@
 #include "hooked_funcs.hpp"
 
 #include "onpress_policy.hpp"
+#include "payload_center.hpp"
 #include "progress_dialog.hpp"
 #include "plugin_progress.hpp"
 #include "payload_progress.hpp"
@@ -25,6 +26,7 @@ void SettingPageStackOnPopping_Hook(MonoObject *instance,
                                     MonoObject *outgoing,
                                     MonoObject *incoming) {
   if (shellui_hooks_are_ready() && outgoing) {
+    onion::shellui::payload_center::release_installed_page(outgoing);
     onion::shellui::settings::release(outgoing);
     if (cheat_progress_handle_popping(outgoing)) {
       g_ui.leave_page(toolbox::Page::CheatProgress);

@@ -20,6 +20,7 @@ struct InstallRequest {
   std::string version;
   std::string last_update;
   std::string category;
+  std::string icon_key;
   std::string match_key;
   bool has_checksum = false;
   bool replace = false;

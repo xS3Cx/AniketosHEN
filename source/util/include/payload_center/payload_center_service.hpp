@@ -12,6 +12,7 @@ struct Status {
   std::string phase;
   std::string error;
   std::string item;
+  std::string identity;
   int progress = -1;
   uint64_t completed = 0;
   uint64_t total = 0;

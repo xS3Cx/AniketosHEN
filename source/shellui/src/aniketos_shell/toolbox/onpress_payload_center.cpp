@@ -11,6 +11,7 @@
 #include <onion/payload_identity.h>
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdlib>
 #include <fcntl.h>
 #include <string>
@@ -29,6 +30,13 @@ bool marker_present(const PayloadEntry &entry) {
 
 const onion::shellui::payload_center::Entry *active_entry() {
   return onion::shellui::payload_center::find_entry(g_ui.active_pldc_item);
+}
+
+PayloadEntry *entry_by_identity(const std::string &identity) {
+  for (auto &entry : g_ui.payloads_list)
+    if (entry.id == identity)
+      return &entry;
+  return nullptr;
 }
 
 OnPressResult master_toggle(OnPressContext &ctx) {
@@ -75,6 +83,12 @@ OnPressResult refresh(OnPressContext &ctx) {
   return OnPressResult::Consumed;
 }
 
+OnPressResult refresh_list(OnPressContext &ctx) {
+  ctx.dirty = false;
+  (void)onion::shellui::payload_center::refresh_installed_page();
+  return OnPressResult::Consumed;
+}
+
 OnPressResult clear_cache(OnPressContext &ctx) {
   ctx.dirty = false;
   onion::shellui::payload_center::clear_cache();
@@ -97,29 +111,8 @@ OnPressResult search(OnPressContext &ctx) {
 OnPressResult clear_filter(OnPressContext &ctx) {
   ctx.dirty = false;
   g_ui.pldc_query.clear();
-  g_ui.pldc_category.clear();
-  toolbox_push_resource("pldc_list.xml");
+  toolbox_push_resource("pldc_browse.xml");
   return OnPressResult::Consumed;
-}
-
-OnPressResult category(OnPressContext &ctx) {
-  ctx.dirty = false;
-  constexpr const char *kPrefix = "id_pldc_cat_";
-  const std::string suffix = ctx.id.substr(std::string(kPrefix).size());
-  if (suffix == "all") {
-    g_ui.pldc_category.clear();
-  } else {
-    char *end = nullptr;
-    const unsigned long index = std::strtoul(suffix.c_str(), &end, 10);
-    if (!end || *end)
-      return OnPressResult::Consumed;
-    const auto categories =
-        onion::shellui::payload_center::categories();
-    if (index >= categories.size())
-      return OnPressResult::Consumed;
-    g_ui.pldc_category = categories[index];
-  }
-  return OnPressResult::Handled;
 }
 
 OnPressResult pick(OnPressContext &ctx) {
@@ -154,46 +147,91 @@ OnPressResult pick_order(OnPressContext &ctx) {
   return OnPressResult::Handled;
 }
 
-OnPressResult order_selected(OnPressContext &ctx) {
+OnPressResult move_order(OnPressContext &ctx, int direction) {
   ctx.dirty = false;
-  char *end = nullptr;
-  const long position = std::strtol(ctx.value.c_str(), &end, 10);
-  if (ctx.value.empty() || !end || *end || position < 1)
-    return OnPressResult::Consumed;
   if (g_ui.payloads_list.empty())
     g_ui.payloads_list = shellui_scan_payloads();
-
-  auto selected = std::find_if(
-      g_ui.payloads_list.begin(), g_ui.payloads_list.end(),
-      [&](const PayloadEntry &entry) {
-        return entry.id == g_ui.active_pldc_order && marker_present(entry);
-      });
-  if (selected == g_ui.payloads_list.end())
-    return OnPressResult::Consumed;
 
   std::vector<PayloadEntry *> ordered;
   for (auto &entry : g_ui.payloads_list)
     if (marker_present(entry))
       ordered.push_back(&entry);
-  if (position > static_cast<long>(ordered.size()))
+
+  const auto selected = std::find_if(
+      ordered.begin(), ordered.end(), [&](const PayloadEntry *entry) {
+        return entry->id == g_ui.active_pldc_order;
+      });
+  if (selected == ordered.end())
     return OnPressResult::Consumed;
 
-  const auto current = std::find(ordered.begin(), ordered.end(), &*selected);
-  if (current == ordered.end())
+  const std::ptrdiff_t index = selected - ordered.begin();
+  const std::ptrdiff_t target = index + direction;
+  if (target < 0 || target >= static_cast<std::ptrdiff_t>(ordered.size()))
     return OnPressResult::Consumed;
-  PayloadEntry *moving = *current;
-  ordered.erase(current);
-  ordered.insert(ordered.begin() + (position - 1), moving);
 
-  for (std::size_t i = 0; i < ordered.size(); ++i) {
-    OnionPayloadConfig config;
-    onion_payload_config_load(ordered[i]->shellui_path.c_str(), &config);
-    config.priority = std::max(0, 1000 - static_cast<int>(i + 1) * 10);
-    if (!onion_payload_config_save(ordered[i]->shellui_path.c_str(), &config))
-      notify("notify.payload.config_save_failed", ordered[i]->name.c_str());
-    ordered[i]->config = config;
+  std::swap(ordered[index], ordered[target]);
+  OnionPayloadConfig first{};
+  OnionPayloadConfig second{};
+  onion_payload_config_load(ordered[index]->shellui_path.c_str(), &first);
+  onion_payload_config_load(ordered[target]->shellui_path.c_str(), &second);
+  const bool tied = first.priority == second.priority;
+  std::swap(first.priority, second.priority);
+  if (tied) {
+    for (std::size_t i = 0; i < ordered.size(); ++i) {
+      OnionPayloadConfig config{};
+      onion_payload_config_load(ordered[i]->shellui_path.c_str(), &config);
+      config.priority = std::max(0, 1000 - static_cast<int>(i) * 10);
+      if (!onion_payload_config_save(ordered[i]->shellui_path.c_str(), &config))
+        notify("notify.payload.config_save_failed", ordered[i]->name.c_str());
+      ordered[i]->config = config;
+    }
+  } else {
+    if (!onion_payload_config_save(ordered[index]->shellui_path.c_str(), &first))
+      notify("notify.payload.config_save_failed", ordered[index]->name.c_str());
+    if (!onion_payload_config_save(ordered[target]->shellui_path.c_str(),
+                                   &second))
+      notify("notify.payload.config_save_failed", ordered[target]->name.c_str());
+    ordered[index]->config = first;
+    ordered[target]->config = second;
   }
   notify("notify.payload_center.order_saved");
+  toolbox_pop_page();
+  return OnPressResult::Consumed;
+}
+
+OnPressResult move_up(OnPressContext &ctx) { return move_order(ctx, -1); }
+
+OnPressResult move_down(OnPressContext &ctx) { return move_order(ctx, 1); }
+
+OnPressResult post_autostart(OnPressContext &ctx) {
+  ctx.dirty = false;
+  const std::string identity =
+      onion::shellui::payload_center::post_install_identity();
+  if (identity.empty())
+    return OnPressResult::Consumed;
+  if (g_ui.payloads_list.empty())
+    g_ui.payloads_list = shellui_scan_payloads();
+  PayloadEntry *entry = entry_by_identity(identity);
+  if (!entry) {
+    g_ui.payloads_list = shellui_scan_payloads();
+    entry = entry_by_identity(identity);
+  }
+  if (entry)
+    (void)shellui_payload_set_autostart(*entry, enabled(ctx.value));
+  return OnPressResult::Consumed;
+}
+
+OnPressResult post_done(OnPressContext &ctx) {
+  ctx.dirty = false;
+  onion::shellui::payload_center::clear_post_install_page();
+  toolbox_pop_page();
+  return OnPressResult::Consumed;
+}
+
+OnPressResult post_installed(OnPressContext &ctx) {
+  ctx.dirty = false;
+  onion::shellui::payload_center::clear_post_install_page();
+  onion::shellui::payload_center::request_navigate_installed();
   toolbox_pop_page();
   return OnPressResult::Consumed;
 }
@@ -203,21 +241,25 @@ const OnPressExactEntry kExact[] = {
     {"id_pldc_install", install},
     {"id_pldc_remove", remove},
     {"id_pldc_refresh", refresh},
+    {"id_pldc_refresh_list", refresh_list},
     {"id_pldc_clear_cache", clear_cache},
     {"id_pldc_add_source", add_source},
-    {"id_pldc_order", order_selected},
     {"id_pldc_search", search},
     {"id_pldc_clear_filter", clear_filter},
+    {"id_pldc_move_up", move_up},
+    {"id_pldc_move_down", move_down},
+    {"id_pldc_post_autostart", post_autostart},
+    {"id_pldc_post_done", post_done},
+    {"id_pldc_post_installed", post_installed},
 };
 
 const OnPressPrefixEntry kPrefix[] = {
-    {"id_pldc_cat_", category},
     {"id_pldc_pick_order_", pick_order},
     {"id_pldc_pick_", pick},
     {"id_pldc_remove_source_", remove_source},
 };
 
-}
+} // namespace
 
 const OnPressExactEntry *onpress_payload_center_exact(size_t *count) {
   *count = sizeof(kExact) / sizeof(kExact[0]);

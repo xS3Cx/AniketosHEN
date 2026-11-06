@@ -36,7 +36,9 @@ constexpr OnPressDomain onpress_domain_for_page(Page page) {
   case Page::DebugSettings:
     return OnPressDomain::Root;
   case Page::Payloads:
-    return OnPressDomain::Payloads;
+  case Page::PayloadsEnabled:
+  case Page::PayloadsUpdates:
+    return OnPressDomain::PayloadCenter;
   case Page::PayloadConfig:
     return OnPressDomain::PayloadConfig;
   case Page::OverlayMetrics:
@@ -62,13 +64,12 @@ constexpr OnPressDomain onpress_domain_for_page(Page page) {
     return OnPressDomain::RemotePlay;
   case Page::DynamicPlugin:
     return OnPressDomain::DynamicPlugin;
-  case Page::PayloadCenter:
   case Page::PayloadAutostart:
   case Page::PayloadOrder:
   case Page::PayloadBrowse:
-  case Page::PayloadList:
   case Page::PayloadDetail:
   case Page::PayloadSettings:
+  case Page::PayloadPostInstall:
     return OnPressDomain::PayloadCenter;
   case Page::PayloadProgress:
     return OnPressDomain::Progress;

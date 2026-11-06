@@ -103,7 +103,8 @@ std::string make_payload_status_json(
       !cJSON_AddNumberToObject(root, "total",
                                static_cast<double>(status.total)) ||
       !cJSON_AddStringToObject(root, "error", status.error.c_str()) ||
-      !cJSON_AddStringToObject(root, "item", status.item.c_str())) {
+      !cJSON_AddStringToObject(root, "item", status.item.c_str()) ||
+      !cJSON_AddStringToObject(root, "identity", status.identity.c_str())) {
     cJSON_Delete(root);
     return {};
   }

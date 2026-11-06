@@ -482,6 +482,7 @@ void Service::worker_install(std::string source_id, std::string item_id,
     request.version = found->version;
     request.last_update = found->last_update;
     request.category = found->category;
+    request.icon_key = found->icon_key;
     request.match_key =
         onion::payload_catalog::item_match_key(*found, source->url);
   }
@@ -492,6 +493,10 @@ void Service::worker_install(std::string source_id, std::string item_id,
   const InstallResult result =
       install_payload(request, progress_thunk, this, cancel_thunk, this);
   if (result.ok) {
+    {
+      std::lock_guard<std::mutex> lock(mu_);
+      status_.identity = result.identity;
+    }
     finish(Status::State::Ok, {});
     return;
   }

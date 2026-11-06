@@ -15,6 +15,8 @@ enum class Page : unsigned char {
   None = 0,           /**< unknown → original stream */
   DebugSettings,      /**< embedded toolbox XML */
   Payloads,
+  PayloadsEnabled,    /**< installed payloads with autostart enabled */
+  PayloadsUpdates,    /**< installed payloads with updates available */
   PayloadConfig,      /**< per-Payload configuration page */
   OverlayMetrics,     /**< overlay metric list (overlay_metrics.xml) */
   OverlayMetricConfig, /**< per-overlay metric page (overlay_<id>.xml) */
@@ -32,13 +34,12 @@ enum class Page : unsigned char {
   SuperuserPass,      /**< recognized; still use original stream */
   RedirectOgDebug,    /**< og_debug.xml → debug_settings resource */
   Kbm,                /**< Keyboard and Mouse pages (kbm.xml, kbm-*.xml) */
-  PayloadCenter,
   PayloadAutostart,
   PayloadOrder,
   PayloadBrowse,
-  PayloadList,
   PayloadDetail,
   PayloadSettings,
+  PayloadPostInstall,
   PayloadProgress,
 };
 
@@ -73,13 +74,14 @@ struct RouteFlags {
   bool is_cheat_progress = false;
   bool is_remote_play = false;
   bool is_plugin_progress = false;
-  bool is_payload_center = false;
+  bool is_payloads_enabled = false;
+  bool is_payloads_updates = false;
   bool is_payload_autostart = false;
   bool is_payload_order = false;
   bool is_payload_browse = false;
-  bool is_payload_list = false;
   bool is_payload_detail = false;
   bool is_payload_settings = false;
+  bool is_payload_post_install = false;
   bool is_payload_progress = false;
 };
 
@@ -100,19 +102,22 @@ constexpr bool restores_parent_on_pop(Page page) {
          page == Page::SprxConfig ||
          page == Page::DynamicPlugin ||
          page == Page::PluginProgress ||
-         page == Page::PayloadList || page == Page::PayloadDetail ||
-         page == Page::PayloadOrder || page == Page::PayloadProgress;
+         page == Page::PayloadsEnabled || page == Page::PayloadsUpdates ||
+         page == Page::PayloadDetail || page == Page::PayloadOrder ||
+         page == Page::PayloadPostInstall ||
+         page == Page::PayloadProgress;
 }
 
 enum class PayloadCenterPage : unsigned char {
   None = 0,
-  Center,
+  InstalledEnabled,
+  InstalledUpdates,
   Autostart,
   Order,
   Browse,
-  List,
   Detail,
   Settings,
+  PostInstall,
   Progress,
 };
 
@@ -163,20 +168,22 @@ inline PayloadCenterPage parse_payload_center_resource(std::string_view resource
   std::string_view relative;
   if (!settings_plugins_relative(resource, &relative))
     return PayloadCenterPage::None;
-  if (relative == "pldc_center.xml")
-    return PayloadCenterPage::Center;
+  if (relative == "pldc_installed_enabled.xml")
+    return PayloadCenterPage::InstalledEnabled;
+  if (relative == "pldc_installed_updates.xml")
+    return PayloadCenterPage::InstalledUpdates;
   if (relative == "pldc_autostart.xml")
     return PayloadCenterPage::Autostart;
   if (relative == "pldc_order.xml")
     return PayloadCenterPage::Order;
   if (relative == "pldc_browse.xml")
     return PayloadCenterPage::Browse;
-  if (relative == "pldc_list.xml")
-    return PayloadCenterPage::List;
   if (relative == "pldc_detail.xml")
     return PayloadCenterPage::Detail;
   if (relative == "pldc_settings.xml")
     return PayloadCenterPage::Settings;
+  if (relative == "pldc_post_install.xml")
+    return PayloadCenterPage::PostInstall;
   if (relative == "pldc_progress.xml")
     return PayloadCenterPage::Progress;
   return PayloadCenterPage::None;

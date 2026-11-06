@@ -470,13 +470,14 @@ static int test_progress_page_restore_is_reusable(void) {
 
 static int test_payload_center_pages(void) {
   const std::pair<const char *, Page> pages[] = {
-      {"pldc_center.xml", Page::PayloadCenter},
+      {"pldc_installed_enabled.xml", Page::PayloadsEnabled},
+      {"pldc_installed_updates.xml", Page::PayloadsUpdates},
       {"pldc_autostart.xml", Page::PayloadAutostart},
       {"pldc_order.xml", Page::PayloadOrder},
       {"pldc_browse.xml", Page::PayloadBrowse},
-      {"pldc_list.xml", Page::PayloadList},
       {"pldc_detail.xml", Page::PayloadDetail},
       {"pldc_settings.xml", Page::PayloadSettings},
+      {"pldc_post_install.xml", Page::PayloadPostInstall},
       {"pldc_progress.xml", Page::PayloadProgress},
   };
   for (const auto &page : pages) {
@@ -485,9 +486,15 @@ static int test_payload_center_pages(void) {
   }
   TEST_ASSERT_TRUE(
       resolve_resource(make_in(cfg_res("pldc_unknown.xml"))).page == Page::None);
-  TEST_ASSERT_TRUE(restores_parent_on_pop(Page::PayloadList));
+  TEST_ASSERT_TRUE(
+      resolve_resource(make_in(cfg_res("pldc_center.xml"))).page == Page::None);
+  TEST_ASSERT_TRUE(
+      resolve_resource(make_in(cfg_res("pldc_list.xml"))).page == Page::None);
+  TEST_ASSERT_TRUE(restores_parent_on_pop(Page::PayloadsEnabled));
+  TEST_ASSERT_TRUE(restores_parent_on_pop(Page::PayloadsUpdates));
   TEST_ASSERT_TRUE(restores_parent_on_pop(Page::PayloadDetail));
   TEST_ASSERT_TRUE(restores_parent_on_pop(Page::PayloadOrder));
+  TEST_ASSERT_TRUE(restores_parent_on_pop(Page::PayloadPostInstall));
   TEST_ASSERT_TRUE(restores_parent_on_pop(Page::PayloadProgress));
   return 0;
 }

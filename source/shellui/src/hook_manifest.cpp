@@ -128,7 +128,18 @@ uint64_t GetManifestResourceStream_Hook(uint64_t inst, MonoString *FileName) {
     generate_toolbox_xml(new_xml_string);
     break;
   case toolbox::Page::Payloads:
-    generate_payload_xml(new_xml_string);
+    onion::shellui::payload_center::generate_installed_xml(
+        new_xml_string, onion::shellui::payload_center::InstalledFilter::All);
+    break;
+  case toolbox::Page::PayloadsEnabled:
+    onion::shellui::payload_center::generate_installed_xml(
+        new_xml_string,
+        onion::shellui::payload_center::InstalledFilter::Enabled);
+    break;
+  case toolbox::Page::PayloadsUpdates:
+    onion::shellui::payload_center::generate_installed_xml(
+        new_xml_string,
+        onion::shellui::payload_center::InstalledFilter::Updates);
     break;
   case toolbox::Page::PayloadConfig: {
     std::string payload_id;
@@ -191,9 +202,6 @@ uint64_t GetManifestResourceStream_Hook(uint64_t inst, MonoString *FileName) {
   case toolbox::Page::PluginProgress:
     generate_plugin_progress_xml(new_xml_string);
     break;
-  case toolbox::Page::PayloadCenter:
-    onion::shellui::payload_center::generate_center_xml(new_xml_string);
-    break;
   case toolbox::Page::PayloadAutostart:
     onion::shellui::payload_center::generate_autostart_xml(new_xml_string);
     break;
@@ -203,14 +211,14 @@ uint64_t GetManifestResourceStream_Hook(uint64_t inst, MonoString *FileName) {
   case toolbox::Page::PayloadBrowse:
     onion::shellui::payload_center::generate_browse_xml(new_xml_string);
     break;
-  case toolbox::Page::PayloadList:
-    onion::shellui::payload_center::generate_list_xml(new_xml_string);
-    break;
   case toolbox::Page::PayloadDetail:
     onion::shellui::payload_center::generate_detail_xml(new_xml_string);
     break;
   case toolbox::Page::PayloadSettings:
     onion::shellui::payload_center::generate_settings_xml(new_xml_string);
+    break;
+  case toolbox::Page::PayloadPostInstall:
+    onion::shellui::payload_center::generate_post_install_xml(new_xml_string);
     break;
   case toolbox::Page::PayloadProgress:
     generate_payload_progress_xml(new_xml_string);

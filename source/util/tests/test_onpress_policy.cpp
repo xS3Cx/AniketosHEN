@@ -64,7 +64,11 @@ static int test_page_domain_matrix(void) {
                    OnPressDomain::Sprx);
   TEST_ASSERT_TRUE(toolbox::onpress_domain_for_page(Page::SprxConfig) ==
                    OnPressDomain::Sprx);
-  TEST_ASSERT_TRUE(toolbox::onpress_domain_for_page(Page::PayloadCenter) ==
+  TEST_ASSERT_TRUE(toolbox::onpress_domain_for_page(Page::Payloads) ==
+                   OnPressDomain::PayloadCenter);
+  TEST_ASSERT_TRUE(toolbox::onpress_domain_for_page(Page::PayloadsEnabled) ==
+                   OnPressDomain::PayloadCenter);
+  TEST_ASSERT_TRUE(toolbox::onpress_domain_for_page(Page::PayloadsUpdates) ==
                    OnPressDomain::PayloadCenter);
   TEST_ASSERT_TRUE(toolbox::onpress_domain_for_page(Page::PayloadAutostart) ==
                    OnPressDomain::PayloadCenter);
@@ -72,11 +76,11 @@ static int test_page_domain_matrix(void) {
                    OnPressDomain::PayloadCenter);
   TEST_ASSERT_TRUE(toolbox::onpress_domain_for_page(Page::PayloadBrowse) ==
                    OnPressDomain::PayloadCenter);
-  TEST_ASSERT_TRUE(toolbox::onpress_domain_for_page(Page::PayloadList) ==
-                   OnPressDomain::PayloadCenter);
   TEST_ASSERT_TRUE(toolbox::onpress_domain_for_page(Page::PayloadDetail) ==
                    OnPressDomain::PayloadCenter);
   TEST_ASSERT_TRUE(toolbox::onpress_domain_for_page(Page::PayloadSettings) ==
+                   OnPressDomain::PayloadCenter);
+  TEST_ASSERT_TRUE(toolbox::onpress_domain_for_page(Page::PayloadPostInstall) ==
                    OnPressDomain::PayloadCenter);
   TEST_ASSERT_TRUE(toolbox::onpress_domain_for_page(Page::PayloadProgress) ==
                    OnPressDomain::Progress);

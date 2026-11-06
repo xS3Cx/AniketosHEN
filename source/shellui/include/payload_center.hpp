@@ -7,7 +7,11 @@
 #include <string_view>
 #include <vector>
 
+struct MonoObject;
+
 namespace onion::shellui::payload_center {
+
+enum class InstalledFilter : unsigned char { All, Enabled, Updates };
 
 struct Entry {
   onion::payload_catalog::Item item;
@@ -21,12 +25,13 @@ struct Entry {
   std::string installed_path;
   std::string identity;
   std::string installed_version;
+  std::string icon_key;
 };
 
 void Tick();
 void reload(bool force = false);
 const std::vector<Entry> &entries();
-std::vector<std::string> categories();
+int updates_available();
 const std::vector<onion::payload_catalog::Source> &sources();
 const Entry *find_entry(std::string_view selection);
 std::string installed_identity(std::string_view selection);
@@ -45,12 +50,26 @@ void clear_cache();
 std::string ftp_hint();
 std::string last_refresh_text();
 
-void generate_center_xml(std::string &xml);
+/* Installed page binding for in-place refresh. */
+void bind_installed_page(MonoObject *page);
+void release_installed_page(MonoObject *page);
+bool refresh_installed_page();
+
+/* Post-install page state. */
+void request_post_install(std::string identity, std::string name);
+std::string post_install_identity();
+std::string post_install_name();
+bool post_install_autostart_enabled();
+void clear_post_install();
+void request_navigate_installed();
+void clear_post_install_page();
+
+void generate_installed_xml(std::string &xml, InstalledFilter filter);
 void generate_autostart_xml(std::string &xml);
 void generate_order_xml(std::string &xml);
 void generate_browse_xml(std::string &xml);
-void generate_list_xml(std::string &xml);
 void generate_detail_xml(std::string &xml);
 void generate_settings_xml(std::string &xml);
+void generate_post_install_xml(std::string &xml);
 
-}
+} // namespace onion::shellui::payload_center

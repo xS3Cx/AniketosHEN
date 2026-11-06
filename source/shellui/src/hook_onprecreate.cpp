@@ -8,6 +8,7 @@
 #include "external_symbols.hpp"
 #include "ipc.hpp"
 #include "onpress_policy.hpp"
+#include "payload_center.hpp"
 #include "progress_dialog.hpp"
 #include "plugin_progress.hpp"
 #include "payload_progress.hpp"
@@ -104,6 +105,11 @@ int OnPreCreate_Hook(MonoObject *Instance, MonoObject *element) {
 
   if (g_ui.active_page == toolbox::Page::RemotePlay)
     remote_play_bind_page(Instance);
+
+  if (g_ui.active_page == toolbox::Page::Payloads ||
+      g_ui.active_page == toolbox::Page::PayloadsEnabled ||
+      g_ui.active_page == toolbox::Page::PayloadsUpdates)
+    onion::shellui::payload_center::bind_installed_page(Instance);
 
   if (!ensure_set_value_method())
     return -1;

@@ -80,6 +80,47 @@ static OnPressResult prefix_id_payload_run(OnPressContext &ctx) {
   return OnPressResult::Consumed;
 }
 
+bool shellui_payload_set_autostart(PayloadEntry &entry, bool enabled) {
+  const std::string marker = entry.shellui_path + ".auto_start";
+  if (!enabled) {
+    /* Disabling only removes the boot marker; a running payload keeps running. */
+    unlink(marker.c_str());
+    return true;
+  }
+
+  /* Rebuild the whole enabled order so the new payload is last and the
+   * priorities stay unique: 1000, 990, 980, ... */
+  std::vector<PayloadEntry *> ordered;
+  for (auto &other : g_ui.payloads_list) {
+    if (other.id == entry.id)
+      continue;
+    if (access((other.shellui_path + ".auto_start").c_str(), F_OK) != 0)
+      continue;
+    ordered.push_back(&other);
+  }
+  ordered.push_back(&entry);
+
+  bool saved = true;
+  for (std::size_t i = 0; i < ordered.size(); ++i) {
+    OnionPayloadConfig config;
+    onion_payload_config_load(ordered[i]->shellui_path.c_str(), &config);
+    config.priority = std::max(0, 1000 - static_cast<int>(i) * 10);
+    if (!onion_payload_config_save(ordered[i]->shellui_path.c_str(), &config)) {
+      notify("notify.payload.config_save_failed", ordered[i]->name.c_str());
+      saved = false;
+    }
+    ordered[i]->config = config;
+  }
+
+  const int fd = open(marker.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0666);
+  if (fd < 0) {
+    notify("notify.payload.autostart_file");
+    return false;
+  }
+  close(fd);
+  return saved;
+}
+
 static OnPressResult prefix_id_enabled(OnPressContext &ctx) {
   if (ctx.id.rfind(kEnabledPrefix, 0) != 0)
     return OnPressResult::NotMine;
@@ -87,41 +128,7 @@ static OnPressResult prefix_id_enabled(OnPressContext &ctx) {
   if (!entry)
     return OnPressResult::Consumed;
 
-  const std::string marker = entry->shellui_path + ".auto_start";
-  if (!control_enabled(ctx.value)) {
-    /* Disabling only removes the boot marker; a running payload keeps running. */
-    unlink(marker.c_str());
-    return OnPressResult::Consumed;
-  }
-
-  /* Append at the end: the lowest current priority minus ten. */
-  int priority = 990;
-  bool found_other = false;
-  int lowest = 999;
-  for (const auto &other : g_ui.payloads_list) {
-    if (other.id == entry->id)
-      continue;
-    if (access((other.shellui_path + ".auto_start").c_str(), F_OK) != 0)
-      continue;
-    OnionPayloadConfig other_config;
-    onion_payload_config_load(other.shellui_path.c_str(), &other_config);
-    lowest = std::min(lowest, other_config.priority);
-    found_other = true;
-  }
-  if (found_other)
-    priority = std::max(0, lowest - 10);
-  OnionPayloadConfig config;
-  onion_payload_config_load(entry->shellui_path.c_str(), &config);
-  config.priority = priority;
-  if (!onion_payload_config_save(entry->shellui_path.c_str(), &config))
-    notify("notify.payload.config_save_failed", entry->name.c_str());
-  entry->config = config;
-
-  const int fd = open(marker.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0666);
-  if (fd < 0)
-    notify("notify.payload.autostart_file");
-  else
-    close(fd);
+  (void)shellui_payload_set_autostart(*entry, control_enabled(ctx.value));
   return OnPressResult::Consumed;
 }
 

@@ -4,6 +4,7 @@
 #include "hooked_funcs.hpp"
 #include "ipc.hpp"
 #include "payload_progress.hpp"
+#include "settings_page_refresh.hpp"
 #include "shellui_payload_state.hpp"
 #include "shellui_payloads.hpp"
 #include "shellui_state.hpp"
@@ -51,11 +52,11 @@ struct Installed {
   std::string name;
   std::string version;
   std::string last_update;
+  std::string icon_key;
   bool autostart = false;
 };
 
 std::vector<Entry> s_entries;
-std::vector<std::string> s_categories;
 std::map<std::string, Installed> s_installed;
 onion::payload_catalog::SourcesFile s_sources;
 long long s_cache_stamp = -1;
@@ -63,6 +64,13 @@ uint64_t s_prompt_token = 0;
 bool s_prompt_pending = false;
 enum class PromptKind { None, AddSource, Search };
 PromptKind s_prompt_kind = PromptKind::None;
+
+MonoObject *s_installed_page = nullptr;
+std::string s_pending_post_identity;
+std::string s_pending_post_name;
+std::string s_post_identity;
+std::string s_post_name;
+bool s_pending_navigate_installed = false;
 
 std::string alias_data(std::string_view path) {
   if (path.starts_with(ONION_DIST_DATA_ROOT))
@@ -160,6 +168,7 @@ void scan_payloads() {
           if (installed.version.empty())
             installed.version = json_string(root, "version");
           installed.last_update = json_string(root, "last_update");
+          installed.icon_key = json_string(root, "icon_key");
           cJSON_Delete(root);
         }
       }
@@ -190,7 +199,6 @@ std::string selection_for(const onion::payload_catalog::Source &source,
 
 void rebuild() {
   s_entries.clear();
-  s_categories.clear();
   for (const auto &source : s_sources.sources) {
     onion::payload_catalog::Catalog catalog;
     if (!load_catalog(source, &catalog))
@@ -211,15 +219,12 @@ void rebuild() {
         entry.installed_path = found->second.path;
         entry.identity = found->second.identity;
         entry.installed_version = found->second.version;
+        entry.icon_key = found->second.icon_key;
         entry.update_available =
             onion::payload_catalog::compare_versions(
                 item.version, item.last_update, found->second.version,
                 found->second.last_update) > 0;
       }
-      if (!item.category.empty() &&
-          std::find(s_categories.begin(), s_categories.end(), item.category) ==
-              s_categories.end())
-        s_categories.push_back(item.category);
       s_entries.push_back(std::move(entry));
     }
   }
@@ -265,6 +270,23 @@ void reload(bool force) {
 }
 
 void Tick() {
+  if (s_pending_navigate_installed && !toolbox_is_stack_under_transition()) {
+    s_pending_navigate_installed = false;
+    if (!toolbox_push_resource("payloads.xml"))
+      notify("notify.payload_center.navigation_failed");
+  }
+
+  if (!s_pending_post_identity.empty() && !toolbox_is_stack_under_transition() &&
+      g_ui.active_page != toolbox::Page::PayloadProgress &&
+      g_ui.active_page != toolbox::Page::PayloadPostInstall) {
+    s_post_identity = std::move(s_pending_post_identity);
+    s_post_name = std::move(s_pending_post_name);
+    s_pending_post_identity.clear();
+    s_pending_post_name.clear();
+    if (!toolbox_push_resource("pldc_post_install.xml"))
+      notify("notify.payload_center.navigation_failed");
+  }
+
   if (!s_prompt_pending)
     return;
   bool confirmed = false;
@@ -290,18 +312,23 @@ void Tick() {
     notify("notify.payload_center.source_added");
   } else if (kind == PromptKind::Search) {
     g_ui.pldc_query = onion::payload_catalog::trim(typed);
-    toolbox_push_resource("pldc_list.xml");
+    toolbox_push_resource("pldc_browse.xml");
   }
 }
 
 const std::vector<Entry> &entries() { return s_entries; }
 
+int updates_available() {
+  int count = 0;
+  for (const auto &entry : s_entries)
+    if (entry.update_available)
+      ++count;
+  return count;
+}
+
 std::vector<const Entry *> visible_entries() {
   std::vector<const Entry *> out;
   for (const auto &entry : s_entries) {
-    if (!g_ui.pldc_category.empty() &&
-        entry.item.category != g_ui.pldc_category)
-      continue;
     if (!entry_matches_query(entry))
       continue;
     out.push_back(&entry);
@@ -318,8 +345,6 @@ bool select_visible_index(std::size_t index) {
   g_ui.active_pldc_item = visible[index]->selection;
   return true;
 }
-
-std::vector<std::string> categories() { return s_categories; }
 
 const std::vector<onion::payload_catalog::Source> &sources() {
   return s_sources.sources;
@@ -457,6 +482,58 @@ void request_search() {
   }
   s_prompt_kind = PromptKind::Search;
   s_prompt_pending = true;
+}
+
+void bind_installed_page(MonoObject *page) { s_installed_page = page; }
+
+void release_installed_page(MonoObject *page) {
+  if (s_installed_page == page)
+    s_installed_page = nullptr;
+}
+
+bool refresh_installed_page() {
+  reload(true);
+  g_ui.payloads_list = shellui_scan_payloads();
+  if (!s_installed_page)
+    return false;
+  onion::shellui::settings::refresh(s_installed_page);
+  return true;
+}
+
+void request_post_install(std::string identity, std::string name) {
+  if (identity.empty())
+    return;
+  s_pending_post_identity = std::move(identity);
+  s_pending_post_name = std::move(name);
+}
+
+std::string post_install_identity() { return s_post_identity; }
+
+std::string post_install_name() { return s_post_name; }
+
+bool post_install_autostart_enabled() {
+  const std::string &identity = s_post_identity;
+  if (identity.empty())
+    return false;
+  for (const auto &entry : shellui_scan_payloads()) {
+    if (entry.id == identity)
+      return access((entry.shellui_path + ".auto_start").c_str(), F_OK) == 0;
+  }
+  return false;
+}
+
+void clear_post_install() {
+  s_pending_post_identity.clear();
+  s_pending_post_name.clear();
+  s_post_identity.clear();
+  s_post_name.clear();
+}
+
+void request_navigate_installed() { s_pending_navigate_installed = true; }
+
+void clear_post_install_page() {
+  s_post_identity.clear();
+  s_post_name.clear();
 }
 
 bool remove_source(std::string_view source_id) {
