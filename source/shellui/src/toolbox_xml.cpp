@@ -370,63 +370,76 @@ void generate_payload_xml(std::string& xml_buffer) {
   xml_buffer = onion::shellui::settings::publish(model, payloads_model);
 }
 
-void generate_payload_config_xml(std::string& xml_buffer,
+static bool payload_config_model(ps5ui::Node& model,
                                  const std::string& payload_id) {
+  if (g_ui.payloads_list.empty())
+    g_ui.payloads_list = shellui_scan_payloads();
   const auto found = std::find_if(
       g_ui.payloads_list.begin(), g_ui.payloads_list.end(),
       [&](const PayloadEntry& entry) { return entry.id == payload_id; });
   if (found == g_ui.payloads_list.end()) {
     ps5ui::Page page("id_payload_config", toolbox_i18n::tr("payload.title"));
     page.label("id_payload_missing", toolbox_i18n::tr("payload.missing"));
-    xml_buffer = page.build();
-  } else {
-    const bool running = shellui_payload_is_running(found->tid.c_str());
-    const std::string auto_path = found->shellui_path + ".auto_start";
-    const bool auto_start = if_exists(auto_path.c_str());
-    onion_payload_config_load(found->shellui_path.c_str(), &found->config);
-    const PayloadMetaView meta = payload_meta_view(found->shellui_path);
-    ps5ui::Page page("id_payload_config", found->name);
-    page.label("id_payload_path", found->path)
-        .toggle("id_payload_run_" + found->id,
-                toolbox_i18n::tr("payload.current_session"), running,
-                toolbox_i18n::tr("payload.current_session.sub"))
-        .toggle("id_payload_autostart_" + found->id,
-                toolbox_i18n::tr("payload.next_autostart"), auto_start,
-                toolbox_i18n::tr("payload.next_autostart.sub"));
-    if (meta.present) {
-      page.label("id_payload_meta_version", meta.version)
-          .label("id_payload_meta_source", meta.source_name)
-          .label("id_payload_meta_updated", meta.last_update);
-      page.button("id_payload_update_" + found->id,
-                  toolbox_i18n::tr("payload_center.update"),
-                  toolbox_i18n::tr("payload_center.update.sub"),
-                  meta.source_name.empty() ? std::nullopt
-                                           : std::optional<std::string>(
-                                                 meta.source_name));
-      page.button("id_payload_remove_" + found->id,
-                  toolbox_i18n::tr("payload_center.remove"),
-                  toolbox_i18n::tr("payload_center.remove.sub"), std::nullopt,
-                  std::nullopt, ps5ui::Style::None,
-                  toolbox_i18n::format("payload_center.confirm.remove_fmt",
-                                       found->name.c_str()),
-                  toolbox_i18n::tr("pkg.msg.ok"));
-    }
-    page.button("id_payload_move_up_" + found->id,
-                toolbox_i18n::tr("payload_center.move_up"), std::nullopt)
-        .button("id_payload_move_down_" + found->id,
-                toolbox_i18n::tr("payload_center.move_down"), std::nullopt)
-        .text_field("id_payload_priority_" + found->id,
-                    toolbox_i18n::tr("payload.priority"),
-                    toolbox_i18n::tr("payload.priority.sub"), "number", "1", "3",
-                    std::nullopt, std::nullopt, std::nullopt,
-                    std::to_string(found->config.priority))
-        .text_field("id_payload_delay_" + found->id,
-                    toolbox_i18n::tr("payload.delay"),
-                    toolbox_i18n::tr("payload.delay.sub"), "number", "1", "3",
-                    std::nullopt, std::nullopt, std::nullopt,
-                    std::to_string(found->config.delay_seconds));
-    xml_buffer = page.build();
+    model = page.root();
+    return true;
   }
+  const bool running = shellui_payload_is_running(found->tid.c_str());
+  const std::string auto_path = found->shellui_path + ".auto_start";
+  const bool auto_start = if_exists(auto_path.c_str());
+  onion_payload_config_load(found->shellui_path.c_str(), &found->config);
+  const PayloadMetaView meta = payload_meta_view(found->shellui_path);
+  ps5ui::Page page("id_payload_config", found->name);
+  page.label("id_payload_path", found->path)
+      .toggle("id_payload_run_" + found->id,
+              toolbox_i18n::tr("payload.current_session"), running,
+              toolbox_i18n::tr("payload.current_session.sub"))
+      .toggle("id_payload_autostart_" + found->id,
+              toolbox_i18n::tr("payload.next_autostart"), auto_start,
+              toolbox_i18n::tr("payload.next_autostart.sub"));
+  if (meta.present) {
+    page.label("id_payload_meta_version", meta.version)
+        .label("id_payload_meta_source", meta.source_name)
+        .label("id_payload_meta_updated", meta.last_update);
+    page.button("id_payload_update_" + found->id,
+                toolbox_i18n::tr("payload_center.update"),
+                toolbox_i18n::tr("payload_center.update.sub"),
+                meta.source_name.empty()
+                    ? std::nullopt
+                    : std::optional<std::string>(meta.source_name));
+    page.button("id_payload_remove_" + found->id,
+                toolbox_i18n::tr("payload_center.remove"),
+                toolbox_i18n::tr("payload_center.remove.sub"), std::nullopt,
+                std::nullopt, ps5ui::Style::None,
+                toolbox_i18n::format("payload_center.confirm.remove_fmt",
+                                     found->name.c_str()),
+                toolbox_i18n::tr("pkg.msg.ok"));
+  }
+  page.button("id_payload_move_up_" + found->id,
+              toolbox_i18n::tr("payload_center.move_up"), std::nullopt)
+      .button("id_payload_move_down_" + found->id,
+              toolbox_i18n::tr("payload_center.move_down"), std::nullopt)
+      .text_field("id_payload_priority_" + found->id,
+                  toolbox_i18n::tr("payload.priority"),
+                  toolbox_i18n::tr("payload.priority.sub"), "number", "1", "3",
+                  std::nullopt, std::nullopt, std::nullopt,
+                  std::to_string(found->config.priority))
+      .text_field("id_payload_delay_" + found->id,
+                  toolbox_i18n::tr("payload.delay"),
+                  toolbox_i18n::tr("payload.delay.sub"), "number", "1", "3",
+                  std::nullopt, std::nullopt, std::nullopt,
+                  std::to_string(found->config.delay_seconds));
+  model = page.root();
+  return true;
+}
+
+void generate_payload_config_xml(std::string& xml_buffer,
+                                 const std::string& payload_id) {
+  ps5ui::Node model;
+  payload_config_model(model, payload_id);
+  xml_buffer = onion::shellui::settings::publish(
+      model, [payload_id](ps5ui::Node& next) {
+        return payload_config_model(next, payload_id);
+      });
 }
 
 void generate_overlay_metric_xml(std::string& xml_buffer,
