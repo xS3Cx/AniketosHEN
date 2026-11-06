@@ -37,6 +37,7 @@
 #include "shellui_state.hpp"
 #include "shellui_payload_state.hpp"
 #include "shellui_payloads.hpp"
+#include "payload_center.hpp"
 #include "toolbox_helpers.hpp"
 #include "overlay_metrics.hpp"
 #include "toolbox_route.hpp"
@@ -426,24 +427,31 @@ static bool payload_config_model(ps5ui::Node& model,
       .toggle("id_payload_run_" + found->id,
               toolbox_i18n::tr("payload.current_session"), running,
               toolbox_i18n::tr("payload.current_session.sub"));
+  onion::shellui::payload_center::reload(true);
+  const auto *catalog_entry =
+      onion::shellui::payload_center::find_installed_identity(found->id);
+  const bool update_available =
+      catalog_entry && catalog_entry->update_available;
   if (meta.present) {
     page.label("id_payload_meta_version", meta.version)
         .label("id_payload_meta_source", meta.source_name)
         .label("id_payload_meta_updated", meta.last_update);
-    page.button("id_payload_update_" + found->id,
-                toolbox_i18n::tr("payload_center.update"),
-                toolbox_i18n::tr("payload_center.update.sub"),
-                meta.source_name.empty()
-                    ? std::nullopt
-                    : std::optional<std::string>(meta.source_name),
-                std::nullopt, ps5ui::Style::None,
-                running ? std::optional<std::string>(toolbox_i18n::format(
-                              "payload_center.confirm.install_fmt",
-                              found->name.c_str()))
-                        : std::nullopt,
-                running ? std::optional<std::string>(
-                              toolbox_i18n::confirm_phrase())
-                        : std::nullopt);
+    if (update_available) {
+      page.button("id_payload_update_" + found->id,
+                  toolbox_i18n::tr("payload_center.update"),
+                  toolbox_i18n::tr("payload_center.update.sub"),
+                  meta.source_name.empty()
+                      ? std::nullopt
+                      : std::optional<std::string>(meta.source_name),
+                  std::nullopt, ps5ui::Style::None,
+                  running ? std::optional<std::string>(toolbox_i18n::format(
+                                "payload_center.confirm.install_fmt",
+                                found->name.c_str()))
+                          : std::nullopt,
+                  running ? std::optional<std::string>(
+                                toolbox_i18n::confirm_phrase())
+                          : std::nullopt);
+    }
     page.button("id_payload_remove_" + found->id,
                 toolbox_i18n::tr("payload_center.remove"),
                 toolbox_i18n::tr("payload_center.remove.sub"), std::nullopt,

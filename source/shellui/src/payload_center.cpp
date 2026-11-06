@@ -358,6 +358,13 @@ const Entry *find_entry(std::string_view selection) {
   return nullptr;
 }
 
+const Entry *find_installed_identity(std::string_view identity) {
+  for (const auto &entry : s_entries)
+    if (entry.installed && entry.identity == identity)
+      return &entry;
+  return nullptr;
+}
+
 std::string installed_identity(std::string_view selection) {
   const Entry *entry = find_entry(selection);
   return entry && entry->installed ? entry->identity : std::string{};
@@ -504,6 +511,7 @@ bool refresh_installed_page() {
 void request_post_install(std::string identity, std::string name) {
   if (identity.empty())
     return;
+  reload(true);
   s_pending_post_identity = std::move(identity);
   s_pending_post_name = std::move(name);
 }

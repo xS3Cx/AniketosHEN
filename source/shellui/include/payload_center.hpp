@@ -34,6 +34,7 @@ const std::vector<Entry> &entries();
 int updates_available();
 const std::vector<onion::payload_catalog::Source> &sources();
 const Entry *find_entry(std::string_view selection);
+const Entry *find_installed_identity(std::string_view identity);
 std::string installed_identity(std::string_view selection);
 bool entry_matches_query(const Entry &entry);
 std::vector<const Entry *> visible_entries();
