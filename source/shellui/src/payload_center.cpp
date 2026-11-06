@@ -25,6 +25,7 @@
 #include <ctime>
 #include <dirent.h>
 #include <map>
+#include <mutex>
 #include <string>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -65,6 +66,8 @@ enum class PromptKind { None, AddSource, Search };
 PromptKind s_prompt_kind = PromptKind::None;
 
 MonoObject *s_installed_page = nullptr;
+std::mutex s_pending_mu;
+bool s_pending_reload = false;
 std::string s_pending_post_identity;
 std::string s_pending_post_name;
 std::string s_post_identity;
@@ -269,6 +272,15 @@ void reload(bool force) {
 }
 
 void Tick() {
+  bool force_reload = false;
+  {
+    std::lock_guard<std::mutex> lock(s_pending_mu);
+    force_reload = s_pending_reload;
+    s_pending_reload = false;
+  }
+  if (force_reload)
+    reload(true);
+
   if (s_pending_navigate_installed &&
       g_ui.active_page != toolbox::Page::PayloadPostInstall &&
       !toolbox_is_stack_under_transition()) {
@@ -277,13 +289,22 @@ void Tick() {
       notify("notify.payload_center.navigation_failed");
   }
 
-  if (!s_pending_post_identity.empty() && !toolbox_is_stack_under_transition() &&
+  std::string pending_identity;
+  std::string pending_name;
+  if (!toolbox_is_stack_under_transition() &&
       g_ui.active_page != toolbox::Page::PayloadProgress &&
       g_ui.active_page != toolbox::Page::PayloadPostInstall) {
-    s_post_identity = std::move(s_pending_post_identity);
-    s_post_name = std::move(s_pending_post_name);
-    s_pending_post_identity.clear();
-    s_pending_post_name.clear();
+    std::lock_guard<std::mutex> lock(s_pending_mu);
+    if (!s_pending_post_identity.empty()) {
+      pending_identity = std::move(s_pending_post_identity);
+      pending_name = std::move(s_pending_post_name);
+      s_pending_post_identity.clear();
+      s_pending_post_name.clear();
+    }
+  }
+  if (!pending_identity.empty()) {
+    s_post_identity = std::move(pending_identity);
+    s_post_name = std::move(pending_name);
     if (!toolbox_push_resource("pldc_post_install.xml"))
       notify("notify.payload_center.navigation_failed");
   }
@@ -511,7 +532,8 @@ bool refresh_installed_page() {
 void request_post_install(std::string identity, std::string name) {
   if (identity.empty())
     return;
-  reload(true);
+  std::lock_guard<std::mutex> lock(s_pending_mu);
+  s_pending_reload = true;
   s_pending_post_identity = std::move(identity);
   s_pending_post_name = std::move(name);
 }

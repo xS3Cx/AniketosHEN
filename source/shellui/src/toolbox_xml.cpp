@@ -452,6 +452,10 @@ static bool payload_config_model(ps5ui::Node& model,
                                 toolbox_i18n::confirm_phrase())
                           : std::nullopt);
     }
+  }
+  const bool removable =
+      found->path.rfind(ONION_DIST_DATA_ROOT "/payloads/", 0) == 0;
+  if (removable) {
     page.button("id_payload_remove_" + found->id,
                 toolbox_i18n::tr("payload_center.remove"),
                 toolbox_i18n::tr("payload_center.remove.sub"), std::nullopt,
