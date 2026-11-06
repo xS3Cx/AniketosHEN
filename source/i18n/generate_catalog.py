@@ -27,7 +27,6 @@ DUPLICATED_INTERNAL_SPACE = re.compile(r"\S {2,}\S")
 REQUIRED_TOKENS = {
     "toolbox": {
         "group.payloads.sub": ("Kstuff",),
-        "plugins.link.sub": ("Kstuff",),
     },
     "notifications": {
         "notify.kstuff.loading": ("Kstuff",),

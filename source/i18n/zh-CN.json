@@ -303,7 +303,7 @@
     "cheats.enable_fmt": "为 %s 启用/禁用 %s",
     "cheats.group.unnamed": "来源",
     "plugins.link": "插件",
-    "plugins.link.sub": "管理 Kstuff 和已安装插件",
+    "plugins.link.sub": "管理已安装的插件",
     "sprx.link": "SPRX",
     "sprx.link.sub": "管理游戏进程 SPRX 和 PRX 模块",
     "sprx.title": "★ AniketosHEN SPRX",
