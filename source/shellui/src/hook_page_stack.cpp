@@ -47,6 +47,10 @@ void SettingPageStackOnPopping_Hook(MonoObject *instance,
         g_ui.leave_page(toolbox::Page::DynamicPlugin);
       LOG_DEBUG("dynamic_plugin_xml: page popped; dynamic_parent=%d",
                 dynamic_parent ? 1 : 0);
+    } else if (g_ui.active_page == toolbox::Page::PayloadPostInstall) {
+      onion::shellui::payload_center::clear_post_install_page();
+      g_ui.leave_page(toolbox::Page::PayloadPostInstall);
+      LOG_DEBUG("payload_center: post-install page popped");
     } else if (toolbox::restores_parent_on_pop(g_ui.active_page)) {
       const toolbox::Page child = g_ui.active_page;
       g_ui.leave_page(child);

@@ -47,7 +47,6 @@ void request_add_source();
 void request_search();
 bool remove_source(std::string_view source_id);
 void clear_cache();
-std::string ftp_hint();
 std::string last_refresh_text();
 
 /* Installed page binding for in-place refresh. */
@@ -60,7 +59,6 @@ void request_post_install(std::string identity, std::string name);
 std::string post_install_identity();
 std::string post_install_name();
 bool post_install_autostart_enabled();
-void clear_post_install();
 void request_navigate_installed();
 void clear_post_install_page();
 

@@ -522,13 +522,6 @@ bool post_install_autostart_enabled() {
   return false;
 }
 
-void clear_post_install() {
-  s_pending_post_identity.clear();
-  s_pending_post_name.clear();
-  s_post_identity.clear();
-  s_post_name.clear();
-}
-
 void request_navigate_installed() { s_pending_navigate_installed = true; }
 
 void clear_post_install_page() {
@@ -569,14 +562,6 @@ void clear_cache() {
     closedir(dir);
   }
   reload(true);
-}
-
-std::string ftp_hint() {
-  char address[64] = {};
-  if (onion_net_get_ip_address(address, sizeof(address)) != 0 || !address[0])
-    return {};
-  return std::string("ftp://") + address + ":2121 -> " +
-         ONION_DIST_DATA_ROOT "/payloads";
 }
 
 std::string last_refresh_text() {

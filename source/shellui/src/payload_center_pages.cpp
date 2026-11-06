@@ -250,6 +250,8 @@ std::string browse_subtitle(const Entry &entry) {
 
 bool installed_model(ps5ui::Node &model, InstalledFilter filter) {
   reload(false);
+  /* The catalog search belongs to the Browse page visit. */
+  g_ui.pldc_query.clear();
   const std::vector<InstalledRow> all = installed_rows();
   const std::string root_id =
       filter == InstalledFilter::Enabled
