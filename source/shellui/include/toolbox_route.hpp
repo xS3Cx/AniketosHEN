@@ -38,6 +38,7 @@ enum class Page : unsigned char {
   PayloadBrowse,
   PayloadDetail,
   PayloadSettings,
+  PayloadIncluded,
   PayloadPostInstall,
   PayloadProgress,
 };
@@ -79,6 +80,7 @@ struct RouteFlags {
   bool is_payload_browse = false;
   bool is_payload_detail = false;
   bool is_payload_settings = false;
+  bool is_payload_included = false;
   bool is_payload_post_install = false;
   bool is_payload_progress = false;
 };
@@ -113,6 +115,7 @@ enum class PayloadCenterPage : unsigned char {
   Browse,
   Detail,
   Settings,
+  Included,
   PostInstall,
   Progress,
 };
@@ -176,6 +179,8 @@ inline PayloadCenterPage parse_payload_center_resource(std::string_view resource
     return PayloadCenterPage::Detail;
   if (relative == "pldc_settings.xml")
     return PayloadCenterPage::Settings;
+  if (relative == "pldc_included.xml")
+    return PayloadCenterPage::Included;
   if (relative == "pldc_post_install.xml")
     return PayloadCenterPage::PostInstall;
   if (relative == "pldc_progress.xml")

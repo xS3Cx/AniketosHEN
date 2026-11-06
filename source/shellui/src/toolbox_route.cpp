@@ -41,6 +41,7 @@ RouteResult resolve_resource(const RouteInput &in) {
   out.flags.is_payload_browse = pldc == PayloadCenterPage::Browse;
   out.flags.is_payload_detail = pldc == PayloadCenterPage::Detail;
   out.flags.is_payload_settings = pldc == PayloadCenterPage::Settings;
+  out.flags.is_payload_included = pldc == PayloadCenterPage::Included;
   out.flags.is_payload_post_install =
       pldc == PayloadCenterPage::PostInstall;
   out.flags.is_payload_progress = pldc == PayloadCenterPage::Progress;
@@ -98,6 +99,8 @@ RouteResult resolve_resource(const RouteInput &in) {
     out.page = Page::PayloadDetail;
   } else if (out.flags.is_payload_settings) {
     out.page = Page::PayloadSettings;
+  } else if (out.flags.is_payload_included) {
+    out.page = Page::PayloadIncluded;
   } else if (out.flags.is_payload_post_install) {
     out.page = Page::PayloadPostInstall;
   } else if (out.flags.is_payload_progress) {

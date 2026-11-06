@@ -68,6 +68,7 @@ constexpr OnPressDomain onpress_domain_for_page(Page page) {
   case Page::PayloadBrowse:
   case Page::PayloadDetail:
   case Page::PayloadSettings:
+  case Page::PayloadIncluded:
   case Page::PayloadPostInstall:
     return OnPressDomain::PayloadCenter;
   case Page::PayloadProgress:

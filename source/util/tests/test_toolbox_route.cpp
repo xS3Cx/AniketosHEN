@@ -476,6 +476,7 @@ static int test_payload_center_pages(void) {
       {"pldc_browse.xml", Page::PayloadBrowse},
       {"pldc_detail.xml", Page::PayloadDetail},
       {"pldc_settings.xml", Page::PayloadSettings},
+      {"pldc_included.xml", Page::PayloadIncluded},
       {"pldc_post_install.xml", Page::PayloadPostInstall},
       {"pldc_progress.xml", Page::PayloadProgress},
   };

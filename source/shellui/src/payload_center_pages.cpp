@@ -395,7 +395,9 @@ bool browse_model(ps5ui::Node &model) {
   ps5ui::Page page("id_pldc_browse",
                    toolbox_i18n::tr("payload_center.browse"));
   page.button("id_pldc_search", toolbox_i18n::tr("payload_center.search"),
-              toolbox_i18n::tr("payload_center.search.sub"));
+              toolbox_i18n::tr("payload_center.search.sub"))
+      .button("id_pldc_refresh", toolbox_i18n::tr("payload_center.refresh"),
+              std::nullopt);
   if (!g_ui.pldc_query.empty())
     page.button("id_pldc_clear_filter",
                 toolbox_i18n::tr("payload_center.clear_filter"));
@@ -411,8 +413,10 @@ bool browse_model(ps5ui::Node &model) {
     page.label("id_pldc_browse_empty",
                toolbox_i18n::tr("payload_center.list.empty"),
                ps5ui::Style::Center);
-  page.button("id_pldc_refresh", toolbox_i18n::tr("payload_center.refresh"),
-              std::nullopt);
+  page.link("id_pldc_settings",
+            toolbox_i18n::tr("payload_center.catalog_settings"),
+            "pldc_settings.xml",
+            toolbox_i18n::tr("payload_center.catalog_settings.sub"));
   model = page.root();
   return true;
 }
@@ -531,11 +535,33 @@ void generate_center_xml(std::string &xml) {
             toolbox_i18n::tr("payload_center.autostart.sub"))
       .link("id_pldc_browse", toolbox_i18n::tr("payload_center.browse"),
             "pldc_browse.xml", toolbox_i18n::tr("payload_center.browse.sub"))
-      .link("id_pldc_settings",
-            toolbox_i18n::tr("payload_center.catalog_settings"),
-            "pldc_settings.xml",
-            toolbox_i18n::tr("payload_center.catalog_settings.sub"));
+      .link("id_pldc_included", toolbox_i18n::tr("payload_center.included"),
+            "pldc_included.xml",
+            toolbox_i18n::tr("payload_center.included.sub"));
   xml = page.build();
+}
+
+bool included_model(ps5ui::Node &model) {
+  ps5ui::Page page("id_pldc_included",
+                   toolbox_i18n::tr("payload_center.included.title"));
+  page.label("id_pldc_included_about",
+             toolbox_i18n::tr("payload_center.included.about"),
+             ps5ui::Style::Center)
+      .toggle("id_plugin_kstuff_autoload",
+              toolbox_i18n::tr("kstuff.autoload"), g_settings.kstuff_autoload,
+              toolbox_i18n::tr("kstuff.autoload.sub"))
+      .toggle("id_plugin_shadowmount_autoload",
+              toolbox_i18n::tr("shadowmount.autoload"),
+              g_settings.shadowmount_autoload,
+              toolbox_i18n::tr("shadowmount.autoload.sub"));
+  model = page.root();
+  return true;
+}
+
+void generate_included_xml(std::string &xml) {
+  ps5ui::Node model;
+  included_model(model);
+  xml = onion::shellui::settings::publish(model, included_model);
 }
 
 void generate_installed_xml(std::string &xml) {

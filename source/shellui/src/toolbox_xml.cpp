@@ -463,6 +463,17 @@ static bool payload_config_model(ps5ui::Node& model,
       .toggle("id_payload_run_" + found->id,
               toolbox_i18n::tr("payload.current_session"), running,
               toolbox_i18n::tr("payload.current_session.sub"));
+  const bool removable =
+      found->path.rfind(ONION_DIST_DATA_ROOT "/payloads/", 0) == 0;
+  if (removable) {
+    page.button("id_payload_remove_" + found->id,
+                toolbox_i18n::tr("payload_center.remove"),
+                toolbox_i18n::tr("payload_center.remove.sub"), std::nullopt,
+                std::nullopt, ps5ui::Style::None,
+                toolbox_i18n::format("payload_center.confirm.remove_fmt",
+                                     found->name.c_str()),
+                toolbox_i18n::confirm_phrase());
+  }
   onion::shellui::payload_center::reload(true);
   const auto *catalog_entry =
       onion::shellui::payload_center::find_installed_identity(found->id);
@@ -523,17 +534,6 @@ static bool payload_config_model(ps5ui::Node& model,
                                 toolbox_i18n::confirm_phrase())
                           : std::nullopt);
     }
-  }
-  const bool removable =
-      found->path.rfind(ONION_DIST_DATA_ROOT "/payloads/", 0) == 0;
-  if (removable) {
-    page.button("id_payload_remove_" + found->id,
-                toolbox_i18n::tr("payload_center.remove"),
-                toolbox_i18n::tr("payload_center.remove.sub"), std::nullopt,
-                std::nullopt, ps5ui::Style::None,
-                toolbox_i18n::format("payload_center.confirm.remove_fmt",
-                                     found->name.c_str()),
-                toolbox_i18n::confirm_phrase());
   }
   model = page.root();
   return true;
