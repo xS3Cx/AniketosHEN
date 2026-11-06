@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 
+#include <onion/payload_catalog.hpp>
 #include <onion/payload_catalog_policy.hpp>
 
 namespace onion::payload_center {
