@@ -11,8 +11,6 @@ struct MonoObject;
 
 namespace onion::shellui::payload_center {
 
-enum class InstalledFilter : unsigned char { All, Enabled, Updates };
-
 struct Entry {
   onion::payload_catalog::Item item;
   std::string source_id;
@@ -63,7 +61,7 @@ bool post_install_autostart_enabled();
 void request_navigate_installed();
 void clear_post_install_page();
 
-void generate_installed_xml(std::string &xml, InstalledFilter filter);
+void generate_installed_xml(std::string &xml);
 void generate_autostart_xml(std::string &xml);
 void generate_order_xml(std::string &xml);
 void generate_browse_xml(std::string &xml);

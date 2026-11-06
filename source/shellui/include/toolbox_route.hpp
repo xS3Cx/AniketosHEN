@@ -15,8 +15,6 @@ enum class Page : unsigned char {
   None = 0,           /**< unknown → original stream */
   DebugSettings,      /**< embedded toolbox XML */
   Payloads,
-  PayloadsEnabled,    /**< installed payloads with autostart enabled */
-  PayloadsUpdates,    /**< installed payloads with updates available */
   PayloadConfig,      /**< per-Payload configuration page */
   OverlayMetrics,     /**< overlay metric list (overlay_metrics.xml) */
   OverlayMetricConfig, /**< per-overlay metric page (overlay_<id>.xml) */
@@ -74,8 +72,6 @@ struct RouteFlags {
   bool is_cheat_progress = false;
   bool is_remote_play = false;
   bool is_plugin_progress = false;
-  bool is_payloads_enabled = false;
-  bool is_payloads_updates = false;
   bool is_payload_autostart = false;
   bool is_payload_order = false;
   bool is_payload_browse = false;
@@ -102,7 +98,6 @@ constexpr bool restores_parent_on_pop(Page page) {
          page == Page::SprxConfig ||
          page == Page::DynamicPlugin ||
          page == Page::PluginProgress ||
-         page == Page::PayloadsEnabled || page == Page::PayloadsUpdates ||
          page == Page::PayloadDetail || page == Page::PayloadOrder ||
          page == Page::PayloadPostInstall ||
          page == Page::PayloadProgress;
@@ -110,8 +105,6 @@ constexpr bool restores_parent_on_pop(Page page) {
 
 enum class PayloadCenterPage : unsigned char {
   None = 0,
-  InstalledEnabled,
-  InstalledUpdates,
   Autostart,
   Order,
   Browse,
@@ -168,10 +161,6 @@ inline PayloadCenterPage parse_payload_center_resource(std::string_view resource
   std::string_view relative;
   if (!settings_plugins_relative(resource, &relative))
     return PayloadCenterPage::None;
-  if (relative == "pldc_installed_enabled.xml")
-    return PayloadCenterPage::InstalledEnabled;
-  if (relative == "pldc_installed_updates.xml")
-    return PayloadCenterPage::InstalledUpdates;
   if (relative == "pldc_autostart.xml")
     return PayloadCenterPage::Autostart;
   if (relative == "pldc_order.xml")

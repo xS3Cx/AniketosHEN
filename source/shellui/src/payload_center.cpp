@@ -26,6 +26,7 @@
 #include <dirent.h>
 #include <map>
 #include <mutex>
+#include <set>
 #include <string>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -223,6 +224,7 @@ void rebuild() {
         entry.installed_version = found->second.version;
         entry.icon_key = found->second.icon_key;
         entry.update_available =
+            !item.version.empty() && !found->second.version.empty() &&
             onion::payload_catalog::compare_versions(
                 item.version, item.last_update, found->second.version,
                 found->second.last_update) > 0;
@@ -289,22 +291,20 @@ void Tick() {
       notify("notify.payload_center.navigation_failed");
   }
 
-  std::string pending_identity;
-  std::string pending_name;
+  bool show_post_install = false;
   if (!toolbox_is_stack_under_transition() &&
       g_ui.active_page != toolbox::Page::PayloadProgress &&
       g_ui.active_page != toolbox::Page::PayloadPostInstall) {
     std::lock_guard<std::mutex> lock(s_pending_mu);
     if (!s_pending_post_identity.empty()) {
-      pending_identity = std::move(s_pending_post_identity);
-      pending_name = std::move(s_pending_post_name);
+      s_post_identity = std::move(s_pending_post_identity);
+      s_post_name = std::move(s_pending_post_name);
       s_pending_post_identity.clear();
       s_pending_post_name.clear();
+      show_post_install = true;
     }
   }
-  if (!pending_identity.empty()) {
-    s_post_identity = std::move(pending_identity);
-    s_post_name = std::move(pending_name);
+  if (show_post_install) {
     if (!toolbox_push_resource("pldc_post_install.xml"))
       notify("notify.payload_center.navigation_failed");
   }
@@ -341,11 +341,11 @@ void Tick() {
 const std::vector<Entry> &entries() { return s_entries; }
 
 int updates_available() {
-  int count = 0;
+  std::set<std::string> identities;
   for (const auto &entry : s_entries)
-    if (entry.update_available)
-      ++count;
-  return count;
+    if (entry.update_available && !entry.identity.empty())
+      identities.insert(entry.identity);
+  return static_cast<int>(identities.size());
 }
 
 std::vector<const Entry *> visible_entries() {
@@ -354,8 +354,6 @@ std::vector<const Entry *> visible_entries() {
     if (!entry_matches_query(entry))
       continue;
     out.push_back(&entry);
-    if (out.size() >= 200)
-      break;
   }
   return out;
 }
@@ -540,12 +538,18 @@ void request_post_install(std::string identity, std::string name) {
   s_pending_post_name = std::move(name);
 }
 
-std::string post_install_identity() { return s_post_identity; }
+std::string post_install_identity() {
+  std::lock_guard<std::mutex> lock(s_pending_mu);
+  return s_post_identity;
+}
 
-std::string post_install_name() { return s_post_name; }
+std::string post_install_name() {
+  std::lock_guard<std::mutex> lock(s_pending_mu);
+  return s_post_name;
+}
 
 bool post_install_autostart_enabled() {
-  const std::string &identity = s_post_identity;
+  const std::string identity = post_install_identity();
   if (identity.empty())
     return false;
   for (const auto &entry : shellui_scan_payloads()) {
@@ -558,6 +562,7 @@ bool post_install_autostart_enabled() {
 void request_navigate_installed() { s_pending_navigate_installed = true; }
 
 void clear_post_install_page() {
+  std::lock_guard<std::mutex> lock(s_pending_mu);
   s_post_identity.clear();
   s_post_name.clear();
 }

@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdlib>
+#include <cstdlib>
 #include <fcntl.h>
 #include <string>
 #include <unistd.h>
@@ -147,8 +148,12 @@ OnPressResult pick_order(OnPressContext &ctx) {
   return OnPressResult::Handled;
 }
 
-OnPressResult move_order(OnPressContext &ctx, int direction) {
+OnPressResult order_selected(OnPressContext &ctx) {
   ctx.dirty = false;
+  char *end = nullptr;
+  const long position = std::strtol(ctx.value.c_str(), &end, 10);
+  if (ctx.value.empty() || !end || *end || position < 1)
+    return OnPressResult::Consumed;
   if (g_ui.payloads_list.empty())
     g_ui.payloads_list = shellui_scan_payloads();
 
@@ -156,52 +161,32 @@ OnPressResult move_order(OnPressContext &ctx, int direction) {
   for (auto &entry : g_ui.payloads_list)
     if (marker_present(entry))
       ordered.push_back(&entry);
+  if (position > static_cast<long>(ordered.size()))
+    return OnPressResult::Consumed;
 
   const auto selected = std::find_if(
-      ordered.begin(), ordered.end(), [&](const PayloadEntry *entry) {
+      ordered.begin(), ordered.end(),
+      [&](const PayloadEntry *entry) {
         return entry->id == g_ui.active_pldc_order;
       });
   if (selected == ordered.end())
     return OnPressResult::Consumed;
 
-  const std::ptrdiff_t index = selected - ordered.begin();
-  const std::ptrdiff_t target = index + direction;
-  if (target < 0 || target >= static_cast<std::ptrdiff_t>(ordered.size()))
-    return OnPressResult::Consumed;
-
-  std::swap(ordered[index], ordered[target]);
-  OnionPayloadConfig first{};
-  OnionPayloadConfig second{};
-  onion_payload_config_load(ordered[index]->shellui_path.c_str(), &first);
-  onion_payload_config_load(ordered[target]->shellui_path.c_str(), &second);
-  const bool tied = first.priority == second.priority;
-  std::swap(first.priority, second.priority);
-  if (tied) {
-    for (std::size_t i = 0; i < ordered.size(); ++i) {
-      OnionPayloadConfig config{};
-      onion_payload_config_load(ordered[i]->shellui_path.c_str(), &config);
-      config.priority = std::max(0, 1000 - static_cast<int>(i) * 10);
-      if (!onion_payload_config_save(ordered[i]->shellui_path.c_str(), &config))
-        notify("notify.payload.config_save_failed", ordered[i]->name.c_str());
-      ordered[i]->config = config;
-    }
-  } else {
-    if (!onion_payload_config_save(ordered[index]->shellui_path.c_str(), &first))
-      notify("notify.payload.config_save_failed", ordered[index]->name.c_str());
-    if (!onion_payload_config_save(ordered[target]->shellui_path.c_str(),
-                                   &second))
-      notify("notify.payload.config_save_failed", ordered[target]->name.c_str());
-    ordered[index]->config = first;
-    ordered[target]->config = second;
+  PayloadEntry *moving = *selected;
+  ordered.erase(selected);
+  ordered.insert(ordered.begin() + (position - 1), moving);
+  for (std::size_t i = 0; i < ordered.size(); ++i) {
+    OnionPayloadConfig config{};
+    onion_payload_config_load(ordered[i]->shellui_path.c_str(), &config);
+    config.priority = std::max(0, 1000 - static_cast<int>(i + 1) * 10);
+    if (!onion_payload_config_save(ordered[i]->shellui_path.c_str(), &config))
+      notify("notify.payload.config_save_failed", ordered[i]->name.c_str());
+    ordered[i]->config = config;
   }
   notify("notify.payload_center.order_saved");
   toolbox_pop_page();
   return OnPressResult::Consumed;
 }
-
-OnPressResult move_up(OnPressContext &ctx) { return move_order(ctx, -1); }
-
-OnPressResult move_down(OnPressContext &ctx) { return move_order(ctx, 1); }
 
 OnPressResult post_autostart(OnPressContext &ctx) {
   ctx.dirty = false;
@@ -246,8 +231,7 @@ const OnPressExactEntry kExact[] = {
     {"id_pldc_add_source", add_source},
     {"id_pldc_search", search},
     {"id_pldc_clear_filter", clear_filter},
-    {"id_pldc_move_up", move_up},
-    {"id_pldc_move_down", move_down},
+    {"id_pldc_order", order_selected},
     {"id_pldc_post_autostart", post_autostart},
     {"id_pldc_post_done", post_done},
     {"id_pldc_post_installed", post_installed},

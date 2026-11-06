@@ -1206,7 +1206,7 @@
     "payload_center.installed.summary_fmt": "%d installed · %d autostart · %d updates",
     "payload_center.installed.ftp_fmt": "FTP: ftp://%s:2121 -> /data/AniketosHEN/payloads",
     "payload_center.installed.ftp_path": "FTP: /data/AniketosHEN/payloads",
-    "payload_center.installed.usb": "or AniketosHEN/payloads on a USB drive",
+    "payload_center.installed.usb": "or USB: AniketosHEN/payloads",
     "payload_center.refresh_list": "Refresh list",
     "payload_center.filter.all": "All",
     "payload_center.filter.enabled": "Autostart",

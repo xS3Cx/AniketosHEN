@@ -128,18 +128,7 @@ uint64_t GetManifestResourceStream_Hook(uint64_t inst, MonoString *FileName) {
     generate_toolbox_xml(new_xml_string);
     break;
   case toolbox::Page::Payloads:
-    onion::shellui::payload_center::generate_installed_xml(
-        new_xml_string, onion::shellui::payload_center::InstalledFilter::All);
-    break;
-  case toolbox::Page::PayloadsEnabled:
-    onion::shellui::payload_center::generate_installed_xml(
-        new_xml_string,
-        onion::shellui::payload_center::InstalledFilter::Enabled);
-    break;
-  case toolbox::Page::PayloadsUpdates:
-    onion::shellui::payload_center::generate_installed_xml(
-        new_xml_string,
-        onion::shellui::payload_center::InstalledFilter::Updates);
+    onion::shellui::payload_center::generate_installed_xml(new_xml_string);
     break;
   case toolbox::Page::PayloadConfig: {
     std::string payload_id;

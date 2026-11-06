@@ -106,9 +106,7 @@ int OnPreCreate_Hook(MonoObject *Instance, MonoObject *element) {
   if (g_ui.active_page == toolbox::Page::RemotePlay)
     remote_play_bind_page(Instance);
 
-  if (g_ui.active_page == toolbox::Page::Payloads ||
-      g_ui.active_page == toolbox::Page::PayloadsEnabled ||
-      g_ui.active_page == toolbox::Page::PayloadsUpdates)
+  if (g_ui.active_page == toolbox::Page::Payloads)
     onion::shellui::payload_center::bind_installed_page(Instance);
 
   if (!ensure_set_value_method())

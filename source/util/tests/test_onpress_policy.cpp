@@ -66,10 +66,6 @@ static int test_page_domain_matrix(void) {
                    OnPressDomain::Sprx);
   TEST_ASSERT_TRUE(toolbox::onpress_domain_for_page(Page::Payloads) ==
                    OnPressDomain::PayloadCenter);
-  TEST_ASSERT_TRUE(toolbox::onpress_domain_for_page(Page::PayloadsEnabled) ==
-                   OnPressDomain::PayloadCenter);
-  TEST_ASSERT_TRUE(toolbox::onpress_domain_for_page(Page::PayloadsUpdates) ==
-                   OnPressDomain::PayloadCenter);
   TEST_ASSERT_TRUE(toolbox::onpress_domain_for_page(Page::PayloadAutostart) ==
                    OnPressDomain::PayloadCenter);
   TEST_ASSERT_TRUE(toolbox::onpress_domain_for_page(Page::PayloadOrder) ==

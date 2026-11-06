@@ -20,6 +20,7 @@
 #include <cstdio>
 #include <optional>
 #include <string>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <vector>
 
@@ -28,6 +29,7 @@ namespace {
 
 constexpr const char *kIconPlugins =
     ONION_DIST_USER_DATA_ROOT "/assets/icon_xml_plugins.png";
+constexpr std::size_t kMaxMetaBytes = 128 * 1024;
 
 bool marker_present(const PayloadEntry &entry) {
   return if_exists((entry.shellui_path + ".auto_start").c_str());
@@ -49,6 +51,12 @@ MetaView meta_view(const std::string &shellui_path) {
   FILE *file = std::fopen((shellui_path + ".meta.json").c_str(), "rb");
   if (!file)
     return view;
+  struct stat st {};
+  if (fstat(fileno(file), &st) != 0 || st.st_size < 0 ||
+      static_cast<std::size_t>(st.st_size) > kMaxMetaBytes) {
+    std::fclose(file);
+    return view;
+  }
   std::string raw;
   char buffer[4096];
   std::size_t read_bytes = 0;
@@ -178,10 +186,16 @@ bool identity_has_update(const std::string &identity) {
 }
 
 std::string identity_icon_key(const std::string &identity) {
-  for (const auto &entry : entries())
-    if (entry.identity == identity && !entry.icon_key.empty())
+  std::string catalog_icon;
+  for (const auto &entry : entries()) {
+    if (entry.identity != identity)
+      continue;
+    if (!entry.icon_key.empty())
       return entry.icon_key;
-  return {};
+    if (catalog_icon.empty())
+      catalog_icon = entry.item.icon_key;
+  }
+  return catalog_icon;
 }
 
 std::vector<InstalledRow> installed_rows() {
@@ -215,27 +229,8 @@ std::vector<InstalledRow> installed_rows() {
   return rows;
 }
 
-bool row_visible(const InstalledRow &row, InstalledFilter filter) {
-  switch (filter) {
-  case InstalledFilter::Enabled:
-    return row.enabled;
-  case InstalledFilter::Updates:
-    return row.update;
-  case InstalledFilter::All:
-  default:
-    return true;
-  }
-}
-
 std::string installed_header() {
-  char address[64] = {};
-  const bool has_ip =
-      onion_net_get_ip_address(address, sizeof(address)) == 0 && address[0];
-  std::string text;
-  if (has_ip)
-    text = toolbox_i18n::format("payload_center.installed.ftp_fmt", address);
-  else
-    text = toolbox_i18n::tr("payload_center.installed.ftp_path");
+  std::string text = toolbox_i18n::tr("payload_center.installed.ftp_path");
   text += std::string("\n") + toolbox_i18n::tr("payload_center.installed.usb");
   return text;
 }
@@ -251,6 +246,8 @@ std::string installed_subtitle(const InstalledRow &row) {
   if (row.position > 0)
     text += std::string(" \xC2\xB7 ") +
             toolbox_i18n::format("payload_center.position_fmt", row.position);
+  if (row.update)
+    text += std::string(" \xC2\xB7 ") + toolbox_i18n::tr("payload_center.update");
   return text;
 }
 
@@ -263,17 +260,13 @@ std::string browse_subtitle(const Entry &entry) {
          " \xC2\xB7 " + toolbox_i18n::tr(status);
 }
 
-bool installed_model(ps5ui::Node &model, InstalledFilter filter) {
+bool installed_model(ps5ui::Node &model) {
   reload(false);
   /* The catalog search belongs to the Browse page visit. */
   g_ui.pldc_query.clear();
   const std::vector<InstalledRow> all = installed_rows();
-  const std::string root_id =
-      filter == InstalledFilter::Enabled
-          ? "id_pldc_installed_enabled"
-          : filter == InstalledFilter::Updates ? "id_pldc_installed_updates"
-                                               : "id_pldc_installed";
-  ps5ui::Page page(root_id, toolbox_i18n::tr("payload_center.manage"));
+  ps5ui::Page page("id_pldc_installed",
+                   toolbox_i18n::tr("payload_center.manage"));
   page.label("id_pldc_installed_header", installed_header(),
              ps5ui::Style::Center)
       .button("id_pldc_refresh_list",
@@ -287,34 +280,18 @@ bool installed_model(ps5ui::Node &model, InstalledFilter filter) {
                      [](const InstalledRow &row) { return row.enabled; })),
                  updates_available()),
              ps5ui::Style::Center)
-      .link("id_pldc_filter_all", toolbox_i18n::tr("payload_center.filter.all"),
-            "payloads.xml")
-      .link("id_pldc_filter_enabled",
-            toolbox_i18n::tr("payload_center.filter.enabled"),
-            "pldc_installed_enabled.xml")
-      .link("id_pldc_filter_updates",
-            toolbox_i18n::tr("payload_center.filter.updates"),
-            "pldc_installed_updates.xml");
-  if (filter != InstalledFilter::All)
-    page.link("id_pldc_show_all",
-              toolbox_i18n::tr("payload_center.filter.show_all"),
-              "payloads.xml");
-  page.link("id_pldc_browse", toolbox_i18n::tr("payload_center.browse"),
+      .link("id_pldc_browse", toolbox_i18n::tr("payload_center.browse"),
             "pldc_browse.xml", toolbox_i18n::tr("payload_center.browse.sub"))
       .link("id_pldc_autostart", toolbox_i18n::tr("payload_center.autostart"),
             "pldc_autostart.xml",
             toolbox_i18n::tr("payload_center.autostart.sub"));
 
-  int visible = 0;
   for (const auto &row : all) {
-    if (!row_visible(row, filter))
-      continue;
-    ++visible;
     page.link("id_payload_item_" + row.entry->id, row.display,
               toolbox::payload_config_xml(row.entry->id),
               installed_subtitle(row), row_icon(row.icon_key));
   }
-  if (visible == 0) {
+  if (all.empty()) {
     page.label("id_pldc_installed_empty",
                toolbox_i18n::tr("payload_center.manage.empty"),
                ps5ui::Style::Center)
@@ -385,16 +362,20 @@ bool order_model(ps5ui::Node &model) {
   OnionPayloadConfig config{};
   onion_payload_config_load(entry.shellui_path.c_str(), &config);
   ps5ui::Page page("id_pldc_order", display_name(entry));
+  const int count = static_cast<int>(ordered.size());
   page.label("id_pldc_order_position",
              toolbox_i18n::format("payload_center.order.position_fmt", current,
-                                  static_cast<int>(ordered.size())),
-             ps5ui::Style::Center);
-  if (current > 1)
-    page.button("id_pldc_move_up", toolbox_i18n::tr("payload_center.order.up"));
-  if (current < static_cast<int>(ordered.size()))
-    page.button("id_pldc_move_down",
-                toolbox_i18n::tr("payload_center.order.down"));
-  page.text_field("id_payload_delay_" + entry.id,
+                                  count),
+             ps5ui::Style::Center)
+      .list(
+          "id_pldc_order", toolbox_i18n::tr("payload_center.order.position"),
+          [count](ps5ui::ListBuilder &L) {
+            for (int i = 1; i <= count; ++i)
+              L.item("id_pldc_order_" + std::to_string(i), std::to_string(i),
+                     std::to_string(i));
+          },
+          toolbox_i18n::tr("payload_center.order.sub"), std::to_string(current))
+      .text_field("id_payload_delay_" + entry.id,
                   toolbox_i18n::tr("payload_center.order.delay"),
                   toolbox_i18n::tr("payload_center.order.delay.sub"), "number",
                   "1", "3", std::nullopt, std::nullopt, std::nullopt,
@@ -538,13 +519,10 @@ bool post_install_model(ps5ui::Node &model) {
 
 } // namespace
 
-void generate_installed_xml(std::string &xml, InstalledFilter filter) {
+void generate_installed_xml(std::string &xml) {
   ps5ui::Node model;
-  installed_model(model, filter);
-  xml = onion::shellui::settings::publish(
-      model, [filter](ps5ui::Node &next) {
-        return installed_model(next, filter);
-      });
+  installed_model(model);
+  xml = onion::shellui::settings::publish(model, installed_model);
 }
 
 void generate_autostart_xml(std::string &xml) {

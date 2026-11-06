@@ -69,8 +69,11 @@ void SettingPageOnActivated_Hook(MonoObject *page, int transition) {
   if (oSettingPageOnActivated)
     oSettingPageOnActivated(page, transition);
   // Firmware TransitionType.Pop = 2. This is reached after stack transition completion.
-  if (shellui_hooks_are_ready() && page && transition == 2)
+  if (shellui_hooks_are_ready() && page && transition == 2) {
     onion::shellui::settings::refresh(page);
+    if (g_ui.active_page == toolbox::Page::Payloads)
+      onion::shellui::payload_center::bind_installed_page(page);
+  }
 }
 
 void SettingListCleanup_Hook(MonoObject *page) {
