@@ -3,6 +3,7 @@
 #include "shellui_payloads.hpp"
 #include "shellui_state.hpp"
 #include "ps5_settings_ui.hpp"
+#include "settings_page_refresh.hpp"
 #include "toolbox_i18n.hpp"
 
 #include <onion/distribution.h>
@@ -105,7 +106,7 @@ void generate_center_xml(std::string &xml) {
   xml = page.build();
 }
 
-void generate_autostart_xml(std::string &xml) {
+bool autostart_model(ps5ui::Node &model) {
   g_ui.payloads_list = shellui_scan_payloads();
   ps5ui::Page page("id_pldc_autostart",
                    toolbox_i18n::tr("payload_center.autostart"));
@@ -124,10 +125,17 @@ void generate_autostart_xml(std::string &xml) {
                   entry.name);
     }
   }
-  xml = page.build();
+  model = page.root();
+  return true;
 }
 
-void generate_browse_xml(std::string &xml) {
+void generate_autostart_xml(std::string &xml) {
+  ps5ui::Node model;
+  autostart_model(model);
+  xml = onion::shellui::settings::publish(model, autostart_model);
+}
+
+bool browse_model(ps5ui::Node &model) {
   reload(false);
   ps5ui::Page page("id_pldc_browse",
                    toolbox_i18n::tr("payload_center.browse"));
@@ -143,11 +151,20 @@ void generate_browse_xml(std::string &xml) {
   if (category_list.empty())
     page.label("id_pldc_browse_empty",
                toolbox_i18n::tr("payload_center.browse.empty"),
-               ps5ui::Style::Center);
-  xml = page.build();
+               ps5ui::Style::Center)
+        .button("id_pldc_refresh",
+                toolbox_i18n::tr("payload_center.refresh"), std::nullopt);
+  model = page.root();
+  return true;
 }
 
-void generate_list_xml(std::string &xml) {
+void generate_browse_xml(std::string &xml) {
+  ps5ui::Node model;
+  browse_model(model);
+  xml = onion::shellui::settings::publish(model, browse_model);
+}
+
+bool list_model(ps5ui::Node &model) {
   reload(false);
   const auto visible = visible_entries();
   ps5ui::Page page("id_pldc_list",
@@ -168,10 +185,17 @@ void generate_list_xml(std::string &xml) {
     page.label("id_pldc_list_empty",
                toolbox_i18n::tr("payload_center.list.empty"),
                ps5ui::Style::Center);
-  xml = page.build();
+  model = page.root();
+  return true;
 }
 
-void generate_detail_xml(std::string &xml) {
+void generate_list_xml(std::string &xml) {
+  ps5ui::Node model;
+  list_model(model);
+  xml = onion::shellui::settings::publish(model, list_model);
+}
+
+bool detail_model(ps5ui::Node &model) {
   reload(false);
   const Entry *entry = find_entry(g_ui.active_pldc_item);
   if (!entry) {
@@ -180,8 +204,8 @@ void generate_detail_xml(std::string &xml) {
     page.label("id_pldc_detail_missing",
                toolbox_i18n::tr("payload_center.detail.missing"),
                ps5ui::Style::Center);
-    xml = page.build();
-    return;
+    model = page.root();
+    return true;
   }
   ps5ui::Page page("id_pldc_detail", entry->item.name);
   page.label("id_pldc_name", entry->item.name)
@@ -223,10 +247,17 @@ void generate_detail_xml(std::string &xml) {
                   toolbox_i18n::tr("payload_center.autostart.toggle.sub"));
     }
   }
-  xml = page.build();
+  model = page.root();
+  return true;
 }
 
-void generate_settings_xml(std::string &xml) {
+void generate_detail_xml(std::string &xml) {
+  ps5ui::Node model;
+  detail_model(model);
+  xml = onion::shellui::settings::publish(model, detail_model);
+}
+
+bool settings_model(ps5ui::Node &model) {
   reload(false);
   ps5ui::Page page("id_pldc_settings",
                    toolbox_i18n::tr("payload_center.settings"));
@@ -255,7 +286,14 @@ void generate_settings_xml(std::string &xml) {
                   source.name);
     }
   }
-  xml = page.build();
+  model = page.root();
+  return true;
+}
+
+void generate_settings_xml(std::string &xml) {
+  ps5ui::Node model;
+  settings_model(model);
+  xml = onion::shellui::settings::publish(model, settings_model);
 }
 
 }
