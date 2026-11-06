@@ -6,7 +6,9 @@
 #include <onion/payload_catalog_policy.hpp>
 #include <onion/payload_identity.h>
 
+extern "C" {
 #include <sha256.h>
+}
 
 #include <algorithm>
 #include <array>

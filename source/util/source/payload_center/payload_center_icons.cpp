@@ -7,7 +7,9 @@
 
 #include <onion/payload_catalog_policy.hpp>
 
+extern "C" {
 #include <mc4/base64.h>
+}
 
 #include <cJSON.hpp>
 
