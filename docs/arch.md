@@ -626,3 +626,33 @@ plumbing lives in `progress_ui3` and is used by the cheat, plugin and payload
 progress pages. Routing uses the `pldc_*` resources because `payload_*.xml` is
 reserved for per-payload configuration.
 
+---
+
+## 10. HEN Update Manager
+
+The update client follows the same split as Payload Center. The manifest
+validator and file store live in public headers
+(`onion/update_manifest.hpp`, `onion/update_store.hpp`) and are host-testable.
+`util.elf` owns networking, hashing, disk and worker state:
+
+- `update_service::check(channel, notify)` fetches one of the two GitHub
+  `update.json` URLs, validates it, writes `latest-<channel>.json` and
+  `check.json`, and compares the version with `ONIONHEN_VERSION`.
+- `update_service::download(channel)` streams the release ELF into
+  `/data/AniketosHEN/update/tmp`, verifies SHA-256 and the ELF64/x86-64 header,
+  then atomically renames it to `AniketosHEN.elf` and writes `ready.json`.
+- One worker runs at a time; `task_id`, cooperative cancel and progress phases
+  (`check`, `download`, `verify`, `save`) are exposed over
+  `BREW_UTIL_UPDATE_*` IPC.
+- A detached boot thread waits up to 60 seconds for IPv4 and only then checks,
+  and only when `[update] auto_check=true`. It never downloads.
+
+ShellUI pages are `hen_update.xml`, `hen_update_releases.xml` and
+`hen_update_progress.xml`. The pages read only the cached manifest and
+`ready.json`; no filesystem path or URL crosses IPC. Download progress reuses
+`progress_ui3`. The root Toolbox layout exposes HEN Update Manager and Payload
+Manager directly, with Plugins moved into Content Install & Management.
+Applying an update calls `sceSystemServiceRequestReboot()`; the new ELF is sent
+manually through the external `:9021` loader after reboot.
+
+

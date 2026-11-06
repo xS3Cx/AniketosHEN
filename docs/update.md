@@ -1,0 +1,171 @@
+# HEN Update Manager
+
+The HEN Update Manager checks GitHub Releases for a newer AniketosHEN build,
+downloads it after an explicit confirmation and lets the user reboot so the new
+ELF can be loaded. It never restarts itself.
+
+## Manifest
+
+Stable:
+
+```
+https://github.com/xS3Cx/AniketosHEN/releases/latest/download/update.json
+```
+
+Beta:
+
+```
+https://github.com/xS3Cx/AniketosHEN/releases/download/beta/update.json
+```
+
+`update.json` is a single JSON object:
+
+```json
+{
+  "version": "0.05a",
+  "tag": "v0.05a",
+  "channel": "stable",
+  "published_at": "2026-11-07T12:00:00Z",
+  "url": "https://github.com/xS3Cx/AniketosHEN/releases/download/v0.05a/AniketosHEN.elf",
+  "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "size": 1048576,
+  "summary": "Short release summary"
+}
+```
+
+Validation rules:
+
+- the manifest is at most 64 KiB and must be a JSON object;
+- `version` is 1-32 characters of letters, digits, `.`, `_`, `+`, `-` and must
+  contain a digit; a leading `v` is accepted;
+- `tag` normalises to the same version;
+- `channel` is `stable` or `beta` and must match the channel being checked;
+- `published_at` is non-empty, printable and at most 40 characters;
+- `url` is HTTPS, at most 2048 characters, on `github.com`,
+  `objects.githubusercontent.com` or `release-assets.githubusercontent.com`,
+  and ends in `.elf`;
+- `sha256` is 64 lowercase hex characters (a `sha256:` prefix is accepted and
+  removed);
+- `size` is an integer from 1 byte to 64 MiB;
+- `summary` is non-empty, printable and at most 300 characters.
+
+`ONIONHEN_VERSION` from `<onion/version.h>` is compared with `version` through
+`onion::payload_catalog::compare_versions`, with a leading `v` stripped. A
+development or dirty build (`dirty`, `unknown` or empty) is shown as
+**Development build** and never produces a boot notification.
+
+## Boot check
+
+Automatic checks are **off by default**. With `[update] auto_check=true`, the
+util daemon starts a detached thread after boot. The thread waits for a local
+IPv4 address for up to 60 seconds, fetches the selected channel manifest,
+caches it and sends a toast only when the release is newer. It never downloads
+automatically.
+
+## Manual flow
+
+**Toolbox > HEN Update Manager** shows the installed version, the cached latest
+version, the selected channel, the last check time and two switches
+(`auto_check` and the beta channel). **Check for updates now** starts a util
+worker and opens the progress page. **Update options** opens the release page,
+which renders the cached manifest and a **Download update** button.
+
+The progress page polls the util service and shows the `check`, `download`,
+`verify` and `save` phases. Back cancels the running task. Successful checks and
+downloads return to the previous page automatically.
+
+## Download and apply
+
+The download:
+
+1. reads the cached manifest for the selected channel;
+2. streams the asset over HTTPS, enforcing the manifest size and the 64 MiB
+   cap;
+3. hashes the bytes with SHA-256 while writing into
+   `/data/AniketosHEN/update/tmp/AniketosHEN.elf.part.XXXXXX`;
+4. verifies the SHA-256 and the ELF header (`0x7f ELF`, ELFCLASS64, x86-64);
+5. `fsync`s, sets mode `0644` and atomically renames the file to
+   `/data/AniketosHEN/update/AniketosHEN.elf`;
+6. writes `/data/AniketosHEN/update/ready.json` atomically.
+
+Only the latest ELF is kept; there is no backup. A failed download removes its
+temporary file and leaves any previous update untouched.
+
+`ready.json`:
+
+```json
+{
+  "version": "0.05a",
+  "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "size": 1048576,
+  "summary": "Short release summary",
+  "downloaded_at": 1793544000
+}
+```
+
+The update page then shows **Update ready: version**, the saved path and **Reboot
+to apply**. The button has a confirmation and calls
+`sceSystemServiceRequestReboot()`. AniketosHEN does not attempt to restart or
+replace itself. After the console reboots, retrieve the saved ELF over FTP and
+send it with the external `:9021` loader. **Delete downloaded update** removes
+the ELF and `ready.json`.
+
+## Files
+
+| Path | Purpose |
+| --- | --- |
+| `/data/AniketosHEN/update/latest-stable.json` | Last stable manifest response |
+| `/data/AniketosHEN/update/latest-beta.json` | Last beta manifest response |
+| `/data/AniketosHEN/update/check.json` | Last check time (`fetched_at`) and error |
+| `/data/AniketosHEN/update/AniketosHEN.elf` | Downloaded update |
+| `/data/AniketosHEN/update/ready.json` | Ready marker shown by the Toolbox |
+| `/data/AniketosHEN/update/tmp/` | `.part` download files |
+
+## Security
+
+- HTTPS only; redirects are restricted to HTTPS by the shared libcurl
+  transport, with the embedded CA bundle and host verification enabled.
+- The manifest is capped at 64 KiB and the ELF at 64 MiB.
+- The manifest channel must match the requested channel.
+- The asset must be on a GitHub release host and end in `.elf`.
+- SHA-256 is mandatory; there is no hash-less path.
+- The ELF header is validated before the file becomes visible as the update.
+- All metadata writes use a temporary file, `fsync` and an atomic rename.
+
+## Settings
+
+```ini
+[update]
+# auto_check checks GitHub for a newer AniketosHEN build at boot.
+# Available values: true, false
+auto_check=false
+# channel selects the release channel used by the update check.
+# Available values: stable, beta
+channel=stable
+```
+
+## Releasing
+
+`scripts/release_hen.sh` builds and publishes a release:
+
+```shell
+GITHUB_TOKEN=... ./scripts/release_hen.sh 0.05a stable "Short summary"
+GITHUB_TOKEN=... ./scripts/release_hen.sh 0.05b beta summary.txt
+```
+
+The third argument is a summary string, or an existing file whose contents are
+used. The script builds Release with `ANIKETOSHEN_VERSION=<version>`, copies
+`build/bin/AniketosHEN.elf`, writes `AniketosHEN.elf.sha256`, generates
+`update.json` and publishes through the GitHub REST API with `curl`. It does not
+use `gh`.
+
+Stable releases use tag `v<version>` and the asset URL
+`https://github.com/xS3Cx/AniketosHEN/releases/download/v<version>/AniketosHEN.elf`.
+Beta releases use the moving `beta` tag as a prerelease, delete same-named
+assets from the existing beta release and upload replacements; the asset URL is
+`https://github.com/xS3Cx/AniketosHEN/releases/download/beta/AniketosHEN.elf`.
+The manifest `tag` field is always `v<version>`.
+
+`published_at` uses `SOURCE_DATE_EPOCH` when set (useful for reproducible test
+builds); otherwise it is the current UTC time. The JSON object is written with a
+fixed field order and two-space indentation.

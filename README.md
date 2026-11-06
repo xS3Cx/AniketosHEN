@@ -74,6 +74,9 @@ existing OnionHEN installation, and adds a large set of features of its own.
 - **fSELF / fPKG** - bundled kstuff for homebrew SELF / PKG; embedded as a fallback and off by default, can be enabled in the Toolbox or `[kstuff] autoload=true`
 - **Plugin runtime** — discovers, validates, starts, stops, and removes descriptor-bearing plugin ELFs
 - **Payload Center** - manage installed payloads, autostart order, a curated online catalog, per-entry icons, categories, search, updates and removal over HTTPS; see [docs/payload-center.md](docs/payload-center.md)
+- **HEN Update Manager** - check GitHub Releases for a newer AniketosHEN build,
+  download it with a mandatory SHA-256 check and reboot to apply it; see
+  [docs/update.md](docs/update.md)
 - **Game overlay** — an in-game bar for FPS, CPU, GPU, RAM, fan, temperatures, and network info
 - **Cheat engine** — local JSON, SHN (also named `.xml.shn`), MC4 and ShnExt files that can be toggled at runtime, plus an online cheat catalog sync
 - **Remote Play pairing** — enable the native PS5 Remote Play service, generate a pairing PIN, register a client, save the details to USB
@@ -182,9 +185,11 @@ ready.
 
 ### Toolbox
 
-The Toolbox groups are: Content Install & Management, Payloads & Kernel, Game
-Tools, Account & Remote Play, Monitoring & Display, System & Hardware,
-Preferences, Advanced Debug and About.
+The Toolbox opens with two direct entries, **HEN Update Manager** and
+**Payload Manager**, followed by the groups: Content Install & Management
+(Package Installer, Add-on Content Manager, Plugins), Game Tools, Account &
+Remote Play, Monitoring & Display, System & Hardware, Preferences, Advanced
+Debug and About.
 
 ### Remote Play
 
@@ -209,7 +214,7 @@ guide is in [docs/kbm.md](docs/kbm.md).
 
 Place standalone payloads in `/data/AniketosHEN/payloads/` (or
 `AniketosHEN/payloads/` on a USB drive). Only plain `.elf` files are
-supported. **Toolbox → Payloads & Kernel → Payload Center** lists
+supported. **Toolbox → Payload Manager → Installed Payloads** lists
 every installed payload. Enabling a payload creates the matching `.auto_start`
 file and appends it to the end of the boot order; disabling removes the marker
 without stopping a running payload. The **Autostart** page shows only enabled
@@ -222,6 +227,23 @@ The default catalog is
 (`payloads.json` and `icons.json` in this repository). There is no mirror
 fallback and no Install from URL action; installing is done from a catalog
 entry.
+
+### HEN updates
+
+**Toolbox > HEN Update Manager** checks GitHub Releases for a newer build,
+shows the installed and latest versions, and lets you select the stable or beta
+channel. Automatic checks run only at boot when `[update] auto_check=true`
+(off by default). Downloads are always started manually.
+
+The downloaded ELF is written to `/data/AniketosHEN/update/AniketosHEN.elf`
+after its SHA-256 and ELF header are verified; `ready.json` records the version.
+**Reboot to apply** restarts the console through the system service. AniketosHEN
+does not restart itself: after the reboot, retrieve the saved ELF over FTP and
+send it with the external `:9021` loader. The full format, security rules and
+release process are in [docs/update.md](docs/update.md).
+
+Plugins are listed under **Toolbox > Content Install & Management > Plugins**
+and belong in `/data/AniketosHEN/plugins/`.
 
 ### Cheats
 
@@ -341,11 +363,25 @@ Both URLs can also be passed to CMake as `-DANIKETOSHEN_ISSUES_URL=…` and
 Build outputs stay in `build/`. Downloads are cached in `.cache/dependencies/`.
 Nothing is written back into `source/`.
 
+### Release
+
+`scripts/release_hen.sh` builds Release and publishes a stable or beta GitHub
+release with `AniketosHEN.elf`, `AniketosHEN.elf.sha256` and `update.json`:
+
+```shell
+GITHUB_TOKEN=... ./scripts/release_hen.sh 0.05a stable "Short summary"
+GITHUB_TOKEN=... ./scripts/release_hen.sh 0.05b beta summary.txt
+```
+
+It uses the GitHub REST API with `curl`; `gh` is not required. Stable releases
+use tag `v<version>` and beta releases replace the assets on the moving `beta`
+prerelease. See [docs/update.md](docs/update.md) for the manifest format.
+
 ### Tests
 
-Host tests cover settings, IPC, payload helpers, cheat parsers, relocation,
-Toolbox routing, migration, keyboard and mouse, the SPRX catalog, the plugin
-manager, the overlay and shared platform code:
+Host tests cover settings, IPC, payload helpers, update manifest validation,
+cheat parsers, relocation, Toolbox routing, migration, keyboard and mouse, the
+SPRX catalog, the plugin manager, the overlay and shared platform code:
 
 ```shell
 make -C source/util/tests clean
@@ -382,6 +418,8 @@ the settings found in `/data/OnionHEN/config.ini` (see
 | `reports.send` | `true` | `true`, `false` |
 | `kstuff.autoload` | `false` | `true`, `false` |
 | `shadowmount.autoload` | `false` | `true`, `false` |
+| `update.auto_check` | `false` | `true`, `false` |
+| `update.channel` | `stable` | `stable`, `beta` |
 | `home_screen.show_title_ids` | `false` | `true`, `false` |
 | `game_menu.show_aniketoshen_options` | `true` | `true`, `false` (OnionHEN's `show_onionhen_options` is still read) |
 | `rest_mode.resume_reinject_delay_seconds` | `10` | `0` through `255` seconds |

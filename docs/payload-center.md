@@ -5,7 +5,7 @@ catalog over HTTPS, browses and installs entries, enables payloads for
 autostart, and removes payloads it installed. The default catalog is the one
 published by this repository.
 
-Open it from **Toolbox → Payloads & Kernel → Payload Center**.
+Open it from **Toolbox → Payload Manager**.
 
 ## Pages
 
@@ -243,11 +243,11 @@ Errors are reported as `network`, `protocol`, `tls`, `clock`, `hash`, `elf`,
 use the dedicated catalog I/O message. Certificate-not-yet-valid and expired
 errors are reported as `clock`; other verification failures as `tls`.
 
-## Payloads & Kernel page
+## Toolbox entry
 
-The Toolbox **Payloads & Kernel** group contains only **Payload Center** and
-**Plugins**. The old **User Payloads** entry is gone; installed payloads are
-reached directly from **Payload Center**.
+The Toolbox root exposes **Payload Manager** directly. **Plugins** now lives in
+**Content Install & Management**, together with Package Installer and Add-on
+Content Manager. Installed payloads are reached from **Payload Manager**.
 
 `elfldr` payloads never autostart: the bootstrapper already skips filenames
 containing `elfldr`. `kstuff`, `etaHEN`, `pldmgr`, `lapy-jb`, `backpork`,
