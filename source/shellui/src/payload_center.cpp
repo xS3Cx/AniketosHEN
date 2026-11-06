@@ -262,7 +262,8 @@ bool entry_matches_query(const Entry &entry) { return query_matches(entry); }
 
 void reload(bool force) {
   long long stamp = mtime_of(kSourcesUser);
-  stamp += mtime_of(ONION_DIST_DATA_ROOT "/payloads");
+  stamp += mtime_of(kPayloadUser);
+  stamp += mtime_of(kPayloadData);
   for (const auto &source : s_sources.sources)
     stamp += mtime_of(cache_catalog_path(source));
   if (!force && stamp == s_cache_stamp && !s_entries.empty())
@@ -378,10 +379,16 @@ const Entry *find_entry(std::string_view selection) {
 }
 
 const Entry *find_installed_identity(std::string_view identity) {
-  for (const auto &entry : s_entries)
-    if (entry.installed && entry.identity == identity)
+  const Entry *fallback = nullptr;
+  for (const auto &entry : s_entries) {
+    if (!entry.installed || entry.identity != identity)
+      continue;
+    if (entry.update_available)
       return &entry;
-  return nullptr;
+    if (!fallback)
+      fallback = &entry;
+  }
+  return fallback;
 }
 
 std::string installed_identity(std::string_view selection) {

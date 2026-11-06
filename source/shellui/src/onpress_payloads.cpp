@@ -89,7 +89,7 @@ bool shellui_payload_set_autostart(PayloadEntry &entry, bool enabled) {
   }
 
   /* Rebuild the whole enabled order so the new payload is last and the
-   * priorities stay unique: 1000, 990, 980, ... */
+   * priorities stay unique: 999, 989, 979, ... */
   std::vector<PayloadEntry *> ordered;
   for (auto &other : g_ui.payloads_list) {
     if (other.id == entry.id)
@@ -104,7 +104,8 @@ bool shellui_payload_set_autostart(PayloadEntry &entry, bool enabled) {
   for (std::size_t i = 0; i < ordered.size(); ++i) {
     OnionPayloadConfig config;
     onion_payload_config_load(ordered[i]->shellui_path.c_str(), &config);
-    config.priority = std::max(0, 1000 - static_cast<int>(i) * 10);
+    config.priority = std::max(
+        0, ONION_PAYLOAD_PRIORITY_MAX - static_cast<int>(i) * 10);
     if (!onion_payload_config_save(ordered[i]->shellui_path.c_str(), &config)) {
       notify("notify.payload.config_save_failed", ordered[i]->name.c_str());
       saved = false;

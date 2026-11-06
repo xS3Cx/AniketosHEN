@@ -180,8 +180,8 @@ struct InstalledRow {
 
 bool identity_has_update(const std::string &identity) {
   for (const auto &entry : entries())
-    if (entry.identity == identity)
-      return entry.update_available;
+    if (entry.identity == identity && entry.update_available)
+      return true;
   return false;
 }
 
@@ -339,7 +339,7 @@ bool order_model(ps5ui::Node &model) {
     }
   }
   if (!selected) {
-    ps5ui::Page page("id_pldc_order",
+    ps5ui::Page page("id_pldc_order_page",
                      toolbox_i18n::tr("payload_center.order.title"));
     page.label("id_pldc_order_missing",
                toolbox_i18n::tr("payload_center.order.missing"),
@@ -361,7 +361,7 @@ bool order_model(ps5ui::Node &model) {
   const PayloadEntry &entry = *selected;
   OnionPayloadConfig config{};
   onion_payload_config_load(entry.shellui_path.c_str(), &config);
-  ps5ui::Page page("id_pldc_order", display_name(entry));
+  ps5ui::Page page("id_pldc_order_page", display_name(entry));
   const int count = static_cast<int>(ordered.size());
   page.label("id_pldc_order_position",
              toolbox_i18n::format("payload_center.order.position_fmt", current,

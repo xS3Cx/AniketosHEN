@@ -13,7 +13,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdlib>
-#include <cstdlib>
 #include <fcntl.h>
 #include <string>
 #include <unistd.h>
@@ -178,7 +177,8 @@ OnPressResult order_selected(OnPressContext &ctx) {
   for (std::size_t i = 0; i < ordered.size(); ++i) {
     OnionPayloadConfig config{};
     onion_payload_config_load(ordered[i]->shellui_path.c_str(), &config);
-    config.priority = std::max(0, 1000 - static_cast<int>(i + 1) * 10);
+    config.priority = std::max(
+        0, ONION_PAYLOAD_PRIORITY_MAX - static_cast<int>(i) * 10);
     if (!onion_payload_config_save(ordered[i]->shellui_path.c_str(), &config))
       notify("notify.payload.config_save_failed", ordered[i]->name.c_str());
     ordered[i]->config = config;
