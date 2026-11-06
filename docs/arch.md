@@ -155,7 +155,7 @@ AniketosHEN/
 - Unix socket：`/system_tmp/onionhen/ipc/crit_service`
 - IPC 前缀 `0x9000000`（`BREW_*`）
 - 休息后 Toolbox 恢复：SceSysCore `NOTE_EXEC` 认出新 `NPXS40087`，等 `libSceNpTrophy.sprx` 与 `libSceNpTrophy2.sprx`，再按 `rest_mode.resume_reinject_delay_seconds` 等待后注入（参考 [kstuff-lite](https://github.com/EchoStretch/kstuff-lite)）
-- Unix IPC 与 TCP **9048** 在 `accept` 失败时关闭并重新 listen（参考 ps5-payload-manager）
+- Unix IPC 与 TCP **9048** 在 `accept` 失败时关闭并重新 listen（参考 upstream）
 
 主要能力：
 
@@ -229,7 +229,7 @@ RAM 与 IP。采样实现参考 [PHU Games Tools](https://github.com/ArkSama)（
 | **libonion_elfldr** | **唯一** ptrace/`pt_*` + inject 侧 `elfldr_load` / `elfldr_payload_args` / 内置 loader 侧 `elfldr_spawn` / `elfldr_read` / `elfldr_raise_privileges`；**authid 不在每条 ptrace 上翻转**（由 inject 入口一次提权） |
 | **libNineS** | 进程注入编排（`inject_elf` / stager）；**pt/elfldr 实现来自 libonion_elfldr** |
 | **libNidResolver** | PS5 模块 NID 解析（SHA1 等） |
-| **libonion_ipc** | **客户端**（injectee 双单例）+ **服务端传输环**（`ipc_server`：listen/accept/loop/reply；`accept` 失败重绑参考 ps5-payload-manager）；daemon/util/shellui 共用 |
+| **libonion_ipc** | **客户端**（injectee 双单例）+ **服务端传输环**（`ipc_server`：listen/accept/loop/reply；`accept` 失败重绑参考 upstream）；daemon/util/shellui 共用 |
 | **libonion_settings** | 统一 `config.ini` schema；各进程以 `onion::Settings g_settings` 为真相源 |
 | **libonion_fps** | skip-hook FPS 采样（PHU Tier 1A/1E/1F 公式、100 样本 multi-pass 校准、缓存 DMAP 物理地址、`/dev/dce` / AgcDriver / seqlock 发布）；实现来自 [PHU Games Tools](https://github.com/ArkSama) |
 | **libonion_sprx** | 标准 SPRX/PRX 加载用例与最小 INI `SprxCatalog`；策略层与 ptrace 运行时解耦，生产适配器通过远程 `pthread_create` 调用 `sceKernelLoadStartModule`，支持幂等检查、超时、返回码、依赖排序和临时内存清理 |
@@ -408,7 +408,7 @@ struct IPCMessage {
 - **kstuff**：fself / fpkg 相关内核能力（通常 ≥ 3.00）
 - App jailbreak（按设置启停；SceSysCore 生命周期事件触发 Running Big App 补扫，再跟沙盒 vnode 与白名单 TID。EXEC 身份未就绪或 NOTE_TRACK 跟丢时短重试，无沙盒常驻扫描）
 - 休息后 Toolbox 恢复（kstuff-lite：新 ShellUI PID + trophy sprx，再按 `rest_mode.resume_reinject_delay_seconds` 等待）
-- 休息后监听套接字重绑（ps5-payload-manager：IPC / TCP `accept` 失败自愈）
+- 休息后监听套接字重绑（upstream：IPC / TCP `accept` 失败自愈）
 - 双守护进程架构（util 可被 daemon 拉起）
 
 ### 4.2 用户界面（Toolbox）
