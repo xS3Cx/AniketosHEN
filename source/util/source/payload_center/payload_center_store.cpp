@@ -53,8 +53,6 @@ void sync_directory(const std::string &directory) {
   }
 }
 
-long long now_seconds() { return static_cast<long long>(std::time(nullptr)); }
-
 bool parse_number(const cJSON *root, const char *key, long long *out) {
   const cJSON *value = cJSON_GetObjectItemCaseSensitive(root, key);
   if (!cJSON_IsNumber(value))
