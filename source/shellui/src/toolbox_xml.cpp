@@ -405,14 +405,22 @@ static bool payload_config_model(ps5ui::Node& model,
                 toolbox_i18n::tr("payload_center.update.sub"),
                 meta.source_name.empty()
                     ? std::nullopt
-                    : std::optional<std::string>(meta.source_name));
+                    : std::optional<std::string>(meta.source_name),
+                std::nullopt, ps5ui::Style::None,
+                running ? std::optional<std::string>(toolbox_i18n::format(
+                              "payload_center.confirm.install_fmt",
+                              found->name.c_str()))
+                        : std::nullopt,
+                running ? std::optional<std::string>(
+                              toolbox_i18n::confirm_phrase())
+                        : std::nullopt);
     page.button("id_payload_remove_" + found->id,
                 toolbox_i18n::tr("payload_center.remove"),
                 toolbox_i18n::tr("payload_center.remove.sub"), std::nullopt,
                 std::nullopt, ps5ui::Style::None,
                 toolbox_i18n::format("payload_center.confirm.remove_fmt",
                                      found->name.c_str()),
-                toolbox_i18n::tr("pkg.msg.ok"));
+                toolbox_i18n::confirm_phrase());
   }
   page.button("id_payload_move_up_" + found->id,
               toolbox_i18n::tr("payload_center.move_up"), std::nullopt)

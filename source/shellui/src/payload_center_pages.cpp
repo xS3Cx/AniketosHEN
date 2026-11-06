@@ -201,12 +201,12 @@ void generate_detail_xml(std::string &xml) {
     page.button("id_pldc_install",
                 toolbox_i18n::tr("payload_center.update"), std::nullopt,
                 status_text(*entry), std::nullopt, ps5ui::Style::None,
-                install_confirm(*entry), toolbox_i18n::tr("pkg.msg.ok"));
+                install_confirm(*entry), toolbox_i18n::confirm_phrase());
   } else if (!entry->installed) {
     page.button("id_pldc_install",
                 toolbox_i18n::tr("payload_center.install"), std::nullopt,
                 status_text(*entry), std::nullopt, ps5ui::Style::None,
-                install_confirm(*entry), toolbox_i18n::tr("pkg.msg.ok"));
+                install_confirm(*entry), toolbox_i18n::confirm_phrase());
   }
   if (entry->installed) {
     g_ui.payloads_list = shellui_scan_payloads();
@@ -215,7 +215,7 @@ void generate_detail_xml(std::string &xml) {
                 ps5ui::Style::None,
                 toolbox_i18n::format("payload_center.confirm.remove_fmt",
                                      entry->item.name.c_str()),
-                toolbox_i18n::tr("pkg.msg.ok"));
+                toolbox_i18n::confirm_phrase());
     if (!entry->identity.empty()) {
       page.toggle("id_payload_autostart_" + entry->identity,
                   toolbox_i18n::tr("payload_center.autostart.toggle"),

@@ -318,4 +318,8 @@ std::string format(const char *key, ...) {
   return out;
 }
 
+std::string confirm_phrase() {
+  return std::string(tr("pkg.msg.ok")) + "," + tr("pkg.msg.cancel");
+}
+
 } // namespace toolbox_i18n

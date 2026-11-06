@@ -4,6 +4,8 @@
 #include "hooked_funcs.hpp"
 #include "ipc.hpp"
 #include "payload_progress.hpp"
+#include "shellui_payload_state.hpp"
+#include "shellui_payloads.hpp"
 #include "shellui_state.hpp"
 #include "toolbox_i18n.hpp"
 #include "toolbox_navigation.hpp"
@@ -263,12 +265,6 @@ void reload(bool force) {
 }
 
 void Tick() {
-  static long long last_check = 0;
-  const long long now = static_cast<long long>(std::time(nullptr));
-  if (now - last_check >= 2) {
-    last_check = now;
-    reload(false);
-  }
   if (!s_prompt_pending)
     return;
   bool confirmed = false;
@@ -382,6 +378,13 @@ bool start_update_for_path(const std::string &payload_path) {
 }
 
 bool remove_installed(const std::string &identity, std::string name) {
+  for (const auto &payload : shellui_scan_payloads()) {
+    if (payload.id != identity)
+      continue;
+    if (shellui_payload_is_running(payload.tid.c_str()))
+      (void)shellui_payload_stop(payload);
+    break;
+  }
   std::string reply;
   if (!IPC_Client::getInstance(true).RemovePayload(identity, reply))
     return false;
@@ -392,7 +395,8 @@ bool remove_installed(const std::string &identity, std::string name) {
   return true;
 }
 
-bool start_install_url(const std::string &url, bool replace) {  std::string reply;
+bool start_install_url(const std::string &url, bool replace) {
+  std::string reply;
   if (!IPC_Client::getInstance(true).InstallPayloadFromUrl(url, replace,
                                                            reply)) {
     notify("notify.payload_center.install_failed");

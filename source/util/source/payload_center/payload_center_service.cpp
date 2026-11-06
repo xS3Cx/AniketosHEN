@@ -97,7 +97,8 @@ std::string normalize_error(const std::string &error) {
   return error;
 }
 
-std::string name_from_url(const std::string &url) {  const std::size_t query = url.find_first_of("?#");
+std::string name_from_url(const std::string &url) {
+  const std::size_t query = url.find_first_of("?#");
   const std::string clean = url.substr(0, query);
   const std::size_t slash = clean.find_last_of('/');
   std::string name =
@@ -105,6 +106,17 @@ std::string name_from_url(const std::string &url) {  const std::size_t query = u
   if (name.empty())
     name = "payload.elf";
   return name;
+}
+
+std::string stem_from_filename(std::string name) {
+  const std::size_t dot = name.find_last_of('.');
+  if (dot != std::string::npos) {
+    const std::string extension =
+        onion::payload_catalog::ascii_lower(name.substr(dot));
+    if (extension == ".elf" || extension == ".bin")
+      name.resize(dot);
+  }
+  return name.empty() ? std::string("payload") : name;
 }
 
 bool write_catalog(const std::string &source_url, const std::string &body) {
@@ -313,11 +325,18 @@ void Service::worker_refresh(std::string source_id, uint32_t task_id) {
     icons.reserve(parsed.catalog.items.size());
     for (const auto &item : parsed.catalog.items)
       icons.push_back({item.icon_key, item.name, item.url});
-    if (icons_refresh_due(source.url)) {
+    std::string icons_url = parsed.catalog.icons_url;
+    if (!icons_url.empty() &&
+        !onion::payload_catalog::is_https_url(icons_url))
+      icons_url =
+          onion::payload_catalog::resolve_url(source.url, icons_url);
+    if (!onion::payload_catalog::is_https_url(icons_url) ||
+        !onion::payload_catalog::valid_url(icons_url))
+      icons_url.clear();
+    if (!icons_url.empty() && icons_refresh_due(source.url)) {
       note_progress("install", i, selected.size());
       std::string icon_error;
-      (void)refresh_icons(source.url, parsed.catalog.icons_url, icons,
-                          &icon_error);
+      (void)refresh_icons(source.url, icons_url, icons, &icon_error);
     }
     ++succeeded;
   }
@@ -340,8 +359,8 @@ void Service::worker_install(std::string source_id, std::string item_id,
   if (!url.empty()) {
     request.from_url = true;
     request.url = url;
-    request.name = name_from_url(url);
-    request.filename = request.name;
+    request.filename = name_from_url(url);
+    request.name = stem_from_filename(request.filename);
     request.item_id = onion::payload_catalog::slug(request.name);
     request.source_name = "URL";
     request.source_url = url;

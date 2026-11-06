@@ -162,6 +162,29 @@ bool is_http_url(std::string_view url) {
   return url.size() > 7 && url.substr(0, 7) == "http://";
 }
 
+std::string resolve_url(std::string_view base, std::string_view reference) {
+  const std::string ref = trim(reference);
+  if (ref.empty())
+    return {};
+  if (is_https_url(ref) || is_http_url(ref))
+    return ref;
+  const std::string source = trim(base);
+  const std::size_t scheme_end = source.find("://");
+  if (scheme_end == std::string::npos)
+    return {};
+  if (ref.rfind("//", 0) == 0)
+    return source.substr(0, scheme_end + 1) + ref;
+  const std::size_t host_end = source.find('/', scheme_end + 3);
+  const std::string origin =
+      host_end == std::string::npos ? source : source.substr(0, host_end);
+  if (ref.front() == '/')
+    return origin + ref;
+  const std::size_t slash = source.find_last_of('/');
+  if (slash == std::string::npos || slash < scheme_end + 3)
+    return origin + "/" + ref;
+  return source.substr(0, slash + 1) + ref;
+}
+
 bool valid_url(std::string_view url) {
   if (!is_https_url(url) && !is_http_url(url))
     return false;

@@ -68,4 +68,7 @@ inline std::string trs(const char *key) { return tr(key); }
 std::string formatv(const char *key, va_list ap);
 std::string format(const char *key, ...);
 
+/** Localized "OK,Cancel" pair for a Settings confirm phrase. */
+std::string confirm_phrase();
+
 } // namespace toolbox_i18n

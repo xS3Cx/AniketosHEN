@@ -30,6 +30,7 @@ std::string icon_cache_name(std::string_view icon_key);
 bool is_https_url(std::string_view url);
 bool is_http_url(std::string_view url);
 bool valid_url(std::string_view url);
+std::string resolve_url(std::string_view base, std::string_view reference);
 bool valid_filename(std::string_view filename);
 bool is_binary_filename(std::string_view filename);
 bool valid_checksum(std::string_view checksum);
