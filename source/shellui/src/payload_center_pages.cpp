@@ -244,8 +244,12 @@ std::string installed_subtitle(const InstalledRow &row) {
 }
 
 std::string browse_subtitle(const Entry &entry) {
+  const char *status = entry.update_available
+                           ? "payload_center.update"
+                           : entry.installed ? "payload_center.status.installed"
+                                             : "payload_center.status.install";
   return or_dash(entry.item.category) + " \xC2\xB7 " + version_text(entry) +
-         " \xC2\xB7 " + status_text(entry);
+         " \xC2\xB7 " + toolbox_i18n::tr(status);
 }
 
 bool installed_model(ps5ui::Node &model, InstalledFilter filter) {
