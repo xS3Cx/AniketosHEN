@@ -144,9 +144,9 @@ std::set<std::string> configured_source_hashes(
 /* Drop cache entries that belonged to a source no longer in sources.json.
  * The old mirror hash would otherwise stay on disk forever. */
 void prune_unconfigured_cache() {
-  onion::payload_catalog::SourcesFile sources;
-  if (!onion::payload_catalog::load_sources_file(kSourcesPath, &sources))
-    return;
+  onion::payload_catalog::SourcesFile sources =
+      onion::payload_catalog::default_sources();
+  (void)onion::payload_catalog::load_sources_file(kSourcesPath, &sources);
   const std::set<std::string> keep = configured_source_hashes(sources);
   DIR *dir = opendir(kCacheDir);
   if (!dir)

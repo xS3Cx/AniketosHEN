@@ -155,7 +155,7 @@ AniketosHEN/
 - Unix socket：`/system_tmp/onionhen/ipc/crit_service`
 - IPC 前缀 `0x9000000`（`BREW_*`）
 - 休息后 Toolbox 恢复：SceSysCore `NOTE_EXEC` 认出新 `NPXS40087`，等 `libSceNpTrophy.sprx` 与 `libSceNpTrophy2.sprx`，再按 `rest_mode.resume_reinject_delay_seconds` 等待后注入（参考 [kstuff-lite](https://github.com/EchoStretch/kstuff-lite)）
-- Unix IPC 与 TCP **9048** 在 `accept` 失败时关闭并重新 listen（参考 [ps5-payload-manager](https://github.com/itsplk/ps5-payload-manager)）
+- Unix IPC 与 TCP **9048** 在 `accept` 失败时关闭并重新 listen（参考 ps5-payload-manager）
 
 主要能力：
 
