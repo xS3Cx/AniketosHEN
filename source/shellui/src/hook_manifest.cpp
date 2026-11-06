@@ -197,6 +197,9 @@ uint64_t GetManifestResourceStream_Hook(uint64_t inst, MonoString *FileName) {
   case toolbox::Page::PayloadAutostart:
     onion::shellui::payload_center::generate_autostart_xml(new_xml_string);
     break;
+  case toolbox::Page::PayloadOrder:
+    onion::shellui::payload_center::generate_order_xml(new_xml_string);
+    break;
   case toolbox::Page::PayloadBrowse:
     onion::shellui::payload_center::generate_browse_xml(new_xml_string);
     break;

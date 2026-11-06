@@ -73,8 +73,7 @@ existing OnionHEN installation, and adds a large set of features of its own.
 - **System preparation** — raise privileges, remount filesystems, and block the update partition
 - **fSELF / fPKG** - bundled kstuff for homebrew SELF / PKG; embedded as a fallback and off by default, can be enabled in the Toolbox or `[kstuff] autoload=true`
 - **Plugin runtime** — discovers, validates, starts, stops, and removes descriptor-bearing plugin ELFs
-- **User payload manager** - start and stop user-provided `.elf` payloads, with optional auto-start
-- **Payload Center** - browse an online catalog, install, update and remove payloads over HTTPS, with optional checksums, icons, categories, search, per-payload autostart and FTP drop support; see [docs/payload-center.md](docs/payload-center.md)
+- **Payload Center** - manage installed payloads, autostart order, a curated online catalog, per-entry icons, categories, search, updates and removal over HTTPS; see [docs/payload-center.md](docs/payload-center.md)
 - **Game overlay** — an in-game bar for FPS, CPU, GPU, RAM, fan, temperatures, and network info
 - **Cheat engine** — local JSON, SHN (also named `.xml.shn`), MC4 and ShnExt files that can be toggled at runtime, plus an online cheat catalog sync
 - **Remote Play pairing** — enable the native PS5 Remote Play service, generate a pairing PIN, register a client, save the details to USB
@@ -210,10 +209,19 @@ guide is in [docs/kbm.md](docs/kbm.md).
 
 Place standalone payloads in `/data/AniketosHEN/payloads/` (or
 `AniketosHEN/payloads/` on a USB drive). Only plain `.elf` files are
-supported. Auto-start can be turned on in the Toolbox; AniketosHEN remembers
-that choice with a matching `.auto_start` file next to the ELF. A recorded
-running instance is left running by later launch and auto-start requests.
-Plugins are a separate category and belong in `/data/AniketosHEN/plugins/`.
+supported. **Toolbox → Payloads & Kernel → Payload Center → Manage** lists
+every installed payload. Enabling a payload creates the matching `.auto_start`
+file and appends it to the end of the boot order; disabling removes the marker
+without stopping a running payload. The **Autostart** page shows only enabled
+payloads and lets you move one to a new position. A recorded running instance
+is left running by later launch and auto-start requests. Plugins are a separate
+category and belong in `/data/AniketosHEN/plugins/`.
+
+The default catalog is
+<https://raw.githubusercontent.com/xS3Cx/AniketosHEN/main/payloads.json>
+(`payloads.json` and `icons.json` in this repository). There is no mirror
+fallback and no Install from URL action; installing is done from a catalog
+entry.
 
 ### Cheats
 
@@ -578,7 +586,6 @@ Everything that OnionHEN does not have is credited to its original authors:
 ### Referenced
 
 - [kstuff-lite](https://github.com/EchoStretch/kstuff-lite) — EchoStretch, sleirsgoevy, and contributors; Rest Mode Toolbox recovery follows its SceSysCore `NOTE_EXEC` watch for `NPXS40087` and wait for `libSceNpTrophy.sprx` / `libSceNpTrophy2.sprx`
-- [ps5-payload-manager](https://github.com/itsplk/ps5-payload-manager) — itsplk; listen-socket rebind after Rest Mode follows this project
 - [HEN-Cheats-Collection](https://github.com/TeeKay87/HEN-Cheats-Collection) — TeeKay87; the community cheat collection downloaded by the built-in cheat sync, with PS5_Xiexiyu's Chinese mirror
 - [PHU Games Tools](https://github.com/ArkSama) — ArkSama; the in-game FPS counter follows PHU Games Tools skip-hook sampling
 

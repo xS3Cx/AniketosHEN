@@ -3,6 +3,7 @@
 #include "cheats/sync/http_transport_ps5.hpp"
 
 #include <onion/payload_identity.h>
+#include <onion/platform.h>
 
 #include <cJSON.hpp>
 
@@ -18,14 +19,6 @@
 
 namespace onion::payload_center {
 namespace {
-
-bool make_directory(const char *path) {
-  if (!path || !path[0])
-    return false;
-  if (mkdir(path, 0755) == 0)
-    return true;
-  return errno == EEXIST;
-}
 
 std::string directory_of(const std::string &path) {
   const std::size_t slash = path.find_last_of('/');
@@ -69,11 +62,16 @@ std::string json_string(const cJSON *root, const char *key) {
 }
 
 bool ensure_layout() {
-  if (!make_directory("/data/AniketosHEN"))
+  const char *directories[] = {"/data/AniketosHEN", kRoot, kIconDir, kCacheDir,
+                               kTmpDir, kPayloadDir};
+  for (const char *directory : directories) {
+    if (mkdir_tree(directory))
+      continue;
+    LOG_ERROR("payload_center: mkdir_tree(%s) failed: %s", directory,
+              std::strerror(errno));
     return false;
-  return make_directory(kRoot) && make_directory(kIconDir) &&
-         make_directory(kCacheDir) && make_directory(kTmpDir) &&
-         make_directory(kPayloadDir);
+  }
+  return true;
 }
 
 bool read_text_file(const char *path, std::string *out, std::size_t maximum) {
@@ -108,23 +106,42 @@ bool write_text_atomic(const char *path, const std::string &body) {
     return false;
   const std::string full(path);
   const std::string directory = directory_of(full);
-  if (!directory.empty())
-    make_directory(directory.c_str());
+  if (!directory.empty() && !mkdir_tree(directory.c_str())) {
+    LOG_ERROR("payload_center: mkdir_tree(%s) failed: %s", directory.c_str(),
+              std::strerror(errno));
+    return false;
+  }
   std::string pattern = full + ".tmp.XXXXXX";
   std::vector<char> buffer(pattern.begin(), pattern.end());
   buffer.push_back('\0');
   const int fd = mkstemp(buffer.data());
-  if (fd < 0)
+  if (fd < 0) {
+    LOG_ERROR("payload_center: mkstemp(%s) failed: %s", buffer.data(),
+              std::strerror(errno));
     return false;
+  }
   bool ok = write_all(fd, body.data(), body.size());
-  ok = ok && fsync(fd) == 0;
-  ok = ok && close(fd) == 0;
+  if (!ok)
+    LOG_ERROR("payload_center: write(%s) failed: %s", buffer.data(),
+              std::strerror(errno));
+  if (ok && fsync(fd) != 0) {
+    LOG_ERROR("payload_center: fsync(%s) failed: %s", buffer.data(),
+              std::strerror(errno));
+    ok = false;
+  }
+  if (close(fd) != 0) {
+    LOG_ERROR("payload_center: close(%s) failed: %s", buffer.data(),
+              std::strerror(errno));
+    ok = false;
+  }
   if (!ok) {
     unlink(buffer.data());
     return false;
   }
   chmod(buffer.data(), 0644);
   if (rename(buffer.data(), full.c_str()) != 0) {
+    LOG_ERROR("payload_center: rename(%s, %s) failed: %s", buffer.data(),
+              full.c_str(), std::strerror(errno));
     unlink(buffer.data());
     return false;
   }
@@ -340,25 +357,17 @@ bool fetch_source_catalog(const std::string &source_url, std::string *body,
   using onion::cheats::sync::HttpRequest;
   using onion::cheats::sync::Ps5HttpTransport;
   using onion::cheats::sync::SyncStatus;
-  const auto fetch = [&](const std::string &url) {
-    body->clear();
-    HttpRequest request;
-    request.url = url.c_str();
-    request.timeout_ms = 60000;
-    request.max_body_bytes = onion::payload_catalog::kMaxCatalogBytes;
-    Ps5HttpTransport http;
-    const SyncStatus status = http.perform(request, [&](const void *data,
-                                                        std::size_t size) {
-      body->append(static_cast<const char *>(data), size);
-      return SyncStatus::Ok;
-    });
-    return status;
-  };
-  SyncStatus status = fetch(source_url);
-  if (status != SyncStatus::Ok &&
-      source_url == onion::payload_catalog::kBuiltinSourceUrl) {
-    status = fetch(std::string(onion::payload_catalog::kBuiltinSourceFallbackUrl));
-  }
+  body->clear();
+  HttpRequest request;
+  request.url = source_url.c_str();
+  request.timeout_ms = 60000;
+  request.max_body_bytes = onion::payload_catalog::kMaxCatalogBytes;
+  Ps5HttpTransport http;
+  const SyncStatus status = http.perform(request, [&](const void *data,
+                                                      std::size_t size) {
+    body->append(static_cast<const char *>(data), size);
+    return SyncStatus::Ok;
+  });
   if (status == SyncStatus::Ok)
     return true;
   if (error)

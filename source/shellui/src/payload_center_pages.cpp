@@ -7,9 +7,13 @@
 #include "toolbox_i18n.hpp"
 
 #include <onion/distribution.h>
+#include <onion/fs.h>
 #include <onion/payload_catalog_policy.hpp>
 
+#include <onion_cjson.hpp>
+
 #include <algorithm>
+#include <cstdio>
 #include <optional>
 #include <string>
 #include <unistd.h>
@@ -17,6 +21,43 @@
 
 namespace onion::shellui::payload_center {
 namespace {
+
+bool marker_present(const PayloadEntry &entry) {
+  return if_exists((entry.shellui_path + ".auto_start").c_str());
+}
+
+std::string display_name(const PayloadEntry &entry) {
+  FILE *file = std::fopen((entry.shellui_path + ".meta.json").c_str(), "rb");
+  if (!file)
+    return entry.name;
+  std::string raw;
+  char buffer[4096];
+  std::size_t read_bytes = 0;
+  while ((read_bytes = std::fread(buffer, 1, sizeof(buffer), file)) > 0)
+    raw.append(buffer, read_bytes);
+  std::fclose(file);
+  if (raw.empty())
+    return entry.name;
+  onion_cjson::Root root(raw);
+  if (!root)
+    return entry.name;
+  const std::string meta_name =
+      onion_cjson::string_item(root.get(), "name", "");
+  return meta_name.empty() ? entry.name : meta_name;
+}
+
+int enabled_position(const std::vector<PayloadEntry> &list,
+                     const PayloadEntry &target) {
+  int position = 0;
+  for (const auto &entry : list) {
+    if (!marker_present(entry))
+      continue;
+    ++position;
+    if (entry.id == target.id)
+      return position;
+  }
+  return 0;
+}
 
 std::string version_text(const Entry &entry) {
   if (entry.item.version.empty())
@@ -88,18 +129,13 @@ void generate_center_xml(std::string &xml) {
   reload(false);
   ps5ui::Page page("id_pldc_center",
                    toolbox_i18n::tr("payload_center.title"));
-  const std::string hint = ftp_hint();
-  if (!hint.empty())
-    page.label("id_pldc_ftp", hint, ps5ui::Style::Center);
-  page.link("id_pldc_autostart", toolbox_i18n::tr("payload_center.autostart"),
+  page.link("id_pldc_manage", toolbox_i18n::tr("payload_center.manage"),
+            "payloads.xml", toolbox_i18n::tr("payload_center.manage.sub"))
+      .link("id_pldc_autostart", toolbox_i18n::tr("payload_center.autostart"),
             "pldc_autostart.xml",
             toolbox_i18n::tr("payload_center.autostart.sub"))
       .link("id_pldc_browse", toolbox_i18n::tr("payload_center.browse"),
             "pldc_browse.xml", toolbox_i18n::tr("payload_center.browse.sub"))
-      .button("id_pldc_add_url", toolbox_i18n::tr("payload_center.add_url"),
-              toolbox_i18n::tr("payload_center.add_url.sub"), std::nullopt,
-              std::nullopt, ps5ui::Style::None,
-              toolbox_i18n::tr("payload_center.add_url.confirm"))
       .link("id_pldc_settings", toolbox_i18n::tr("payload_center.settings"),
             "pldc_settings.xml",
             toolbox_i18n::tr("payload_center.settings.sub"));
@@ -112,19 +148,23 @@ bool autostart_model(ps5ui::Node &model) {
                    toolbox_i18n::tr("payload_center.autostart"));
   page.toggle("id_pldc_master", toolbox_i18n::tr("payload_center.master"),
               g_settings.payload_autostart_enabled,
-              toolbox_i18n::tr("payload_center.master.sub"));
-  if (g_ui.payloads_list.empty()) {
+              toolbox_i18n::tr("payload_center.master.sub"))
+      .label("id_pldc_autostart_hint",
+             toolbox_i18n::tr("payload_center.autostart.order_hint"),
+             ps5ui::Style::Center);
+  int position = 0;
+  for (const auto &entry : g_ui.payloads_list) {
+    if (!marker_present(entry))
+      continue;
+    ++position;
+    page.link("id_pldc_pick_order_" + entry.id,
+              std::to_string(position) + ". " + display_name(entry),
+              "pldc_order.xml");
+  }
+  if (position == 0)
     page.label("id_pldc_autostart_empty",
                toolbox_i18n::tr("payload_center.autostart.empty"),
                ps5ui::Style::Center);
-  } else {
-    for (const auto &entry : g_ui.payloads_list) {
-      const bool automatic =
-          access((entry.shellui_path + ".auto_start").c_str(), F_OK) == 0;
-      page.toggle("id_payload_autostart_" + entry.id, entry.name, automatic,
-                  entry.name);
-    }
-  }
   model = page.root();
   return true;
 }
@@ -133,6 +173,41 @@ void generate_autostart_xml(std::string &xml) {
   ps5ui::Node model;
   autostart_model(model);
   xml = onion::shellui::settings::publish(model, autostart_model);
+}
+
+void generate_order_xml(std::string &xml) {
+  g_ui.payloads_list = shellui_scan_payloads();
+  const PayloadEntry *selected = nullptr;
+  for (const auto &entry : g_ui.payloads_list) {
+    if (entry.id == g_ui.active_pldc_order && marker_present(entry)) {
+      selected = &entry;
+      break;
+    }
+  }
+  ps5ui::Page page("id_pldc_order", toolbox_i18n::tr("payload_center.order.title"));
+  if (!selected) {
+    page.label("id_pldc_order_missing",
+               toolbox_i18n::tr("payload_center.order.missing"),
+               ps5ui::Style::Center);
+    xml = page.build();
+    return;
+  }
+  int count = 0;
+  for (const auto &entry : g_ui.payloads_list)
+    if (marker_present(entry))
+      ++count;
+  const int current = enabled_position(g_ui.payloads_list, *selected);
+  page.label("id_pldc_order_name", display_name(*selected))
+      .list(
+          "id_pldc_order", toolbox_i18n::tr("payload_center.order.position"),
+          [count](ps5ui::ListBuilder &L) {
+            for (int i = 1; i <= count; ++i)
+              L.item("id_pldc_order_" + std::to_string(i), std::to_string(i),
+                     std::to_string(i));
+          },
+          toolbox_i18n::tr("payload_center.order.sub"),
+          std::to_string(current));
+  xml = page.build();
 }
 
 bool browse_model(ps5ui::Node &model) {
@@ -240,12 +315,6 @@ bool detail_model(ps5ui::Node &model) {
                 toolbox_i18n::format("payload_center.confirm.remove_fmt",
                                      entry->item.name.c_str()),
                 toolbox_i18n::confirm_phrase());
-    if (!entry->identity.empty()) {
-      page.toggle("id_payload_autostart_" + entry->identity,
-                  toolbox_i18n::tr("payload_center.autostart.toggle"),
-                  entry->autostart,
-                  toolbox_i18n::tr("payload_center.autostart.toggle.sub"));
-    }
   }
   model = page.root();
   return true;
@@ -261,10 +330,7 @@ bool settings_model(ps5ui::Node &model) {
   reload(false);
   ps5ui::Page page("id_pldc_settings",
                    toolbox_i18n::tr("payload_center.settings"));
-  page.toggle("id_pldc_master", toolbox_i18n::tr("payload_center.master"),
-              g_settings.payload_autostart_enabled,
-              toolbox_i18n::tr("payload_center.master.sub"))
-      .label("id_pldc_last_refresh", last_refresh_text(), ps5ui::Style::Center)
+  page.label("id_pldc_last_refresh", last_refresh_text(), ps5ui::Style::Center)
       .button("id_pldc_refresh",
               toolbox_i18n::tr("payload_center.refresh"), std::nullopt)
       .button("id_pldc_clear_cache",

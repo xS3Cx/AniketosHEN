@@ -61,7 +61,7 @@ onion::payload_catalog::SourcesFile s_sources;
 long long s_cache_stamp = -1;
 uint64_t s_prompt_token = 0;
 bool s_prompt_pending = false;
-enum class PromptKind { None, AddSource, InstallUrl, Search };
+enum class PromptKind { None, AddSource, Search };
 PromptKind s_prompt_kind = PromptKind::None;
 
 std::string alias_data(std::string_view path) {
@@ -288,9 +288,6 @@ void Tick() {
     }
     reload(true);
     notify("notify.payload_center.source_added");
-  } else if (kind == PromptKind::InstallUrl) {
-    if (!start_install_url(onion::payload_catalog::trim(typed), true))
-      notify("notify.payload_center.install_failed");
   } else if (kind == PromptKind::Search) {
     g_ui.pldc_query = onion::payload_catalog::trim(typed);
     toolbox_push_resource("pldc_list.xml");
@@ -395,23 +392,6 @@ bool remove_installed(const std::string &identity, std::string name) {
   return true;
 }
 
-bool start_install_url(const std::string &url, bool replace) {
-  std::string reply;
-  if (!IPC_Client::getInstance(true).InstallPayloadFromUrl(url, replace,
-                                                           reply)) {
-    notify("notify.payload_center.install_failed");
-    return false;
-  }
-  int task_id = 0;
-  const std::string state = state_from_reply(reply, &task_id);
-  if (state == "started" || state == "already_running") {
-    show_progress(static_cast<uint32_t>(task_id));
-    return true;
-  }
-  notify("notify.payload_center.busy");
-  return false;
-}
-
 bool start_refresh() {
   std::string reply;
   if (!IPC_Client::getInstance(true).RefreshPayloadCatalog("", reply)) {
@@ -420,9 +400,11 @@ bool start_refresh() {
   }
   int task_id = 0;
   const std::string state = state_from_reply(reply, &task_id);
-  if (state == "started" || state == "already_running") {
-    show_progress(static_cast<uint32_t>(task_id));
+  if (state == "started")
     return true;
+  if (state == "already_running") {
+    notify("notify.payload_center.refresh_busy");
+    return false;
   }
   notify("notify.payload_center.busy");
   return false;
@@ -440,30 +422,18 @@ void request_add_source() {
   options.message = toolbox_i18n::tr("payload_center.add_source.message");
   options.positive = toolbox_i18n::tr("pkg.msg.ok");
   options.negative = toolbox_i18n::tr("pkg.msg.cancel");
+  MonoObject *scene = SystemDialogs::FocusedScene();
+  if (!scene) {
+    notify("notify.payload_center.prompt_failed");
+    return;
+  }
   std::string failure;
   s_prompt_token = 0;
-  if (!SystemDialogs::ShowPrompt(options, &failure, nullptr, &s_prompt_token)) {
+  if (!SystemDialogs::ShowPrompt(options, &failure, scene, &s_prompt_token)) {
     notify("notify.payload_center.prompt_failed");
     return;
   }
   s_prompt_kind = PromptKind::AddSource;
-  s_prompt_pending = true;
-}
-
-void request_install_url() {
-  SystemDialogs::PromptOptions options;
-  options.title = toolbox_i18n::tr("payload_center.add_url");
-  options.message = toolbox_i18n::tr("payload_center.add_url.message");
-  options.text = "https://";
-  options.positive = toolbox_i18n::tr("pkg.msg.ok");
-  options.negative = toolbox_i18n::tr("pkg.msg.cancel");
-  std::string failure;
-  s_prompt_token = 0;
-  if (!SystemDialogs::ShowPrompt(options, &failure, nullptr, &s_prompt_token)) {
-    notify("notify.payload_center.prompt_failed");
-    return;
-  }
-  s_prompt_kind = PromptKind::InstallUrl;
   s_prompt_pending = true;
 }
 
@@ -474,9 +444,14 @@ void request_search() {
   options.text = g_ui.pldc_query;
   options.positive = toolbox_i18n::tr("pkg.msg.ok");
   options.negative = toolbox_i18n::tr("pkg.msg.cancel");
+  MonoObject *scene = SystemDialogs::FocusedScene();
+  if (!scene) {
+    notify("notify.payload_center.prompt_failed");
+    return;
+  }
   std::string failure;
   s_prompt_token = 0;
-  if (!SystemDialogs::ShowPrompt(options, &failure, nullptr, &s_prompt_token)) {
+  if (!SystemDialogs::ShowPrompt(options, &failure, scene, &s_prompt_token)) {
     notify("notify.payload_center.prompt_failed");
     return;
   }

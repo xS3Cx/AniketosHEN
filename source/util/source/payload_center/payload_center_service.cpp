@@ -7,16 +7,21 @@
 #include <onion/payload_catalog.hpp>
 #include <onion/payload_catalog_policy.hpp>
 #include <onion/payload_sources_json.hpp>
+#include <onion/platform.h>
 
 extern "C" {
 #include <sha256.h>
 }
 
 #include <algorithm>
+#include <cstring>
 #include <ctime>
+#include <dirent.h>
 #include <memory>
 #include <pthread.h>
+#include <set>
 #include <string>
+#include <unistd.h>
 #include <utility>
 #include <vector>
 
@@ -128,6 +133,59 @@ bool write_catalog(const std::string &source_url, const std::string &body) {
   return write_catalog_cache(source_url, body, status);
 }
 
+std::set<std::string> configured_source_hashes(
+    const onion::payload_catalog::SourcesFile &sources) {
+  std::set<std::string> hashes;
+  for (const auto &source : sources.sources)
+    hashes.insert(onion::payload_catalog::source_hash8(source.url));
+  return hashes;
+}
+
+/* Drop cache entries that belonged to a source no longer in sources.json.
+ * The old mirror hash would otherwise stay on disk forever. */
+void prune_unconfigured_cache() {
+  onion::payload_catalog::SourcesFile sources;
+  if (!onion::payload_catalog::load_sources_file(kSourcesPath, &sources))
+    return;
+  const std::set<std::string> keep = configured_source_hashes(sources);
+  DIR *dir = opendir(kCacheDir);
+  if (!dir)
+    return;
+  struct dirent *entry = nullptr;
+  while ((entry = readdir(dir)) != nullptr) {
+    const std::string name = entry->d_name;
+    std::string hash;
+    if (name.rfind("catalog-", 0) == 0) {
+      const std::size_t end = name.find('.', 8);
+      if (end == std::string::npos || end <= 8)
+        continue;
+      hash = name.substr(8, end - 8);
+    } else if (name.rfind("icons-", 0) == 0) {
+      const std::size_t end = name.find('.', 6);
+      if (end == std::string::npos || end <= 6)
+        continue;
+      hash = name.substr(6, end - 6);
+    } else {
+      continue;
+    }
+    if (keep.count(hash))
+      continue;
+    const std::string path = std::string(kCacheDir) + "/" + name;
+    if (unlink(path.c_str()) == 0)
+      LOG_INFO("payload_center: pruned stale cache file %s", path.c_str());
+    else
+      LOG_WARN("payload_center: could not prune %s: %s", path.c_str(),
+               std::strerror(errno));
+  }
+  closedir(dir);
+}
+
+std::string refresh_error_text(const std::string &error) {
+  if (error == "io")
+    return onion_notify_tr("payload_center.error.catalog_io");
+  return error;
+}
+
 bool load_or_fetch_catalog(const std::string &source_url, std::string *body,
                            onion::payload_catalog::Catalog *catalog,
                            std::string *error) {
@@ -231,6 +289,8 @@ Service::StartResult Service::install_url(const std::string &url, bool replace,
 Service::StartResult Service::start(JobKind kind, std::string source_id,
                                     std::string item_id, std::string url,
                                     bool replace, uint32_t *task_id) {
+  (void)ensure_layout();
+  prune_unconfigured_cache();
   std::lock_guard<std::mutex> lock(mu_);
   if (running_) {
     if (task_id)
@@ -276,9 +336,16 @@ Service::StartResult Service::start(JobKind kind, std::string source_id,
 
 void Service::worker_refresh(std::string source_id, uint32_t task_id) {
   (void)task_id;
+  if (!ensure_layout()) {
+    onion_notify(true, "notify.payload_center.catalog_failed_fmt",
+                 onion_notify_tr("payload_center.error.catalog_io"));
+    finish(Status::State::Error, "io");
+    return;
+  }
   note_progress("start", 0, 0);
   onion::payload_catalog::SourcesFile sources;
   (void)onion::payload_catalog::load_sources_file(kSourcesPath, &sources);
+  prune_unconfigured_cache();
   std::vector<const onion::payload_catalog::Source *> selected;
   if (source_id.empty()) {
     for (const auto &source : sources.sources)
@@ -289,6 +356,8 @@ void Service::worker_refresh(std::string source_id, uint32_t task_id) {
       selected.push_back(source);
   }
   if (selected.empty()) {
+    onion_notify(true, "notify.payload_center.catalog_failed_fmt",
+                 refresh_error_text("rejected").c_str());
     finish(Status::State::Error, "rejected");
     return;
   }
@@ -344,15 +413,23 @@ void Service::worker_refresh(std::string source_id, uint32_t task_id) {
     finish(Status::State::Error, "cancelled");
     return;
   }
-  if (succeeded == 0)
+  if (succeeded == 0) {
+    onion_notify(true, "notify.payload_center.catalog_failed_fmt",
+                 refresh_error_text(last_error).c_str());
     finish(Status::State::Error, last_error);
-  else
+  } else {
+    onion_notify(true, "notify.payload_center.catalog_ok");
     finish(Status::State::Ok, {});
+  }
 }
 
 void Service::worker_install(std::string source_id, std::string item_id,
                              std::string url, bool replace, uint32_t task_id) {
   (void)task_id;
+  if (!ensure_layout()) {
+    finish(Status::State::Error, "io");
+    return;
+  }
   note_progress("start", 0, 0);
   InstallRequest request;
   request.replace = replace;

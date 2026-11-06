@@ -60,20 +60,40 @@ std::string toolbox_val(const char* id, const char* fallback);
 std::string read_file_to_string(const char* path);
 
 /** Payload .elf only (AniketosHEN no longer supports .plugin packages). */
-std::string payload_list_status(const PayloadEntry& entry) {
+bool payload_enabled(const PayloadEntry& entry) {
+  return if_exists((entry.shellui_path + ".auto_start").c_str());
+}
+
+int payload_enabled_position(const std::vector<PayloadEntry>& list,
+                             const PayloadEntry& target) {
+  int position = 0;
+  for (const auto& entry : list) {
+    if (!payload_enabled(entry))
+      continue;
+    ++position;
+    if (entry.id == target.id)
+      return position;
+  }
+  return 0;
+}
+
+std::string payload_list_status(const PayloadEntry& entry, int position) {
   const bool running = shellui_payload_is_running(entry.tid.c_str());
-  const bool auto_start = if_exists((entry.shellui_path + ".auto_start").c_str());
-  if (running && auto_start)
-    return toolbox_i18n::tr("payload.status.running_autostart");
-  if (running)
-    return toolbox_i18n::tr("payload.status.running");
-  if (auto_start)
-    return toolbox_i18n::tr("payload.status.stopped_autostart");
-  return toolbox_i18n::tr("payload.status.stopped");
+  std::string text = toolbox_i18n::tr(payload_enabled(entry)
+                                          ? "payload_center.enabled"
+                                          : "payload_center.disabled");
+  text += std::string(" \xC2\xB7 ") +
+          toolbox_i18n::tr(running ? "payload_center.running"
+                                   : "payload_center.stopped");
+  if (position > 0)
+    text += std::string(" \xC2\xB7 ") +
+            toolbox_i18n::format("payload_center.position_fmt", position);
+  return text;
 }
 
 struct PayloadMetaView {
   std::string id;
+  std::string name;
   std::string version;
   std::string source_name;
   std::string source_url;
@@ -91,6 +111,7 @@ PayloadMetaView payload_meta_view(const std::string& path) {
   if (!root)
     return view;
   view.id = onion_cjson::string_item(root.get(), "id", "");
+  view.name = onion_cjson::string_item(root.get(), "name", "");
   view.version = onion_cjson::string_item(root.get(), "item_version", "");
   view.source_name = onion_cjson::string_item(root.get(), "source_name", "");
   view.source_url = onion_cjson::string_item(root.get(), "source_url", "");
@@ -350,16 +371,22 @@ std::vector<PayloadEntry> shellui_scan_payloads() {
 
 static bool payloads_model(ps5ui::Node& model) {
   g_ui.payloads_list = shellui_scan_payloads();
-  ps5ui::Page page("id_payload", toolbox_i18n::tr("payload.title"));
+  ps5ui::Page page("id_payload", toolbox_i18n::tr("payload_center.manage"));
 
+  int position = 0;
   for (const auto& entry : g_ui.payloads_list) {
-    const std::string status = payload_list_status(entry);
-    page.link("id_payload_item_" + entry.id, entry.name,
+    position = payload_enabled_position(g_ui.payloads_list, entry);
+    const PayloadMetaView meta = payload_meta_view(entry.shellui_path);
+    const std::string display =
+        meta.name.empty() ? entry.name : meta.name;
+    page.link("id_payload_item_" + entry.id, display,
               toolbox::payload_config_xml(entry.id),
-              toolbox_i18n::format("payload.status.schedule_fmt", status.c_str(),
-                                   entry.config.priority, entry.config.delay_seconds),
-              kIconPlugins);
+              payload_list_status(entry, position), kIconPlugins);
   }
+  if (g_ui.payloads_list.empty())
+    page.label("id_payload_empty",
+               toolbox_i18n::tr("payload_center.manage.empty"),
+               ps5ui::Style::Center);
   model = page.root();
   return true;
 }
@@ -388,14 +415,17 @@ static bool payload_config_model(ps5ui::Node& model,
   const bool auto_start = if_exists(auto_path.c_str());
   onion_payload_config_load(found->shellui_path.c_str(), &found->config);
   const PayloadMetaView meta = payload_meta_view(found->shellui_path);
+  const int position = payload_enabled_position(g_ui.payloads_list, *found);
   ps5ui::Page page("id_payload_config", found->name);
   page.label("id_payload_path", found->path)
+      .label("id_payload_status", payload_list_status(*found, position),
+             ps5ui::Style::Center)
+      .toggle("id_payload_enabled_" + found->id,
+              toolbox_i18n::tr("payload_center.enabled"), auto_start,
+              toolbox_i18n::tr("payload_center.enabled.sub"))
       .toggle("id_payload_run_" + found->id,
               toolbox_i18n::tr("payload.current_session"), running,
-              toolbox_i18n::tr("payload.current_session.sub"))
-      .toggle("id_payload_autostart_" + found->id,
-              toolbox_i18n::tr("payload.next_autostart"), auto_start,
-              toolbox_i18n::tr("payload.next_autostart.sub"));
+              toolbox_i18n::tr("payload.current_session.sub"));
   if (meta.present) {
     page.label("id_payload_meta_version", meta.version)
         .label("id_payload_meta_source", meta.source_name)
@@ -422,16 +452,7 @@ static bool payload_config_model(ps5ui::Node& model,
                                      found->name.c_str()),
                 toolbox_i18n::confirm_phrase());
   }
-  page.button("id_payload_move_up_" + found->id,
-              toolbox_i18n::tr("payload_center.move_up"), std::nullopt)
-      .button("id_payload_move_down_" + found->id,
-              toolbox_i18n::tr("payload_center.move_down"), std::nullopt)
-      .text_field("id_payload_priority_" + found->id,
-                  toolbox_i18n::tr("payload.priority"),
-                  toolbox_i18n::tr("payload.priority.sub"), "number", "1", "3",
-                  std::nullopt, std::nullopt, std::nullopt,
-                  std::to_string(found->config.priority))
-      .text_field("id_payload_delay_" + found->id,
+  page.text_field("id_payload_delay_" + found->id,
                   toolbox_i18n::tr("payload.delay"),
                   toolbox_i18n::tr("payload.delay.sub"), "number", "1", "3",
                   std::nullopt, std::nullopt, std::nullopt,
@@ -776,11 +797,9 @@ void append_toolbox_pkg_group(ps5ui::Group& g) {
 }
 
 void append_toolbox_payloads_group(ps5ui::Group& g) {
-  g.link("id_payloads", toolbox_i18n::tr("payloads.link"), "payloads.xml",
-         toolbox_i18n::tr("payloads.link.sub"), kIconPlugins)
-      .link("id_payload_center", toolbox_i18n::tr("payload_center.link"),
-            "pldc_center.xml",
-            toolbox_i18n::tr("payload_center.link.sub"), kIconPlugins)
+  g.link("id_payload_center", toolbox_i18n::tr("payload_center.link"),
+         "pldc_center.xml", toolbox_i18n::tr("payload_center.link.sub"),
+         kIconPlugins)
       .link("id_plugins", toolbox_i18n::tr("plugins.link"), "plugins.xml",
             toolbox_i18n::tr("plugins.link.sub"), kIconPlugins);
   /* SPRX catalog UI is untested; restore id_sprx -> sprx.xml when it is. */
@@ -1117,7 +1136,8 @@ void generate_toolbox_xml(std::string& new_xml) {
       .group(
           "id_group_payloads", toolbox_i18n::tr("group.payloads"),
           [](ps5ui::Group& g) { append_toolbox_payloads_group(g); },
-          toolbox_i18n::tr("group.payloads.sub"), kIconPlugins, "id_payloads")
+          toolbox_i18n::tr("group.payloads.sub"), kIconPlugins,
+          "id_payload_center")
       .group(
           "id_group_game", toolbox_i18n::tr("group.game"),
           [](ps5ui::Group& g) { append_toolbox_game_group(g); },

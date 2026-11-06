@@ -472,6 +472,7 @@ static int test_payload_center_pages(void) {
   const std::pair<const char *, Page> pages[] = {
       {"pldc_center.xml", Page::PayloadCenter},
       {"pldc_autostart.xml", Page::PayloadAutostart},
+      {"pldc_order.xml", Page::PayloadOrder},
       {"pldc_browse.xml", Page::PayloadBrowse},
       {"pldc_list.xml", Page::PayloadList},
       {"pldc_detail.xml", Page::PayloadDetail},
@@ -486,7 +487,25 @@ static int test_payload_center_pages(void) {
       resolve_resource(make_in(cfg_res("pldc_unknown.xml"))).page == Page::None);
   TEST_ASSERT_TRUE(restores_parent_on_pop(Page::PayloadList));
   TEST_ASSERT_TRUE(restores_parent_on_pop(Page::PayloadDetail));
+  TEST_ASSERT_TRUE(restores_parent_on_pop(Page::PayloadOrder));
   TEST_ASSERT_TRUE(restores_parent_on_pop(Page::PayloadProgress));
+  return 0;
+}
+
+static int test_payload_order_restores_parent(void) {
+  ToolboxUiState state;
+  state.set_active_page(Page::PayloadAutostart);
+  state.set_active_page(Page::PayloadOrder);
+  TEST_ASSERT_TRUE(state.active_page == Page::PayloadOrder);
+  TEST_ASSERT_TRUE(state.parent_page == Page::PayloadAutostart);
+  TEST_ASSERT_TRUE(state.child_page == Page::PayloadOrder);
+  TEST_ASSERT_TRUE(onpress_domain_for_page(state.active_page) ==
+                   OnPressDomain::PayloadCenter);
+
+  state.leave_page(Page::PayloadOrder);
+  TEST_ASSERT_TRUE(state.active_page == Page::PayloadAutostart);
+  TEST_ASSERT_TRUE(state.parent_page == Page::None);
+  TEST_ASSERT_TRUE(state.child_page == Page::None);
   return 0;
 }
 
@@ -517,6 +536,8 @@ extern "C" int test_toolbox_route_suite(void) {
   fails += onion_test_run("route.cheat_progress", test_cheat_progress_page);
   fails += onion_test_run("route.plugin_progress", test_plugin_progress_page);
   fails += onion_test_run("route.payload_center", test_payload_center_pages);
+  fails += onion_test_run("payload.order_restores_parent",
+                          test_payload_order_restores_parent);
   fails += onion_test_run("route.remote_play", test_remote_play_page);
   fails += onion_test_run("route.superuser", test_superuser_pass_through);
   fails += onion_test_run("route.og_debug", test_og_debug_redirect);

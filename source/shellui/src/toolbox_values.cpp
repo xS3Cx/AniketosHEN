@@ -160,21 +160,16 @@ bool try_exact_value(const std::string &id, std::string &out) {
 
 bool try_payload_control_value(const std::string &id, std::string &out) {
   constexpr std::string_view kRunPrefix = "id_payload_run_";
-  constexpr std::string_view kAutoStartPrefix = "id_payload_autostart_";
-  constexpr std::string_view kPriorityPrefix = "id_payload_priority_";
+  constexpr std::string_view kEnabledPrefix = "id_payload_enabled_";
   constexpr std::string_view kDelayPrefix = "id_payload_delay_";
   std::string_view payload_id;
   bool is_run = false;
-  bool is_priority = false;
   bool is_delay = false;
   if (id.starts_with(kRunPrefix)) {
     payload_id = std::string_view(id).substr(kRunPrefix.size());
     is_run = true;
-  } else if (id.starts_with(kAutoStartPrefix)) {
-    payload_id = std::string_view(id).substr(kAutoStartPrefix.size());
-  } else if (id.starts_with(kPriorityPrefix)) {
-    payload_id = std::string_view(id).substr(kPriorityPrefix.size());
-    is_priority = true;
+  } else if (id.starts_with(kEnabledPrefix)) {
+    payload_id = std::string_view(id).substr(kEnabledPrefix.size());
   } else if (id.starts_with(kDelayPrefix)) {
     payload_id = std::string_view(id).substr(kDelayPrefix.size());
     is_delay = true;
@@ -184,10 +179,10 @@ bool try_payload_control_value(const std::string &id, std::string &out) {
   for (const auto &entry : g_ui.payloads_list) {
     if (entry.id != payload_id)
       continue;
-    if (is_priority || is_delay) {
+    if (is_delay) {
       OnionPayloadConfig config;
       onion_payload_config_load(entry.shellui_path.c_str(), &config);
-      out = int_str(is_priority ? config.priority : config.delay_seconds);
+      out = int_str(config.delay_seconds);
       return true;
     }
     out = bool_str(is_run

@@ -1,11 +1,56 @@
 # Payload Center
 
-Payload Center is the Toolbox page for installing user payloads from an online
-catalog. It downloads a catalog over HTTPS, lists its entries by category,
-installs one ELF at a time, verifies checksums when the catalog provides one,
-detects updates from the installed metadata, and removes payloads it installed.
+Payload Center is the Toolbox page for managing user payloads. It downloads a
+catalog over HTTPS, browses and installs entries, enables payloads for
+autostart, and removes payloads it installed. The default catalog is the one
+published by this repository.
 
 Open it from **Toolbox → Payloads & Kernel → Payload Center**.
+
+## Pages
+
+The hub has exactly four entries:
+
+- **Manage** — every installed payload, with its Enabled/Disabled state,
+  Running/Stopped state and autostart position. Selecting one opens its
+  per-payload page.
+- **Autostart** — the master switch plus an ordered list of the enabled
+  payloads. The top row loads first.
+- **Browse** — the online catalog by category or search. Each entry shows its
+  icon, name, version and install/update status.
+- **Settings** — catalog sources, cache controls and the last refresh date.
+
+There is no **Install from URL** entry. Payloads are installed from a catalog
+entry only.
+
+### Manage and per-payload pages
+
+Selecting an installed payload opens `payload_<id>.xml`. That page has:
+
+- **Enabled** — adds or removes the adjacent `.auto_start` marker.
+- **Current session** — starts or stops the payload now.
+- **Update**, **Remove** and the **delay** field.
+
+Enabling a payload appends it to the end of the boot order. Disabling removes
+the marker only: a payload that is already running keeps running until it is
+stopped from **Current session**. The old priority text field, Move up/Move
+down buttons and separate "Auto-start next time" toggle are gone.
+
+The Manage status line is a combination of Enabled/Disabled, Running/Stopped
+and, when enabled, the 1-based autostart position.
+
+### Autostart
+
+Autostart only lists enabled payloads, ordered by the payloads' persisted
+`priority` (`1000 - position * 10`, so the first row has the highest priority).
+The master switch is `[payload_center] autostart_enabled` in `config.ini`; when
+it is off the bootstrapper returns before scanning.
+
+Pressing an Autostart row opens a small **Position** page. Selecting a position
+moves that payload there, renumbers the others, rewrites every enabled payload's
+`priority`, saves, and returns to Autostart. The Autostart list is published
+through the Settings reconciler, so it reorders in place without reopening the
+page.
 
 ## Files
 
@@ -36,15 +81,20 @@ The util daemon writes through `/data`; ShellUI reads both views.
 {
   "version": 1,
   "sources": [
-    {"name": "PS5 Payloads", "url": "https://itsplk.github.io/ps5-payloads-mirror/payloads_v2.json", "builtin": true},
-    {"name": "My mirror", "url": "https://example.com/payloads_v2.json", "builtin": false}
+    {"name": "AniketosHEN Payloads", "url": "https://raw.githubusercontent.com/xS3Cx/AniketosHEN/main/payloads.json", "builtin": true},
+    {"name": "My catalog", "url": "https://example.com/payloads.json", "builtin": false}
   ]
 }
 ```
 
 The built-in source is always present and cannot be removed. Users can add up
 to eight HTTPS sources. `http://` sources and catalog entries are rejected;
-the URL and name are length-limited and validated before use.
+the URL and name are length-limited and validated before use. There is no
+mirror fallback: if the built-in catalog cannot be fetched, refresh reports a
+normal network error and keeps the previous cache.
+
+Cache files are pruned when a source is removed, so an old source hash cannot
+stay on disk after its source is gone.
 
 ### Catalog cache
 
@@ -55,6 +105,12 @@ refresh leaves the previous copy in place.
 
 `icons-<src8>.status.json` records the last icon refresh. Icons are refreshed
 at most once every seven days; a failed icon download keeps the previous icon.
+If the catalog does not supply a usable icon, a colored tile with the payload's
+initial is generated locally.
+
+Refreshing the catalog is a background task. It returns to the page
+immediately and reports success or failure with a notification; the progress
+page is used only for installs and updates.
 
 ### Installed metadata
 
@@ -64,22 +120,22 @@ at most once every seven days; a failed icon download keeps the previous icon.
 {
   "version": 1,
   "id": "ftpsrv",
-  "match_key": "https://github.com/ps5-payload-dev/ftpsrv/releases",
-  "source_url": "https://itsplk.github.io/ps5-payloads-mirror/payloads_v2.json",
-  "source_name": "PS5 Payloads",
+  "match_key": "https://github.com/ps5-payload-dev/ftpsrv/releases/tag/v0.21.1",
+  "source_url": "https://raw.githubusercontent.com/xS3Cx/AniketosHEN/main/payloads.json",
+  "source_name": "AniketosHEN Payloads",
   "name": "ftpsrv",
   "item_version": "v0.21.1",
-  "filename": "ftpsrv_v0.21.1.elf",
+  "filename": "ftpsrv-ps5.elf",
   "checksum": "0123456789abcdef...",
   "last_update": "2026-08-20",
-  "category": "Networking & Servers",
+  "category": "Servers",
   "installed_at": 1793986660
 }
 ```
 
 `version` is the sidecar schema version. `item_version` is the catalog item
 version. `match_key` is the item's `source` field when present, otherwise
-`source_url + "#" + id`; it identifies the same catalog entry across mirrors.
+`source_url + "#" + id`; it identifies the same catalog entry across catalogs.
 The existing `<slug>.elf.json` (`priority`, `delay_seconds`) and
 `<slug>.elf.auto_start` files are unchanged.
 
@@ -89,7 +145,7 @@ requires an explicit confirmation in the UI; the util daemon refuses it unless
 the install request sets `replace`.
 
 Newly installed payloads do not get an `.auto_start` marker, so autostart is
-off by default.
+off by default. Enable them from **Manage**.
 
 ## Catalog schema
 
@@ -97,18 +153,19 @@ Both shapes are accepted:
 
 ```json
 {
-  "name": "PS5 Payloads",
-  "icons_url": "https://example.com/icons/",
+  "name": "AniketosHEN Payloads",
+  "icons_url": "icons.json",
   "payloads": [
     {
+      "id": "ftpsrv",
       "name": "ftpsrv",
-      "filename": "ftpsrv_v0.21.1.elf",
-      "url": "https://example.com/ftpsrv_v0.21.1.elf",
-      "source": "https://github.com/ps5-payload-dev/ftpsrv/releases",
-      "description": "FTP server",
+      "filename": "ftpsrv-ps5.elf",
+      "url": "https://github.com/ps5-payload-dev/ftpsrv/releases/download/v0.21.1/ftpsrv-ps5.elf",
+      "source": "https://github.com/ps5-payload-dev/ftpsrv/releases/tag/v0.21.1",
+      "description": "FTP server for PlayStation 5.",
       "last_update": "2026-08-20",
       "version": "v0.21.1",
-      "category": "Networking & Servers",
+      "category": "Servers",
       "checksum": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
       "icon_key": "ftpsrv"
     }
@@ -118,7 +175,7 @@ Both shapes are accepted:
 
 ```json
 [
-  {"name": "ftpsrv", "filename": "ftpsrv_v0.21.1.elf", "url": "https://example.com/ftpsrv.elf"}
+  {"name": "ftpsrv", "filename": "ftpsrv-ps5.elf", "url": "https://example.com/ftpsrv.elf"}
 ]
 ```
 
@@ -137,10 +194,26 @@ hard failure; the partial file is deleted and the existing payload is kept.
 
 Entries with `http://` URLs are listed as insecure and cannot be installed.
 
+### Maintaining the bundled catalog
+
+`scripts/build_payload_catalog.py` builds the repository's `payloads.json` and
+`icons.json`. For GitHub projects it queries `releases/latest`, picks the
+matching `.elf` asset, downloads it and computes its SHA-256. Non-GitHub
+projects use an explicit `direct_url`. The script uses only the Python standard
+library and honors `GITHUB_TOKEN` when present:
+
+```bash
+python3 scripts/build_payload_catalog.py
+```
+
+`icons.json` is an object mapping each `icon_key` to a
+`data:image/png;base64,...` 128×128 tile generated from the payload's initial
+and category color; no third-party logos are bundled.
+
 ## Install pipeline
 
-1. Resolve the catalog item server-side from `(source_id, item_id)` or a
-   direct HTTPS URL. Filesystem paths never cross IPC.
+1. Resolve the catalog item server-side from `(source_id, item_id)`. Filesystem
+   paths never cross IPC.
 2. Check free space (64 MiB margin).
 3. Download into `payload_center/cache/tmp/` while streaming SHA-256.
 4. Verify the catalog checksum when present.
@@ -152,18 +225,23 @@ Entries with `http://` URLs are listed as insecure and cannot be installed.
 Only one task runs at a time. The progress page polls the daemon every 500 ms;
 pressing Back while an install is running cancels it. A cancelled or failed
 download leaves no `.part` file and does not touch an installed payload.
+Refresh jobs never open the progress page.
+
+The directory tree is created with recursive `mkdir_tree` before every task,
+including on a fresh console where
+`/data/AniketosHEN/payload_center/cache` does not exist yet. Filesystem
+failures log the failing operation with `errno`/`strerror`.
 
 Errors are reported as `network`, `protocol`, `tls`, `clock`, `hash`, `elf`,
-`io`, `space`, `busy`, `rejected` or `cancelled`. Certificate-not-yet-valid
-and expired errors are reported as `clock`; other verification failures as
-`tls`.
+`io`, `space`, `busy`, `rejected` or `cancelled`. Catalog cache write failures
+use the dedicated catalog I/O message. Certificate-not-yet-valid and expired
+errors are reported as `clock`; other verification failures as `tls`.
 
-## Autostart
+## Payloads & Kernel page
 
-The Autostart page lists payloads found by the normal payload scanner and uses
-the existing `.auto_start` markers, so it stays compatible with the Payloads
-page. The master switch is `[payload_center] autostart_enabled` in
-`config.ini`; when it is off the bootstrapper returns before scanning.
+The Toolbox **Payloads & Kernel** group contains only **Payload Center** and
+**Plugins**. The old **User Payloads** entry is gone; installed payloads are
+reached through **Payload Center → Manage**.
 
 `elfldr` payloads never autostart: the bootstrapper already skips filenames
 containing `elfldr`. `kstuff`, `etaHEN`, `pldmgr`, `lapy-jb`, `backpork`,
@@ -187,19 +265,9 @@ payloads are not blocked, but the detail page warns and asks for confirmation.
 
 ## FTP drop
 
-The Payload Center hub shows the console address in the form
-`ftp://<ip>:2121 -> /data/AniketosHEN/payloads` when the LAN address can be
-resolved. The optional FTP plugin exposes the same directory, so a payload can
-be dropped manually without the online catalog.
-
-## Hosting a catalog
-
-Serve a `payloads_v2.json` over HTTPS. Keep filenames unique per entry, use
-stable `source` values (for example the project release page) so updates match
-after a mirror change, and publish a SHA-256 checksum whenever possible. Put
-the icon key into `icon_key` (or a `data:image/png;base64,...` URI) and point
-`icons_url` either at a JSON object mapping icon keys to data URIs/HTTPS URLs,
-or at a directory ending in `/` where `<icon_key>.png` can be fetched.
+The optional FTP plugin exposes `/data/AniketosHEN/payloads`, so a payload can
+be dropped manually without the online catalog. The Payload Center no longer
+displays the FTP address on its hub.
 
 ## Settings
 
@@ -217,4 +285,5 @@ autoload=false
 ```
 
 `kstuff` remains embedded as a fallback. Both kstuff and ShadowMount have
-Toolbox toggles; ShadowMount's toggle lives on the Plugins page.
+Toolbox toggles; ShadowMount's toggle lives on the Plugins page. Their behavior
+is unchanged by the Payload Center rework.

@@ -17,8 +17,7 @@ void *load_payload_thread(void *args);
 namespace {
 
 constexpr const char *kRunPrefix = "id_payload_run_";
-constexpr const char *kAutoStartPrefix = "id_payload_autostart_";
-constexpr const char *kPriorityPrefix = "id_payload_priority_";
+constexpr const char *kEnabledPrefix = "id_payload_enabled_";
 constexpr const char *kDelayPrefix = "id_payload_delay_";
 
 PayloadEntry *payload_for_control(const std::string &control_id,
@@ -81,54 +80,76 @@ static OnPressResult prefix_id_payload_run(OnPressContext &ctx) {
   return OnPressResult::Consumed;
 }
 
-static OnPressResult prefix_id_auto_payload(OnPressContext &ctx) {
-  if (ctx.id.rfind(kAutoStartPrefix, 0) != 0) {
+static OnPressResult prefix_id_enabled(OnPressContext &ctx) {
+  if (ctx.id.rfind(kEnabledPrefix, 0) != 0)
     return OnPressResult::NotMine;
-  }
-  PayloadEntry *entry = payload_for_control(ctx.id, kAutoStartPrefix);
+  PayloadEntry *entry = payload_for_control(ctx.id, kEnabledPrefix);
   if (!entry)
     return OnPressResult::Consumed;
 
-  const std::string auto_path = entry->shellui_path + ".auto_start";
-  LOG_DEBUG("Auto start path: %s", auto_path.c_str());
+  const std::string marker = entry->shellui_path + ".auto_start";
   if (!control_enabled(ctx.value)) {
-    unlink(auto_path.c_str());
-  } else {
-    const int fd = open(auto_path.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0666);
-    if (fd < 0)
-      notify("notify.payload.autostart_file");
-    else
-      close(fd);
+    /* Disabling only removes the boot marker; a running payload keeps running. */
+    unlink(marker.c_str());
+    return OnPressResult::Consumed;
   }
+
+  /* Append at the end: the lowest current priority minus ten. */
+  int priority = 990;
+  bool found_other = false;
+  int lowest = 999;
+  for (const auto &other : g_ui.payloads_list) {
+    if (other.id == entry->id)
+      continue;
+    if (access((other.shellui_path + ".auto_start").c_str(), F_OK) != 0)
+      continue;
+    OnionPayloadConfig other_config;
+    onion_payload_config_load(other.shellui_path.c_str(), &other_config);
+    lowest = std::min(lowest, other_config.priority);
+    found_other = true;
+  }
+  if (found_other)
+    priority = std::max(0, lowest - 10);
+  OnionPayloadConfig config;
+  onion_payload_config_load(entry->shellui_path.c_str(), &config);
+  config.priority = priority;
+  if (!onion_payload_config_save(entry->shellui_path.c_str(), &config))
+    notify("notify.payload.config_save_failed", entry->name.c_str());
+  entry->config = config;
+
+  const int fd = open(marker.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0666);
+  if (fd < 0)
+    notify("notify.payload.autostart_file");
+  else
+    close(fd);
   return OnPressResult::Consumed;
 }
 
-static OnPressResult set_payload_schedule(OnPressContext &ctx, bool priority) {  ctx.dirty = false;
-  PayloadEntry *entry = payload_for_control(
-      ctx.id, priority ? kPriorityPrefix : kDelayPrefix);
+static OnPressResult set_payload_delay(OnPressContext &ctx) {
+  ctx.dirty = false;
+  PayloadEntry *entry = payload_for_control(ctx.id, kDelayPrefix);
   if (!entry)
     return OnPressResult::Consumed;
 
   OnionPayloadConfig config;
   onion_payload_config_load(entry->shellui_path.c_str(), &config);
-  const int maximum = priority ? ONION_PAYLOAD_PRIORITY_MAX : ONION_PAYLOAD_DELAY_MAX;
   char *end = nullptr;
   errno = 0;
   const long value = std::strtol(ctx.value.c_str(), &end, 10);
   if (ctx.value.empty() || ctx.value.find_first_not_of("0123456789") !=
                                std::string::npos ||
-      errno == ERANGE || !end || *end || value < 0 || value > maximum) {
-    notify("notify.payload.config_invalid", maximum);
+      errno == ERANGE || !end || *end || value < 0 ||
+      value > ONION_PAYLOAD_DELAY_MAX) {
+    notify("notify.payload.config_invalid", ONION_PAYLOAD_DELAY_MAX);
   } else {
-    (priority ? config.priority : config.delay_seconds) = static_cast<int>(value);
+    config.delay_seconds = static_cast<int>(value);
     if (!onion_payload_config_save(entry->shellui_path.c_str(), &config))
       notify("notify.payload.config_save_failed", entry->name.c_str());
   }
 
   // Rebind the persisted value, including after rejected input or failed writes.
   onion_payload_config_load(entry->shellui_path.c_str(), &entry->config);
-  const std::string saved = std::to_string(
-      priority ? entry->config.priority : entry->config.delay_seconds);
+  const std::string saved = std::to_string(entry->config.delay_seconds);
   MonoDomain *domain = mono_domain_get ? mono_domain_get() : Root_Domain;
   if (!domain)
     domain = Root_Domain;
@@ -175,51 +196,11 @@ static OnPressResult remove_payload(OnPressContext &ctx) {
   return OnPressResult::Consumed;
 }
 
-static OnPressResult move_payload(OnPressContext &ctx, bool up) {
-  ctx.dirty = false;
-  constexpr const char *kUp = "id_payload_move_up_";
-  constexpr const char *kDown = "id_payload_move_down_";
-  const std::string id =
-      ctx.id.substr(std::string(up ? kUp : kDown).size());
-  auto &list = g_ui.payloads_list;
-  const auto found = std::find_if(
-      list.begin(), list.end(),
-      [&](const PayloadEntry &entry) { return entry.id == id; });
-  if (found == list.end())
-    return OnPressResult::Consumed;
-  const std::size_t index =
-      static_cast<std::size_t>(std::distance(list.begin(), found));
-  if ((up && index == 0) || (!up && index + 1 >= list.size()))
-    return OnPressResult::Consumed;
-  const std::size_t other = up ? index - 1 : index + 1;
-  std::swap(list[index], list[other]);
-  for (std::size_t i = 0; i < list.size(); ++i) {
-    OnionPayloadConfig config;
-    onion_payload_config_load(list[i].shellui_path.c_str(), &config);
-    config.priority = static_cast<int>(i < 10 ? 100 - i * 10 : 0);
-    onion_payload_config_save(list[i].shellui_path.c_str(), &config);
-    list[i].config = config;
-  }
-  notify("notify.payload_center.order_saved");
-  return OnPressResult::Consumed;
-}
-
 static const OnPressPrefixEntry kPrefix[] = {
     {"id_payload_update_", update_payload},
     {"id_payload_remove_", remove_payload},
-    {"id_payload_move_up_", +[](OnPressContext &ctx) {
-       return move_payload(ctx, true);
-     }},
-    {"id_payload_move_down_", +[](OnPressContext &ctx) {
-       return move_payload(ctx, false);
-     }},
-    {kPriorityPrefix, +[](OnPressContext &ctx) {
-       return set_payload_schedule(ctx, true);
-     }},
-    {kDelayPrefix, +[](OnPressContext &ctx) {
-       return set_payload_schedule(ctx, false);
-     }},
-    {kAutoStartPrefix, prefix_id_auto_payload},
+    {kDelayPrefix, set_payload_delay},
+    {kEnabledPrefix, prefix_id_enabled},
     {kRunPrefix, prefix_id_payload_run},
 };
 

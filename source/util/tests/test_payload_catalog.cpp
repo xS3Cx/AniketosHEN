@@ -1,6 +1,7 @@
 #include "test_harness.h"
 
 #include <onion/payload_catalog.hpp>
+#include <onion/payload_catalog_policy.hpp>
 #include <onion/payload_sources_json.hpp>
 
 #include <cstdio>
@@ -26,7 +27,8 @@ static std::string fixture() {
 static int test_wrapper_catalog(void) {
   const ParseResult result = parse_catalog(fixture());
   TEST_ASSERT_TRUE(result.ok);
-  TEST_ASSERT_STREQ("PS5 Payloads", result.catalog.name.c_str());
+  TEST_ASSERT_STREQ("AniketosHEN Payloads", result.catalog.name.c_str());
+  TEST_ASSERT_TRUE(result.catalog.icons_url.empty());
   TEST_ASSERT_TRUE(result.catalog.items.size() >= 3);
   const Item &first = result.catalog.items.front();
   TEST_ASSERT_STREQ("ftpsrv", first.id.c_str());
@@ -73,6 +75,12 @@ static int test_sources_roundtrip(void) {
   close(fd);
   SourcesFile sources = default_sources();
   TEST_ASSERT_EQ_INT(1, static_cast<int>(sources.sources.size()));
+  TEST_ASSERT_STREQ("AniketosHEN Payloads",
+                    sources.sources.front().name.c_str());
+  TEST_ASSERT_STREQ(
+      "https://raw.githubusercontent.com/xS3Cx/AniketosHEN/main/payloads.json",
+      sources.sources.front().url.c_str());
+  TEST_ASSERT_TRUE(sources.sources.front().builtin);
   TEST_ASSERT_TRUE(add_source(&sources, "Mine", "https://example.com/c.json"));
   TEST_ASSERT_TRUE(!add_source(&sources, "Bad", "http://example.com/c.json"));
   TEST_ASSERT_TRUE(!add_source(&sources, "Mine", "https://example.com/c.json"));

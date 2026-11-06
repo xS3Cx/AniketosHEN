@@ -7,12 +7,9 @@
 
 namespace onion::payload_catalog {
 
-inline constexpr std::string_view kBuiltinSourceName = "PS5 Payloads";
+inline constexpr std::string_view kBuiltinSourceName = "AniketosHEN Payloads";
 inline constexpr std::string_view kBuiltinSourceUrl =
-    "https://itsplk.github.io/ps5-payloads-mirror/payloads_v2.json";
-inline constexpr std::string_view kBuiltinSourceFallbackUrl =
-    "https://raw.githubusercontent.com/itsPLK/ps5-payloads-mirror/main/"
-    "payloads_v2.json";
+    "https://raw.githubusercontent.com/xS3Cx/AniketosHEN/main/payloads.json";
 inline constexpr std::size_t kMaxSources = 8;
 inline constexpr std::size_t kMaxUrlLength = 2048;
 inline constexpr std::size_t kMaxNameLength = 256;
