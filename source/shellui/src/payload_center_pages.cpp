@@ -174,6 +174,13 @@ bool identity_has_update(const std::string &identity) {
   return false;
 }
 
+std::string identity_icon_key(const std::string &identity) {
+  for (const auto &entry : entries())
+    if (entry.identity == identity && !entry.icon_key.empty())
+      return entry.icon_key;
+  return {};
+}
+
 std::vector<InstalledRow> installed_rows() {
   g_ui.payloads_list = shellui_scan_payloads();
   std::vector<InstalledRow> rows;
@@ -186,7 +193,8 @@ std::vector<InstalledRow> installed_rows() {
     row.version =
         meta.version.empty() ? toolbox_i18n::tr("payload_center.version_unknown")
                              : meta.version;
-    row.icon_key = meta.icon_key;
+    row.icon_key = meta.icon_key.empty() ? identity_icon_key(entry.id)
+                                         : meta.icon_key;
     row.enabled = marker_present(entry);
     row.running = shellui_payload_is_running(entry.tid.c_str());
     row.position = row.enabled ? enabled_position(g_ui.payloads_list, entry) : 0;
