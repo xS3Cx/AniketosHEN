@@ -533,6 +533,8 @@ void request_post_install(std::string identity, std::string name) {
   if (identity.empty())
     return;
   std::lock_guard<std::mutex> lock(s_pending_mu);
+  if (!s_pending_post_identity.empty() || !s_post_identity.empty())
+    return;
   s_pending_reload = true;
   s_pending_post_identity = std::move(identity);
   s_pending_post_name = std::move(name);

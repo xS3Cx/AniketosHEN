@@ -319,9 +319,7 @@ bool installed_model(ps5ui::Node &model, InstalledFilter filter) {
                toolbox_i18n::tr("payload_center.manage.empty"),
                ps5ui::Style::Center)
         .link("id_pldc_empty_browse", toolbox_i18n::tr("payload_center.browse"),
-              "pldc_browse.xml")
-        .button("id_pldc_refresh_list",
-                toolbox_i18n::tr("payload_center.refresh_list"));
+              "pldc_browse.xml");
   }
   model = page.root();
   return true;
