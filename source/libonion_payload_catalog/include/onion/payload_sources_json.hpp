@@ -1,5 +1,6 @@
 #pragma once
 
+#include <onion/payload_catalog.hpp>
 #include <onion/payload_catalog_policy.hpp>
 
 #include <string>
