@@ -168,7 +168,7 @@ measurements are in [docs/shell-menu.md](docs/shell-menu.md).
 
 1. Run the kernel exploit and start the external `elfldr` service.
 2. Send `AniketosHEN.elf` through the loader your exploit host provides.
-3. Wait for the utility daemon, `kstuff`, ShadowMountPlus, and the main daemon to start, in that order (with a 2-second pause after `kstuff`).
+3. Wait for the utility daemon and the main daemon. When their autoload is enabled, `kstuff` and ShadowMountPlus start between them in that order (with a 2-second pause after `kstuff`); both are off by default and can be enabled in the Toolbox or with `[kstuff] autoload=true` / `[shadowmount] autoload=true`.
 4. Use the **HEN** button on Home, or open PS5 Settings and enter the AniketosHEN Toolbox.
 
 Startup is sequential. After the first hop, AniketosHEN uses its own
@@ -372,8 +372,8 @@ the settings found in `/data/OnionHEN/config.ini` (see
 | `startup.open_after_load` | `none` | `none`, `home_menu` |
 | `logging.level` | `info` | `off`, `error`, `warn`, `info`, `debug`, `trace` |
 | `reports.send` | `true` | `true`, `false` |
-| `kstuff.autoload` | `true` | `true`, `false` |
-| `shadowmount.autoload` | `true` | `true`, `false` |
+| `kstuff.autoload` | `false` | `true`, `false` |
+| `shadowmount.autoload` | `false` | `true`, `false` |
 | `home_screen.show_title_ids` | `false` | `true`, `false` |
 | `game_menu.show_aniketoshen_options` | `true` | `true`, `false` (OnionHEN's `show_onionhen_options` is still read) |
 | `rest_mode.resume_reinject_delay_seconds` | `10` | `0` through `255` seconds |
