@@ -54,11 +54,6 @@ constexpr int kMaxConsecutiveStatusFailures = 10;
 
 constexpr std::string_view kCustomElementId = "id_cheat_progress_custom";
 
-constexpr const char *kPuiUi3Namespace = "Sce.PlayStation.PUI.UI3";
-constexpr const char *kUpdatePanelNamespace =
-    "Sce.Vsh.ShellUI.Settings.Peripherals.MorpheusUpdateUI3";
-constexpr const char *kUpdatePanelClass = "UpdateProgressPanel";
-
 enum class SyncState { Idle, Running, Ok, Error };
 
 enum class SyncPhase { Start, Download, Extract, Install, Cleanup, Unknown };

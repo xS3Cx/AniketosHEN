@@ -50,11 +50,6 @@ using progress_ui3::widget_children_count;
 
 constexpr std::string_view kCustomElementId = "id_plugin_progress_custom";
 
-constexpr const char *kPuiUi3Namespace = "Sce.PlayStation.PUI.UI3";
-constexpr const char *kUpdatePanelNamespace =
-    "Sce.Vsh.ShellUI.Settings.Peripherals.MorpheusUpdateUI3";
-constexpr const char *kUpdatePanelClass = "UpdateProgressPanel";
-
 enum class ProgressState { Idle, Running, Ok, Error };
 
 struct PluginProgress {

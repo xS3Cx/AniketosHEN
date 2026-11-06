@@ -48,12 +48,15 @@ std::string install_confirm(const Entry &entry) {
       toolbox_i18n::format("payload_center.confirm.install_fmt",
                            entry.item.name.c_str());
   if (!entry.item.has_checksum)
-    text += "\n" + toolbox_i18n::tr("payload_center.confirm.no_checksum");
+    text += std::string("\n") +
+            toolbox_i18n::tr("payload_center.confirm.no_checksum");
   if (onion::payload_catalog::is_system_or_conflicting_name(entry.item.name))
-    text += "\n" + toolbox_i18n::format("payload_center.confirm.risk_fmt",
-                                        entry.item.name.c_str());
+    text += std::string("\n") +
+            toolbox_i18n::format("payload_center.confirm.risk_fmt",
+                                 entry.item.name.c_str());
   if (unmanaged_target(entry))
-    text += "\n" + toolbox_i18n::tr("payload_center.confirm.replace");
+    text += std::string("\n") +
+            toolbox_i18n::tr("payload_center.confirm.replace");
   return text;
 }
 
@@ -109,12 +112,12 @@ void generate_browse_xml(std::string &xml) {
               std::nullopt)
       .button("id_pldc_search", toolbox_i18n::tr("payload_center.search"),
               toolbox_i18n::tr("payload_center.search.sub"));
-  const auto categories = categories();
-  for (std::size_t i = 0; i < categories.size(); ++i) {
-    page.button("id_pldc_cat_" + std::to_string(i), categories[i],
+  const auto category_list = categories();
+  for (std::size_t i = 0; i < category_list.size(); ++i) {
+    page.button("id_pldc_cat_" + std::to_string(i), category_list[i],
                 std::nullopt);
   }
-  if (categories.empty())
+  if (category_list.empty())
     page.label("id_pldc_browse_empty",
                toolbox_i18n::tr("payload_center.browse.empty"),
                ps5ui::Style::Center);

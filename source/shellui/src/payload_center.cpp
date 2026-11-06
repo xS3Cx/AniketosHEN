@@ -224,18 +224,6 @@ void rebuild() {
     g_ui.pldc_items.push_back(entry.item);
 }
 
-bool parse_selection(std::string_view selection, std::string *source_id,
-                     std::string *item_id) {
-  const std::size_t separator = selection.find('|');
-  if (separator == std::string_view::npos || separator == 0)
-    return false;
-  if (source_id)
-    *source_id = std::string(selection.substr(0, separator));
-  if (item_id)
-    *item_id = std::string(selection.substr(separator + 1));
-  return true;
-}
-
 std::string state_from_reply(const std::string &reply, int *task_id) {
   onion_cjson::Root root(reply);
   if (!root)
