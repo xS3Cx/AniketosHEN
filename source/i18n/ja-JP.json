@@ -1205,6 +1205,7 @@
     "shadowmount.autoload.sub": "Loads before kstuff when AniketosHEN starts"
   },
   "notifications": {
+    "payload_center.error.catalog_io": "Could not write the payload catalog cache",
     "notify.payload.config_invalid": "0 から %d までの整数を入力してください。",
     "notify.payload.config_save_failed": "Payload の設定を保存できませんでした：%s",
     "notify.boot.starting": "AniketosHEN を起動しています...",

@@ -14,7 +14,7 @@
     "group.pkg": "Content Install & Management",
     "group.pkg.sub": "Install PKGs and manage add-on content",
     "group.payloads": "Payloads & Kernel",
-    "group.payloads.sub": "User and auto-start payloads; Kstuff and installed plugins · Payload Center",
+    "group.payloads.sub": "Payload Center for installed payloads and catalogs; Kstuff and plugins",
     "group.game": "Game Tools",
     "group.game.sub": "Manage cheats and download the cheat collection",
     "group.network": "Account & Remote Play",
@@ -1205,6 +1205,7 @@
     "shadowmount.autoload.sub": "Loads before kstuff when AniketosHEN starts"
   },
   "notifications": {
+    "payload_center.error.catalog_io": "Could not write the payload catalog cache",
     "notify.payload.config_invalid": "Enter a whole number from 0 to %d.",
     "notify.payload.config_save_failed": "Failed to save Payload settings: %s",
     "notify.boot.starting": "AniketosHEN is starting...",

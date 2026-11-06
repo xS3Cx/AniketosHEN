@@ -120,7 +120,7 @@ page is used only for installs and updates.
 {
   "version": 1,
   "id": "ftpsrv",
-  "match_key": "https://github.com/ps5-payload-dev/ftpsrv/releases/tag/v0.21.1",
+  "match_key": "https://github.com/ps5-payload-dev/ftpsrv/releases",
   "source_url": "https://raw.githubusercontent.com/xS3Cx/AniketosHEN/main/payloads.json",
   "source_name": "AniketosHEN Payloads",
   "name": "ftpsrv",
@@ -161,7 +161,7 @@ Both shapes are accepted:
       "name": "ftpsrv",
       "filename": "ftpsrv-ps5.elf",
       "url": "https://github.com/ps5-payload-dev/ftpsrv/releases/download/v0.21.1/ftpsrv-ps5.elf",
-      "source": "https://github.com/ps5-payload-dev/ftpsrv/releases/tag/v0.21.1",
+      "source": "https://github.com/ps5-payload-dev/ftpsrv/releases",
       "description": "FTP server for PlayStation 5.",
       "last_update": "2026-08-20",
       "version": "v0.21.1",

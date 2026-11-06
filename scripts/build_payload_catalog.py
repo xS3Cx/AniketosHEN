@@ -82,8 +82,7 @@ CURATED = [
     dict(id="garlic-savemgr",
          direct_url="https://git.etawen.dev/earthonion/garlic-savemgr/releases/"
                     "download/v1.15-beta12/garlic-savemgr.elf",
-         source="https://git.etawen.dev/earthonion/garlic-savemgr/releases/"
-                "tag/v1.15-beta12",
+         source="https://git.etawen.dev/earthonion/garlic-savemgr/releases",
          version="v1.15-beta12", last_update="2026-11-06",
          filename="garlic-savemgr.elf", category="Storage & Files",
          description="Save file manager for PlayStation 5."),
@@ -275,7 +274,9 @@ def build_entry(item: dict) -> dict:
         asset = pick_asset(release, item["pattern"])
         url = asset["browser_download_url"]
         filename = asset["name"]
-        source = release["html_url"]
+        # Stable release page, not the tag URL: the tag changes every release
+        # and would change the catalog match key used for update detection.
+        source = f"https://github.com/{item['repo']}/releases"
         version = release.get("tag_name", "")
         last_update = str(release.get("published_at", ""))[:10]
         release_url = release["html_url"]
