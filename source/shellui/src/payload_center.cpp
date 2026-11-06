@@ -249,6 +249,7 @@ bool entry_matches_query(const Entry &entry) { return query_matches(entry); }
 
 void reload(bool force) {
   long long stamp = mtime_of(kSourcesUser);
+  stamp += mtime_of(ONION_DIST_DATA_ROOT "/payloads");
   for (const auto &source : s_sources.sources)
     stamp += mtime_of(cache_catalog_path(source));
   if (!force && stamp == s_cache_stamp && !s_entries.empty())
@@ -359,6 +360,7 @@ bool start_install(const Entry &entry, bool replace) {
 }
 
 bool start_update_for_path(const std::string &payload_path) {
+  reload(false);
   std::string raw;
   if (!read_text(payload_path + ".meta.json", &raw, 128 * 1024))
     return false;

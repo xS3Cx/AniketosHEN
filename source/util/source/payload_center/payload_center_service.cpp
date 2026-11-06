@@ -87,8 +87,17 @@ const onion::payload_catalog::Source *find_source(
   return nullptr;
 }
 
-std::string name_from_url(const std::string &url) {
-  const std::size_t query = url.find_first_of("?#");
+std::string normalize_error(const std::string &error) {
+  if (error == "unavailable")
+    return "network";
+  if (error == "no_space")
+    return "space";
+  if (error.empty())
+    return "network";
+  return error;
+}
+
+std::string name_from_url(const std::string &url) {  const std::size_t query = url.find_first_of("?#");
   const std::string clean = url.substr(0, query);
   const std::size_t slash = clean.find_last_of('/');
   std::string name =
@@ -118,7 +127,7 @@ bool load_or_fetch_catalog(const std::string &source_url, std::string *body,
   const auto parsed = onion::payload_catalog::parse_catalog(*body);
   if (!parsed.ok) {
     if (error)
-      *error = parsed.error.empty() ? "protocol" : parsed.error;
+      *error = "protocol";
     return false;
   }
   *catalog = parsed.catalog;
@@ -288,12 +297,12 @@ void Service::worker_refresh(std::string source_id, uint32_t task_id) {
     std::string body;
     std::string error;
     if (!fetch_source_catalog(source.url, &body, &error)) {
-      last_error = error.empty() ? "network" : error;
+      last_error = normalize_error(error);
       continue;
     }
     const auto parsed = onion::payload_catalog::parse_catalog(body);
     if (!parsed.ok) {
-      last_error = parsed.error.empty() ? "protocol" : parsed.error;
+      last_error = "protocol";
       continue;
     }
     if (!write_catalog(source.url, body)) {
@@ -349,7 +358,7 @@ void Service::worker_install(std::string source_id, std::string item_id,
     onion::payload_catalog::Catalog catalog;
     std::string error;
     if (!load_or_fetch_catalog(source->url, &body, &catalog, &error)) {
-      finish(Status::State::Error, error.empty() ? "network" : error);
+      finish(Status::State::Error, normalize_error(error));
       return;
     }
     const auto found = std::find_if(
