@@ -112,12 +112,15 @@ std::string or_dash(const std::string &text) {
 std::optional<std::string> icon_for_key(const std::string &icon_key) {
   if (icon_key.empty())
     return std::nullopt;
-  const std::string path =
-      std::string(ONION_DIST_USER_DATA_ROOT) + "/payload_center/icons/" +
+  const std::string name =
       onion::payload_catalog::icon_cache_name(icon_key) + ".png";
-  if (access(path.c_str(), F_OK) != 0)
-    return std::nullopt;
-  return path;
+  for (const char *root : {ONION_DIST_USER_DATA_ROOT, ONION_DIST_DATA_ROOT}) {
+    const std::string path =
+        std::string(root) + "/payload_center/icons/" + name;
+    if (access(path.c_str(), F_OK) == 0)
+      return path;
+  }
+  return std::nullopt;
 }
 
 std::string row_icon(const std::string &icon_key) {
