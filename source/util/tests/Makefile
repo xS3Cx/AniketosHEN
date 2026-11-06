@@ -129,7 +129,8 @@ TEST_C_SRCS := \
 	test_payload.c \
 	test_payload_config.c \
 	test_payload_autostart.c \
-	test_conflict.c \	test_base64.c \
+	test_conflict.c \
+	test_base64.c \
 	test_aes_cbc.c \
 	test_hde64.c \
 	test_reg_entity.c \
