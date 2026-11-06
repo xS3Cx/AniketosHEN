@@ -126,14 +126,14 @@ void generate_browse_xml(std::string &xml) {
   reload(false);
   ps5ui::Page page("id_pldc_browse",
                    toolbox_i18n::tr("payload_center.browse"));
-  page.button("id_pldc_cat_all", toolbox_i18n::tr("payload_center.all"),
-              std::nullopt)
+  page.link("id_pldc_cat_all", toolbox_i18n::tr("payload_center.all"),
+            "pldc_list.xml")
       .button("id_pldc_search", toolbox_i18n::tr("payload_center.search"),
               toolbox_i18n::tr("payload_center.search.sub"));
   const auto category_list = categories();
   for (std::size_t i = 0; i < category_list.size(); ++i) {
-    page.button("id_pldc_cat_" + std::to_string(i), category_list[i],
-                std::nullopt);
+    page.link("id_pldc_cat_" + std::to_string(i), category_list[i],
+              "pldc_list.xml");
   }
   if (category_list.empty())
     page.label("id_pldc_browse_empty",

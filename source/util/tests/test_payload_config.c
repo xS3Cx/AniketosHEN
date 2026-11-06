@@ -47,6 +47,22 @@ static int test_config_roundtrip(void) {
   TEST_ASSERT_EQ_INT(0, mkdir(json_path, 0700));
   TEST_ASSERT_TRUE(!onion_payload_config_save(path, &config));
   TEST_ASSERT_EQ_INT(0, rmdir(json_path));
+  char meta_path[288];
+  snprintf(meta_path, sizeof(meta_path), "%s.meta.json", path);
+  FILE *meta = fopen(meta_path, "wb");
+  TEST_ASSERT_TRUE(meta != NULL);
+  fputs("{\"version\":1,\"id\":\"test\"}", meta);
+  fclose(meta);
+  config.priority = 42;
+  config.delay_seconds = 3;
+  TEST_ASSERT_TRUE(onion_payload_config_save(path, &config));
+  meta = fopen(meta_path, "rb");
+  TEST_ASSERT_TRUE(meta != NULL);
+  char meta_body[64] = {0};
+  TEST_ASSERT_TRUE(fread(meta_body, 1, sizeof(meta_body) - 1, meta) > 0);
+  fclose(meta);
+  TEST_ASSERT_STREQ("{\"version\":1,\"id\":\"test\"}", meta_body);
+  unlink(meta_path);
   unlink(path);
   return 0;
 }

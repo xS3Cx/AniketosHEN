@@ -117,8 +117,7 @@ OnPressResult category(OnPressContext &ctx) {
       return OnPressResult::Consumed;
     g_ui.pldc_category = categories[index];
   }
-  toolbox_push_resource("pldc_list.xml");
-  return OnPressResult::Consumed;
+  return OnPressResult::Handled;
 }
 
 OnPressResult pick(OnPressContext &ctx) {
