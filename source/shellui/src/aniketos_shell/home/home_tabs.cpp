@@ -77,6 +77,7 @@ int s_rename_request = -1; /* the tab a rename prompt is asked for */
 int s_icon_request = -1;   /* the tab an icon prompt is asked for */
 int s_renaming = -1;       /* the tab whose rename prompt is open */
 int s_icon_setting = -1;   /* the tab whose icon prompt is open */
+uint64_t s_prompt_token = 0;
 
 /* TabName's answers, kept by Tick: the Options menu is built on another
    thread than the one the names change on. */
@@ -391,7 +392,7 @@ void open_rename_prompt(StockTab tab) {
   options.positive = toolbox_i18n::tr("home_tabs.save");
   options.negative = toolbox_i18n::tr("home_tabs.cancel");
   std::string failure;
-  if (!SystemDialogs::ShowPrompt(options, &failure)) {
+  if (!SystemDialogs::ShowPrompt(options, &failure, nullptr, &s_prompt_token)) {
     LOG_WARN("[HOMETABS] prompt: %s", failure.c_str());
     return;
   }
@@ -445,7 +446,7 @@ void open_icon_prompt(StockTab tab) {
   options.positive = toolbox_i18n::tr("home_tabs.save");
   options.negative = toolbox_i18n::tr("home_tabs.cancel");
   std::string failure;
-  if (!SystemDialogs::ShowPrompt(options, &failure)) {
+  if (!SystemDialogs::ShowPrompt(options, &failure, nullptr, &s_prompt_token)) {
     LOG_WARN("[HOMETABS] icon prompt: %s", failure.c_str());
     return;
   }
@@ -509,12 +510,12 @@ void rename_tick() {
   if (s_renaming >= 0) {
     bool confirmed = false;
     std::string typed;
-    if (SystemDialogs::PollPrompt(&confirmed, &typed))
+    if (SystemDialogs::PollPrompt(s_prompt_token, &confirmed, &typed))
       finish_rename(confirmed, typed);
   } else if (s_icon_setting >= 0) {
     bool confirmed = false;
     std::string typed;
-    if (SystemDialogs::PollPrompt(&confirmed, &typed))
+    if (SystemDialogs::PollPrompt(s_prompt_token, &confirmed, &typed))
       finish_icon(confirmed, typed);
   }
 }

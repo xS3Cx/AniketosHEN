@@ -121,12 +121,18 @@ cheats_menu=off
 # Available values: off, l2_r3, long_share, share
 toolbox=off
 
-[kstuff]
-# autoload loads kstuff when AniketosHEN starts.
+[payload_center]
+# autostart_enabled starts payloads with an adjacent .auto_start marker on boot.
 # Available values: true, false
-autoload=true
+autostart_enabled=true
+
+[kstuff]
+# autoload loads kstuff when AniketosHEN starts. Off by default; kstuff stays
+# embedded as a fallback and can be started from the Toolbox.
+# Available values: true, false
+autoload=false
 
 [shadowmount]
 # autoload loads ShadowMountPlus before kstuff when AniketosHEN starts.
 # Available values: true, false
-autoload=true
+autoload=false

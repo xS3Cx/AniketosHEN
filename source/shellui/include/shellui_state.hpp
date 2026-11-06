@@ -7,6 +7,8 @@
 #include "shellui_types.hpp"
 #include "toolbox_route.hpp"
 
+#include <onion/payload_catalog.hpp>
+
 #include <cstring>
 #include <string>
 #include <unordered_map>
@@ -36,6 +38,13 @@ struct ToolboxUiState {
 
   /* The plugin whose config page is active; a registry key ("kstuff"/…). */
   std::string active_plugin;
+
+  std::string active_pldc_item;
+  std::string pldc_category;
+  std::string pldc_query;
+  std::vector<onion::payload_catalog::Item> pldc_items;
+  std::string pldc_sources_json;
+  long long pldc_catalog_mtime = 0;
 
   struct ParentContext {
     toolbox::Page page;

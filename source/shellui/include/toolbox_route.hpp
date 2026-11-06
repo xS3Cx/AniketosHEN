@@ -32,6 +32,13 @@ enum class Page : unsigned char {
   SuperuserPass,      /**< recognized; still use original stream */
   RedirectOgDebug,    /**< og_debug.xml → debug_settings resource */
   Kbm,                /**< Keyboard and Mouse pages (kbm.xml, kbm-*.xml) */
+  PayloadCenter,
+  PayloadAutostart,
+  PayloadBrowse,
+  PayloadList,
+  PayloadDetail,
+  PayloadSettings,
+  PayloadProgress,
 };
 
 struct ResourceNames {
@@ -65,6 +72,13 @@ struct RouteFlags {
   bool is_cheat_progress = false;
   bool is_remote_play = false;
   bool is_plugin_progress = false;
+  bool is_payload_center = false;
+  bool is_payload_autostart = false;
+  bool is_payload_browse = false;
+  bool is_payload_list = false;
+  bool is_payload_detail = false;
+  bool is_payload_settings = false;
+  bool is_payload_progress = false;
 };
 
 struct RouteResult {
@@ -83,8 +97,21 @@ constexpr bool restores_parent_on_pop(Page page) {
          page == Page::PluginConfig ||
          page == Page::SprxConfig ||
          page == Page::DynamicPlugin ||
-         page == Page::PluginProgress;
+         page == Page::PluginProgress ||
+         page == Page::PayloadList || page == Page::PayloadDetail ||
+         page == Page::PayloadProgress;
 }
+
+enum class PayloadCenterPage : unsigned char {
+  None = 0,
+  Center,
+  Autostart,
+  Browse,
+  List,
+  Detail,
+  Settings,
+  Progress,
+};
 
 /** Fixed Legacy resource paths (Sony Settings.Plugins module name is fixed). */
 inline constexpr std::string_view kAutoPayloadsXml =
@@ -127,6 +154,27 @@ inline bool settings_plugins_relative(std::string_view resource,
   if (out)
     *out = relative;
   return true;
+}
+
+inline PayloadCenterPage parse_payload_center_resource(std::string_view resource) {
+  std::string_view relative;
+  if (!settings_plugins_relative(resource, &relative))
+    return PayloadCenterPage::None;
+  if (relative == "pldc_center.xml")
+    return PayloadCenterPage::Center;
+  if (relative == "pldc_autostart.xml")
+    return PayloadCenterPage::Autostart;
+  if (relative == "pldc_browse.xml")
+    return PayloadCenterPage::Browse;
+  if (relative == "pldc_list.xml")
+    return PayloadCenterPage::List;
+  if (relative == "pldc_detail.xml")
+    return PayloadCenterPage::Detail;
+  if (relative == "pldc_settings.xml")
+    return PayloadCenterPage::Settings;
+  if (relative == "pldc_progress.xml")
+    return PayloadCenterPage::Progress;
+  return PayloadCenterPage::None;
 }
 
 /** Keyboard and Mouse pages: kbm.xml and kbm-<path>.xml (kbm_toolbox). */

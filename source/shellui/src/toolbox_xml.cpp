@@ -57,6 +57,7 @@ constexpr const char* kIconPlugins =
 
 /* Defined with the other dynamic control helpers below. */
 std::string toolbox_val(const char* id, const char* fallback);
+std::string read_file_to_string(const char* path);
 
 /** Payload .elf only (AniketosHEN no longer supports .plugin packages). */
 std::string payload_list_status(const PayloadEntry& entry) {
@@ -69,6 +70,34 @@ std::string payload_list_status(const PayloadEntry& entry) {
   if (auto_start)
     return toolbox_i18n::tr("payload.status.stopped_autostart");
   return toolbox_i18n::tr("payload.status.stopped");
+}
+
+struct PayloadMetaView {
+  std::string id;
+  std::string version;
+  std::string source_name;
+  std::string source_url;
+  std::string last_update;
+  std::string category;
+  bool present = false;
+};
+
+PayloadMetaView payload_meta_view(const std::string& path) {
+  PayloadMetaView view;
+  const std::string raw = read_file_to_string((path + ".meta.json").c_str());
+  if (raw.empty())
+    return view;
+  onion_cjson::Root root(raw);
+  if (!root)
+    return view;
+  view.id = onion_cjson::string_item(root.get(), "id", "");
+  view.version = onion_cjson::string_item(root.get(), "item_version", "");
+  view.source_name = onion_cjson::string_item(root.get(), "source_name", "");
+  view.source_url = onion_cjson::string_item(root.get(), "source_url", "");
+  view.last_update = onion_cjson::string_item(root.get(), "last_update", "");
+  view.category = onion_cjson::string_item(root.get(), "category", "");
+  view.present = !view.id.empty();
+  return view;
 }
 
 void append_payload_entry(std::vector<PayloadEntry>& list,
@@ -355,6 +384,7 @@ void generate_payload_config_xml(std::string& xml_buffer,
     const std::string auto_path = found->shellui_path + ".auto_start";
     const bool auto_start = if_exists(auto_path.c_str());
     onion_payload_config_load(found->shellui_path.c_str(), &found->config);
+    const PayloadMetaView meta = payload_meta_view(found->shellui_path);
     ps5ui::Page page("id_payload_config", found->name);
     page.label("id_payload_path", found->path)
         .toggle("id_payload_run_" + found->id,
@@ -362,7 +392,29 @@ void generate_payload_config_xml(std::string& xml_buffer,
                 toolbox_i18n::tr("payload.current_session.sub"))
         .toggle("id_payload_autostart_" + found->id,
                 toolbox_i18n::tr("payload.next_autostart"), auto_start,
-                toolbox_i18n::tr("payload.next_autostart.sub"))
+                toolbox_i18n::tr("payload.next_autostart.sub"));
+    if (meta.present) {
+      page.label("id_payload_meta_version", meta.version)
+          .label("id_payload_meta_source", meta.source_name)
+          .label("id_payload_meta_updated", meta.last_update);
+      page.button("id_payload_update_" + found->id,
+                  toolbox_i18n::tr("payload_center.update"),
+                  toolbox_i18n::tr("payload_center.update.sub"),
+                  meta.source_name.empty() ? std::nullopt
+                                           : std::optional<std::string>(
+                                                 meta.source_name));
+      page.button("id_payload_remove_" + found->id,
+                  toolbox_i18n::tr("payload_center.remove"),
+                  toolbox_i18n::tr("payload_center.remove.sub"), std::nullopt,
+                  std::nullopt, ps5ui::Style::None,
+                  toolbox_i18n::format("payload_center.confirm.remove_fmt",
+                                       found->name.c_str()),
+                  toolbox_i18n::tr("pkg.msg.ok"));
+    }
+    page.button("id_payload_move_up_" + found->id,
+                toolbox_i18n::tr("payload_center.move_up"), std::nullopt)
+        .button("id_payload_move_down_" + found->id,
+                toolbox_i18n::tr("payload_center.move_down"), std::nullopt)
         .text_field("id_payload_priority_" + found->id,
                     toolbox_i18n::tr("payload.priority"),
                     toolbox_i18n::tr("payload.priority.sub"), "number", "1", "3",
@@ -455,6 +507,10 @@ static bool plugins_model(ps5ui::Node &model) {
     if (std::string_view(d.key) == "kstuff")
       status = g_settings.kstuff_autoload ? "plugin.kstuff.status.autoload"
                                           : "plugin.kstuff.status.manual";
+    else if (std::string_view(d.key) == "shadowmount")
+      status = g_settings.shadowmount_autoload
+                   ? "plugin.shadowmount.status.autoload"
+                   : "plugin.shadowmount.status.manual";
     page.link(d.toggle_id, toolbox_i18n::tr(d.title_key), d.config_xml,
               toolbox_i18n::tr(status));
   }
@@ -505,7 +561,24 @@ void generate_kstuff_config_xml(std::string &xml_buffer) {
   xml_buffer = onion::shellui::settings::publish(model, kstuff_model);
 }
 
+static bool shadowmount_model(ps5ui::Node &model) {
+  ps5ui::Page page("id_plugin_config",
+                   toolbox_i18n::tr("plugin.shadowmount.title"));
+  page.toggle("id_plugin_shadowmount_autoload",
+              toolbox_i18n::tr("shadowmount.autoload"),
+              g_settings.shadowmount_autoload,
+              toolbox_i18n::tr("shadowmount.autoload.sub"));
+  model = page.root();
+  return true;
+}
+
 void generate_plugin_config_xml(std::string &xml_buffer) {
+  if (g_ui.active_plugin == "shadowmount") {
+    ps5ui::Node model;
+    shadowmount_model(model);
+    xml_buffer = onion::shellui::settings::publish(model, shadowmount_model);
+    return;
+  }
   generate_kstuff_config_xml(xml_buffer);
 }
 
@@ -684,6 +757,9 @@ void append_toolbox_pkg_group(ps5ui::Group& g) {
 void append_toolbox_payloads_group(ps5ui::Group& g) {
   g.link("id_payloads", toolbox_i18n::tr("payloads.link"), "payloads.xml",
          toolbox_i18n::tr("payloads.link.sub"), kIconPlugins)
+      .link("id_payload_center", toolbox_i18n::tr("payload_center.link"),
+            "pldc_center.xml",
+            toolbox_i18n::tr("payload_center.link.sub"), kIconPlugins)
       .link("id_plugins", toolbox_i18n::tr("plugins.link"), "plugins.xml",
             toolbox_i18n::tr("plugins.link.sub"), kIconPlugins);
   /* SPRX catalog UI is untested; restore id_sprx -> sprx.xml when it is. */

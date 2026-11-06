@@ -60,7 +60,7 @@ set(CMAKE_C_FLAGS_RELEASE "-Os -DNDEBUG")
 set(CMAKE_CXX_FLAGS_RELEASE "-Os -DNDEBUG")
 
 target_sources(${PROJECT_NAME} PRIVATE ${SrcFiles} ${AniketosSrc} "${EMBEDDED_ASSETS_ASSEMBLY}" "${PARTICLE_TEXTURES_ASSEMBLY}")
-add_dependencies(${PROJECT_NAME} shellui_i18n_catalog onion_version onion_ipc onion_settings onion_detour onion_proc onion_platform onion_ready onion_plugin_ui onion_plugin_bridge onion_kbm_profile)
+add_dependencies(${PROJECT_NAME} shellui_i18n_catalog onion_version onion_ipc onion_settings onion_payload_catalog onion_detour onion_proc onion_platform onion_ready onion_plugin_ui onion_plugin_bridge onion_kbm_profile)
 onion_target_debug_define(${PROJECT_NAME})
 target_include_directories(${PROJECT_NAME} PRIVATE
 	"${PROJECT_ROOT}/libonion_kbm/include"
@@ -72,6 +72,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 	"${ONIONHEN_THIRD_PARTY_DIR}/stb"
 	"${PROJECT_ROOT}/libonion_ipc/include"
 	"${PROJECT_ROOT}/libonion_settings/include"
+	"${PROJECT_ROOT}/libonion_payload_catalog/include"
 	"${PROJECT_ROOT}/libonion_detour/include"
 	"${PROJECT_ROOT}/libonion_proc/include"
 	"${PROJECT_ROOT}/libonion_platform/include"
@@ -81,7 +82,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 	"${PROJECT_ROOT}/include"
 )
 target_link_directories	(${PROJECT_NAME} PUBLIC "${ONIONHEN_PS5_STUB_DIR}")
-target_link_libraries	(${PROJECT_NAME} PUBLIC onion_kbm_profile onion_payload onion_detour onion_proc onion_platform onion_ipc onion_settings onion_ready onion_plugin_ui onion_plugin_bridge SceRegMgr SceSystemService SceSysCore SceUserService SceNet SceNetCtl ScePad)
+target_link_libraries	(${PROJECT_NAME} PUBLIC onion_kbm_profile onion_payload onion_payload_catalog onion_detour onion_proc onion_platform onion_ipc onion_settings onion_ready onion_plugin_ui onion_plugin_bridge SceRegMgr SceSystemService SceSysCore SceUserService SceNet SceNetCtl ScePad)
 
 # Add post-build command
 onion_strip_debug(${PROJECT_NAME})

@@ -9,6 +9,7 @@
 
 #include <cstring>
 #include <string>
+#include <utility>
 
 using namespace toolbox;
 
@@ -211,7 +212,7 @@ static int test_payload_config_page(void) {
 static int test_plugins_registry(void) {
   using namespace onion::plugins;
 
-  TEST_ASSERT_EQ_INT(1, static_cast<int>(kRegistrySize));
+  TEST_ASSERT_EQ_INT(2, static_cast<int>(kRegistrySize));
   TEST_ASSERT_TRUE(find_by_key("missing") == nullptr);
   TEST_ASSERT_TRUE(find_by_toggle_id("id_plugin_kstuff") != nullptr);
   TEST_ASSERT_TRUE(find_by_toggle_id("id_nope") == nullptr);
@@ -219,6 +220,11 @@ static int test_plugins_registry(void) {
   TEST_ASSERT_STREQ("id_plugin_kstuff", find_by_key("kstuff")->toggle_id);
   TEST_ASSERT_STREQ("kstuff.xml", find_by_key("kstuff")->config_xml);
   TEST_ASSERT_TRUE(default_key() == std::string_view("kstuff"));
+  TEST_ASSERT_TRUE(find_by_key("shadowmount") != nullptr);
+  TEST_ASSERT_STREQ("shadowmount.xml",
+                    find_by_key("shadowmount")->config_xml);
+  TEST_ASSERT_TRUE(find_by_config_xml_resource(cfg_res("shadowmount.xml")) !=
+                   nullptr);
 
   const Descriptor *by_kstuff =
       find_by_config_xml_resource(cfg_res("kstuff.xml"));
@@ -462,6 +468,28 @@ static int test_progress_page_restore_is_reusable(void) {
   return 0;
 }
 
+static int test_payload_center_pages(void) {
+  const std::pair<const char *, Page> pages[] = {
+      {"pldc_center.xml", Page::PayloadCenter},
+      {"pldc_autostart.xml", Page::PayloadAutostart},
+      {"pldc_browse.xml", Page::PayloadBrowse},
+      {"pldc_list.xml", Page::PayloadList},
+      {"pldc_detail.xml", Page::PayloadDetail},
+      {"pldc_settings.xml", Page::PayloadSettings},
+      {"pldc_progress.xml", Page::PayloadProgress},
+  };
+  for (const auto &page : pages) {
+    const RouteResult result = resolve_resource(make_in(cfg_res(page.first)));
+    TEST_ASSERT_TRUE(result.page == page.second);
+  }
+  TEST_ASSERT_TRUE(
+      resolve_resource(make_in(cfg_res("pldc_unknown.xml"))).page == Page::None);
+  TEST_ASSERT_TRUE(restores_parent_on_pop(Page::PayloadList));
+  TEST_ASSERT_TRUE(restores_parent_on_pop(Page::PayloadDetail));
+  TEST_ASSERT_TRUE(restores_parent_on_pop(Page::PayloadProgress));
+  return 0;
+}
+
 extern "C" int test_toolbox_route_suite(void) {
   int fails = 0;
   fails += onion_test_run("route.unknown", test_unknown_passthrough);
@@ -488,6 +516,7 @@ extern "C" int test_toolbox_route_suite(void) {
   fails += onion_test_run("route.account", test_account_page);
   fails += onion_test_run("route.cheat_progress", test_cheat_progress_page);
   fails += onion_test_run("route.plugin_progress", test_plugin_progress_page);
+  fails += onion_test_run("route.payload_center", test_payload_center_pages);
   fails += onion_test_run("route.remote_play", test_remote_play_page);
   fails += onion_test_run("route.superuser", test_superuser_pass_through);
   fails += onion_test_run("route.og_debug", test_og_debug_redirect);

@@ -8,6 +8,8 @@
 #include "onpress_policy.hpp"
 #include "progress_dialog.hpp"
 #include "plugin_progress.hpp"
+#include "payload_center.hpp"
+#include "payload_progress.hpp"
 #include "remote_play.hpp"
 #include "toolbox_route.hpp"
 #include "dynamic_ui_runtime.hpp"
@@ -188,6 +190,27 @@ uint64_t GetManifestResourceStream_Hook(uint64_t inst, MonoString *FileName) {
     break;
   case toolbox::Page::PluginProgress:
     generate_plugin_progress_xml(new_xml_string);
+    break;
+  case toolbox::Page::PayloadCenter:
+    onion::shellui::payload_center::generate_center_xml(new_xml_string);
+    break;
+  case toolbox::Page::PayloadAutostart:
+    onion::shellui::payload_center::generate_autostart_xml(new_xml_string);
+    break;
+  case toolbox::Page::PayloadBrowse:
+    onion::shellui::payload_center::generate_browse_xml(new_xml_string);
+    break;
+  case toolbox::Page::PayloadList:
+    onion::shellui::payload_center::generate_list_xml(new_xml_string);
+    break;
+  case toolbox::Page::PayloadDetail:
+    onion::shellui::payload_center::generate_detail_xml(new_xml_string);
+    break;
+  case toolbox::Page::PayloadSettings:
+    onion::shellui::payload_center::generate_settings_xml(new_xml_string);
+    break;
+  case toolbox::Page::PayloadProgress:
+    generate_payload_progress_xml(new_xml_string);
     break;
   case toolbox::Page::Kbm:
     kbm_toolbox::generate_xml(new_xml_string, resourceName);

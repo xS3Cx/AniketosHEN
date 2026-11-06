@@ -1,8 +1,10 @@
 /* Copyright (C) 2025 OnionHEN / LightningMods — OnPress payloads / auto-start */
 #include "onpress.hpp"
+#include "payload_center.hpp"
 #include "shellui_payload_state.hpp"
 #include "shellui_payloads.hpp"
 #include <cerrno>
+#include <algorithm>
 #include <cstdlib>
 #include <fcntl.h>
 #include <pthread.h>
@@ -100,8 +102,7 @@ static OnPressResult prefix_id_auto_payload(OnPressContext &ctx) {
   return OnPressResult::Consumed;
 }
 
-static OnPressResult set_payload_schedule(OnPressContext &ctx, bool priority) {
-  ctx.dirty = false;
+static OnPressResult set_payload_schedule(OnPressContext &ctx, bool priority) {  ctx.dirty = false;
   PayloadEntry *entry = payload_for_control(
       ctx.id, priority ? kPriorityPrefix : kDelayPrefix);
   if (!entry)
@@ -143,7 +144,74 @@ static OnPressResult set_payload_schedule(OnPressContext &ctx, bool priority) {
   return OnPressResult::Consumed;
 }
 
+static OnPressResult update_payload(OnPressContext &ctx) {
+  ctx.dirty = false;
+  constexpr const char *kPrefix = "id_payload_update_";
+  const std::string id = ctx.id.substr(std::string(kPrefix).size());
+  for (const auto &entry : g_ui.payloads_list) {
+    if (entry.id == id) {
+      if (!onion::shellui::payload_center::start_update_for_path(
+              entry.shellui_path))
+        notify("notify.payload_center.not_installable");
+      return OnPressResult::Consumed;
+    }
+  }
+  return OnPressResult::Consumed;
+}
+
+static OnPressResult remove_payload(OnPressContext &ctx) {
+  ctx.dirty = false;
+  constexpr const char *kPrefix = "id_payload_remove_";
+  const std::string id = ctx.id.substr(std::string(kPrefix).size());
+  for (const auto &entry : g_ui.payloads_list) {
+    if (entry.id == id) {
+      if (!onion::shellui::payload_center::remove_installed(entry.id,
+                                                            entry.name))
+        notify("notify.payload_center.remove_failed");
+      return OnPressResult::Consumed;
+    }
+  }
+  return OnPressResult::Consumed;
+}
+
+static OnPressResult move_payload(OnPressContext &ctx, bool up) {
+  ctx.dirty = false;
+  constexpr const char *kUp = "id_payload_move_up_";
+  constexpr const char *kDown = "id_payload_move_down_";
+  const std::string id =
+      ctx.id.substr(std::string(up ? kUp : kDown).size());
+  auto &list = g_ui.payloads_list;
+  const auto found = std::find_if(
+      list.begin(), list.end(),
+      [&](const PayloadEntry &entry) { return entry.id == id; });
+  if (found == list.end())
+    return OnPressResult::Consumed;
+  const std::size_t index =
+      static_cast<std::size_t>(std::distance(list.begin(), found));
+  if ((up && index == 0) || (!up && index + 1 >= list.size()))
+    return OnPressResult::Consumed;
+  const std::size_t other = up ? index - 1 : index + 1;
+  std::swap(list[index], list[other]);
+  for (std::size_t i = 0; i < list.size(); ++i) {
+    OnionPayloadConfig config;
+    onion_payload_config_load(list[i].shellui_path.c_str(), &config);
+    config.priority = static_cast<int>(i < 10 ? 100 - i * 10 : 0);
+    onion_payload_config_save(list[i].shellui_path.c_str(), &config);
+    list[i].config = config;
+  }
+  notify("notify.payload_center.order_saved");
+  return OnPressResult::Consumed;
+}
+
 static const OnPressPrefixEntry kPrefix[] = {
+    {"id_payload_update_", update_payload},
+    {"id_payload_remove_", remove_payload},
+    {"id_payload_move_up_", +[](OnPressContext &ctx) {
+       return move_payload(ctx, true);
+     }},
+    {"id_payload_move_down_", +[](OnPressContext &ctx) {
+       return move_payload(ctx, false);
+     }},
     {kPriorityPrefix, +[](OnPressContext &ctx) {
        return set_payload_schedule(ctx, true);
      }},

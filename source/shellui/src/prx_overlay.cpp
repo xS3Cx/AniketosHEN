@@ -13,6 +13,7 @@
 #include <onion/net.h>
 #include <onion/settings.hpp>
 #include "plugin_progress.hpp"
+#include "payload_progress.hpp"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -746,4 +747,5 @@ void OnRender_Hook(MonoObject* instance) {
   Profile::Scope poll_scope(Profile::kPolls);
   shellui_poll_cheat_progress();
   shellui_poll_plugin_progress();
+  shellui_poll_payload_progress();
 }

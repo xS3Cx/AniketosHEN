@@ -16,6 +16,7 @@
 #include "toolbox_navigation.hpp"
 #include "progress_auto_return.hpp"
 #include "dynamic_ui_runtime.hpp"
+#include "progress_ui3.hpp"
 
 #include <onion/ipc_client.hpp>
 #include <onion/platform.h>
@@ -35,6 +36,18 @@
 
 namespace {
 
+using progress_ui3::append_panel;
+using progress_ui3::BoundWidget;
+using progress_ui3::new_update_progress_panel;
+using progress_ui3::pin_widget;
+using progress_ui3::read_progress_bar_progress;
+using progress_ui3::release_widget;
+using progress_ui3::set_label_text;
+using progress_ui3::set_progress_bar_progress;
+using progress_ui3::set_progress_bar_status;
+using progress_ui3::widget_child_at;
+using progress_ui3::widget_children_count;
+
 constexpr std::string_view kCustomElementId = "id_plugin_progress_custom";
 
 constexpr const char *kPuiUi3Namespace = "Sce.PlayStation.PUI.UI3";
@@ -43,11 +56,6 @@ constexpr const char *kUpdatePanelNamespace =
 constexpr const char *kUpdatePanelClass = "UpdateProgressPanel";
 
 enum class ProgressState { Idle, Running, Ok, Error };
-
-struct BoundWidget {
-  MonoObject *object = nullptr;
-  uint32_t handle = 0;
-};
 
 struct PluginProgress {
   std::mutex mu;
@@ -95,16 +103,6 @@ struct WorkerArgs {
   bool is_start = false;
 };
 
-MonoDomain *current_domain() {
-  MonoDomain *domain = mono_domain_get ? mono_domain_get() : nullptr;
-  return domain ? domain : Root_Domain;
-}
-
-void release_widget(BoundWidget &widget) {
-  if (widget.handle && mono_gchandle_free)
-    mono_gchandle_free(widget.handle);
-  widget = {};
-}
 
 void release_bound_widgets_locked() {
   release_widget(g_progress.host);
@@ -205,206 +203,6 @@ Presentation presentation_locked() {
     view.phase.clear();
     return view;
   }
-}
-
-MonoMethod *ui3_property_setter(const char *class_name, const char *name) {
-  if (!pui_img || !class_name || !name || !mono_class_from_name ||
-      !mono_class_get_property_from_name || !mono_property_get_set_method) {
-    return nullptr;
-  }
-
-  MonoClass *klass =
-      mono_class_from_name(pui_img, kPuiUi3Namespace, class_name);
-  MonoProperty *property =
-      klass ? mono_class_get_property_from_name(klass, name) : nullptr;
-  return property ? mono_property_get_set_method(property) : nullptr;
-}
-
-MonoMethod *ui3_property_getter(const char *class_name, const char *name) {
-  if (!pui_img || !class_name || !name || !mono_class_from_name ||
-      !mono_class_get_property_from_name || !mono_property_get_get_method) {
-    return nullptr;
-  }
-
-  MonoClass *klass =
-      mono_class_from_name(pui_img, kPuiUi3Namespace, class_name);
-  MonoProperty *property =
-      klass ? mono_class_get_property_from_name(klass, name) : nullptr;
-  return property ? mono_property_get_get_method(property) : nullptr;
-}
-
-bool invoke_ui3_setter(MonoObject *object, const char *class_name,
-                       const char *name, void *value) {
-  MonoMethod *setter = ui3_property_setter(class_name, name);
-  if (!setter || !mono_runtime_invoke) {
-    LOG_ERROR("plugin_progress_ui3: UI3.%s.%s setter not found",
-              class_name ? class_name : "?", name ? name : "?");
-    return false;
-  }
-
-  void *args[] = {value};
-  MonoObject *exc = nullptr;
-  mono_runtime_invoke(setter, object, args, &exc);
-  if (exc) {
-    LOG_ERROR("plugin_progress_ui3: %s setter threw", name);
-    return false;
-  }
-  return true;
-}
-
-bool set_label_text(MonoObject *object, const std::string &text) {
-  if (!mono_string_new)
-    return false;
-  MonoDomain *domain = current_domain();
-  MonoString *value = domain ? mono_string_new(domain, text.c_str()) : nullptr;
-  return value && invoke_ui3_setter(object, "Label", "Text", value);
-}
-
-bool set_progress_bar_progress(MonoObject *object, float value) {
-  return invoke_ui3_setter(object, "ProgressBar", "Progress", &value);
-}
-
-bool set_progress_bar_status(MonoObject *object, int value) {
-  return invoke_ui3_setter(object, "ProgressBar", "Status", &value);
-}
-
-bool read_progress_bar_progress(MonoObject *object, float &value) {
-  MonoMethod *getter = ui3_property_getter("ProgressBar", "Progress");
-  if (!getter || !mono_runtime_invoke || !mono_object_unbox)
-    return false;
-
-  MonoObject *exc = nullptr;
-  MonoObject *boxed = mono_runtime_invoke(getter, object, nullptr, &exc);
-  void *raw = (!exc && boxed) ? mono_object_unbox(boxed) : nullptr;
-  if (!raw)
-    return false;
-
-  std::memcpy(&value, raw, sizeof(value));
-  return true;
-}
-
-MonoObject *new_update_progress_panel() {
-  if (!mono_class_from_name || !mono_object_new ||
-      !mono_runtime_object_init) {
-    return nullptr;
-  }
-
-  MonoImage *legacy_image = getDLLimage(legacy_dec.c_str());
-  MonoClass *klass =
-      legacy_image ? mono_class_from_name(legacy_image, kUpdatePanelNamespace,
-                                          kUpdatePanelClass)
-                   : nullptr;
-  MonoDomain *domain = current_domain();
-  MonoObject *object =
-      (klass && domain) ? mono_object_new(domain, klass) : nullptr;
-  if (object) {
-    mono_runtime_object_init(object);
-    LOG_DEBUG("plugin_progress_ui3: created %s.%s", kUpdatePanelNamespace,
-              kUpdatePanelClass);
-  } else {
-    LOG_ERROR("plugin_progress_ui3: failed to create %s.%s",
-              kUpdatePanelNamespace, kUpdatePanelClass);
-  }
-  return object;
-}
-
-MonoObject *widget_child_at(MonoObject *root, int index) {
-  if (!pui_img || !root || index < 0 || !mono_class_from_name ||
-      !mono_class_get_method_from_name || !mono_runtime_invoke) {
-    return nullptr;
-  }
-
-  MonoClass *widget_class =
-      mono_class_from_name(pui_img, kPuiUi3Namespace, "Widget");
-  MonoMethod *get_child =
-      widget_class
-          ? mono_class_get_method_from_name(widget_class, "GetChildAt", 1)
-          : nullptr;
-  if (!get_child) {
-    LOG_ERROR("plugin_progress_ui3: Widget.GetChildAt unavailable");
-    return nullptr;
-  }
-
-  void *args[] = {&index};
-  MonoObject *exc = nullptr;
-  MonoObject *result = mono_runtime_invoke(get_child, root, args, &exc);
-  if (exc) {
-    LOG_ERROR("plugin_progress_ui3: GetChildAt(%d) threw", index);
-    return nullptr;
-  }
-  return result;
-}
-
-int widget_children_count(MonoObject *widget) {
-  if (!pui_img || !widget || !mono_class_from_name ||
-      !mono_class_get_property_from_name || !mono_property_get_get_method ||
-      !mono_runtime_invoke || !mono_object_unbox) {
-    return -1;
-  }
-
-  MonoClass *widget_class =
-      mono_class_from_name(pui_img, kPuiUi3Namespace, "Widget");
-  MonoProperty *property = widget_class
-                               ? mono_class_get_property_from_name(
-                                     widget_class, "ChildrenCount")
-                               : nullptr;
-  MonoMethod *getter = property ? mono_property_get_get_method(property) : nullptr;
-  if (!getter)
-    return -1;
-
-  MonoObject *exc = nullptr;
-  MonoObject *boxed = mono_runtime_invoke(getter, widget, nullptr, &exc);
-  int *value = (!exc && boxed) ? static_cast<int *>(mono_object_unbox(boxed))
-                               : nullptr;
-  return value ? *value : -1;
-}
-
-bool pin_widget(BoundWidget &bound, MonoObject *object, const char *name) {
-  if (!object || !mono_gchandle_new)
-    return false;
-  bound.handle = mono_gchandle_new(object, 1);
-  if (!bound.handle) {
-    LOG_ERROR("plugin_progress_ui3: failed to root %s", name);
-    return false;
-  }
-  bound.object = object;
-  return true;
-}
-
-MonoMethod *widget_append_child_method() {
-  static MonoMethod *method = nullptr;
-  if (method)
-    return method;
-  if (!pui_img || !mono_class_from_name || !mono_method_desc_new ||
-      !mono_method_desc_search_in_class || !mono_method_desc_free) {
-    return nullptr;
-  }
-
-  MonoClass *widget_class =
-      mono_class_from_name(pui_img, kPuiUi3Namespace, "Widget");
-  MonoMethodDesc *description = mono_method_desc_new(
-      ":AppendChild(Sce.PlayStation.PUI.UI3.Widget)", 1);
-  if (widget_class && description)
-    method = mono_method_desc_search_in_class(description, widget_class);
-  if (description)
-    mono_method_desc_free(description);
-
-  if (!method)
-    LOG_ERROR("plugin_progress_ui3: exact Widget.AppendChild(Widget) missing");
-  return method;
-}
-
-bool append_panel(MonoObject *widget, MonoObject *panel) {
-  MonoMethod *append = widget_append_child_method();
-  if (!widget || !panel || !append || !mono_runtime_invoke)
-    return false;
-
-  void *args[] = {panel};
-  MonoObject *exc = nullptr;
-  mono_runtime_invoke(append, widget, args, &exc);
-  if (exc)
-    LOG_ERROR("plugin_progress_ui3: Widget.AppendChild(Widget) threw");
-  return exc == nullptr;
 }
 
 void apply_progress_locked() {

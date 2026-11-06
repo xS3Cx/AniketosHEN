@@ -25,6 +25,7 @@
 #include "aniketos_shell/system_ui/migration_notice.hpp"
 #include "aniketos_shell/system_ui/popup_menu.hpp"
 #include "aniketos_shell/toolbox/kbm_toolbox.hpp"
+#include "payload_center.hpp"
 #include "aniketos_theme/clock/shell_clock.hpp"
 #include "aniketos_theme/custom_font.hpp"
 #include "aniketos_theme/icon_color.hpp"
@@ -96,6 +97,7 @@ void BeforeNativeFrame() {
     HomeTabs::Tick();
     HomeTabsStore::Tick();
     WebTiles::Tick();
+    onion::shellui::payload_center::Tick();
   }
   {
     Profile::Scope scope(Profile::kInput);

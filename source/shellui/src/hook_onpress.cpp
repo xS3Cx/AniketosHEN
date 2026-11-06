@@ -87,6 +87,10 @@ OnPressResult dispatch_toolbox_press(toolbox::OnPressDomain domain,
   case toolbox::OnPressDomain::RemotePlay:
     run_exact(onpress_network_exact);
     break;
+  case toolbox::OnPressDomain::PayloadCenter:
+    run_exact(onpress_payload_center_exact);
+    run_prefix(onpress_payload_center_prefix);
+    break;
   case toolbox::OnPressDomain::PassThrough:
   case toolbox::OnPressDomain::DynamicPlugin:
     break;

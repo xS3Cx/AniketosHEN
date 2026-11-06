@@ -33,6 +33,15 @@ RouteResult resolve_resource(const RouteInput &in) {
   out.flags.is_plugin_progress = (in.resource == kPluginProgressXml);
   out.flags.is_remote_play = (in.resource == kRemotePlayXml);
   out.flags.is_su_menu = (in.resource == kSuperuserXml);
+  const PayloadCenterPage pldc =
+      parse_payload_center_resource(in.resource);
+  out.flags.is_payload_center = pldc == PayloadCenterPage::Center;
+  out.flags.is_payload_autostart = pldc == PayloadCenterPage::Autostart;
+  out.flags.is_payload_browse = pldc == PayloadCenterPage::Browse;
+  out.flags.is_payload_list = pldc == PayloadCenterPage::List;
+  out.flags.is_payload_detail = pldc == PayloadCenterPage::Detail;
+  out.flags.is_payload_settings = pldc == PayloadCenterPage::Settings;
+  out.flags.is_payload_progress = pldc == PayloadCenterPage::Progress;
 
   if (in.cheats_shortcut || in.cheats_shortcut_not_open) {
     out.flags.is_debug_settings = false;
@@ -75,6 +84,20 @@ RouteResult resolve_resource(const RouteInput &in) {
     out.page = Page::Kbm;
   } else if (out.flags.is_su_menu) {
     out.page = Page::SuperuserPass;
+  } else if (out.flags.is_payload_center) {
+    out.page = Page::PayloadCenter;
+  } else if (out.flags.is_payload_autostart) {
+    out.page = Page::PayloadAutostart;
+  } else if (out.flags.is_payload_browse) {
+    out.page = Page::PayloadBrowse;
+  } else if (out.flags.is_payload_list) {
+    out.page = Page::PayloadList;
+  } else if (out.flags.is_payload_detail) {
+    out.page = Page::PayloadDetail;
+  } else if (out.flags.is_payload_settings) {
+    out.page = Page::PayloadSettings;
+  } else if (out.flags.is_payload_progress) {
+    out.page = Page::PayloadProgress;
   } else {
     out.page = Page::None;
   }

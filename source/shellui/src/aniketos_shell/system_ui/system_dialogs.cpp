@@ -13,6 +13,8 @@ constexpr const char *kPuiImage = "Sce.PlayStation.PUI.dll";
 
 uint32_t s_alert_handle = 0;  /* the alert PollAlert watches */
 uint32_t s_prompt_handle = 0; /* the prompt PollPrompt watches */
+uint64_t s_prompt_token = 0;
+uint64_t s_prompt_next_token = 0;
 
 MonoClass *find_class(const char *space, const char *name) {
   MonoImage *image = getDLLimage(kPuiImage);
@@ -238,7 +240,7 @@ bool PollAlert(int *result) {
 }
 
 bool ShowPrompt(const PromptOptions &options, std::string *failure,
-                MonoObject *scene) {
+                MonoObject *scene, uint64_t *token) {
   Failure result{failure};
   void *arguments[2] = {managed_string(options.message),
                         managed_string(options.text)};
@@ -248,11 +250,16 @@ bool ShowPrompt(const PromptOptions &options, std::string *failure,
                     {"set_NegativeButtonTitle", options.negative}},
                    scene, s_prompt_handle, result))
     return false;
+  s_prompt_token = ++s_prompt_next_token;
+  if (token)
+    *token = s_prompt_token;
   LOG_INFO("[SYSDIALOG] prompt opened");
   return true;
 }
 
-bool PollPrompt(bool *confirmed, std::string *text) {
+bool PollPrompt(uint64_t token, bool *confirmed, std::string *text) {
+  if (token == 0 || token != s_prompt_token)
+    return false;
   MonoObject *dialog = Reflect::Target(s_prompt_handle);
   int32_t button = 0;
   if (!property_value(dialog, "get_Result", &button))
@@ -269,6 +276,7 @@ bool PollPrompt(bool *confirmed, std::string *text) {
       break;
     }
   Reflect::Release(s_prompt_handle);
+  s_prompt_token = 0;
   if (confirmed)
     *confirmed = button == 0;
   if (text)

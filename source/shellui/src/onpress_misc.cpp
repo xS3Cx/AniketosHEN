@@ -53,8 +53,17 @@ static OnPressResult id_download_cheats(OnPressContext &ctx) {
   return OnPressResult::Consumed;
 }
 
-OnPressResult onpress_delete_kstuff(OnPressContext &ctx) {
-  (void)ctx;
+OnPressResult onpress_shadowmount_autoload(OnPressContext &ctx) {
+  const bool enabled = value_as_int(ctx);
+  if (enabled == g_settings.shadowmount_autoload)
+    return OnPressResult::EarlyReturn;
+  g_settings.shadowmount_autoload = enabled;
+  notify(enabled ? "notify.shadowmount.next_boot_on"
+                 : "notify.shadowmount.next_boot_off");
+  return OnPressResult::Handled;
+}
+
+OnPressResult onpress_delete_kstuff(OnPressContext &ctx) {  (void)ctx;
   unlink(ONION_DIST_USER_DATA_ROOT "/kstuff.elf");
   notify("notify.kstuff.deleted");
   return OnPressResult::Handled;

@@ -72,6 +72,9 @@ const OnPressPrefixEntry *onpress_kbm_prefix(size_t *count);
 const OnPressExactEntry *onpress_plugins_exact(size_t *count);
 const OnPressPrefixEntry *onpress_plugins_prefix(size_t *count);
 
+const OnPressExactEntry *onpress_payload_center_exact(size_t *count);
+const OnPressPrefixEntry *onpress_payload_center_prefix(size_t *count);
+
 /**
  * Shared built-in plugin handlers (root page + plugins page).
  * Run toggles change the current session only. Autoload toggles persist for
@@ -79,6 +82,7 @@ const OnPressPrefixEntry *onpress_plugins_prefix(size_t *count);
  */
 OnPressResult onpress_kstuff_autoload(OnPressContext &ctx);
 OnPressResult onpress_delete_kstuff(OnPressContext &ctx);
+OnPressResult onpress_shadowmount_autoload(OnPressContext &ctx);
 
 /** Shared toggle helpers. */
 inline bool value_as_int(const OnPressContext &ctx) {

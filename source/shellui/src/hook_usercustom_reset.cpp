@@ -11,6 +11,7 @@
 #include "hooked_funcs.hpp"
 #include "progress_dialog.hpp"
 #include "plugin_progress.hpp"
+#include "payload_progress.hpp"
 #include "shellui_state.hpp"
 
 namespace {
@@ -55,7 +56,8 @@ void UserCustomElementReset_Hook(MonoObject *instance, MonoObject *item) {
   }
 
   if (g_ui.active_page != toolbox::Page::CheatProgress &&
-      g_ui.active_page != toolbox::Page::PluginProgress) {
+      g_ui.active_page != toolbox::Page::PluginProgress &&
+      g_ui.active_page != toolbox::Page::PayloadProgress) {
     return;
   }
 
@@ -72,6 +74,8 @@ void UserCustomElementReset_Hook(MonoObject *instance, MonoObject *item) {
     cheat_progress_attach_panel(id, item);
   } else if (g_ui.active_page == toolbox::Page::PluginProgress) {
     plugin_progress_attach_panel(id, item);
+  } else if (g_ui.active_page == toolbox::Page::PayloadProgress) {
+    payload_progress_attach_panel(id, item);
   }
 }
 

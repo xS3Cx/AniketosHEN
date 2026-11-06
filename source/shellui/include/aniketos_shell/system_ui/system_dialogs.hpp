@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <cstdint>
 
 #include "external_symbols.hpp"
 
@@ -44,10 +45,10 @@ struct PromptOptions {
   std::string negative;
 };
 bool ShowPrompt(const PromptOptions &options, std::string *failure = nullptr,
-                MonoObject *scene = nullptr);
+                MonoObject *scene = nullptr, uint64_t *token = nullptr);
 /* The prompt opened last has closed: true once, with whether it was
  * confirmed and what its field held. False while it is open. */
-bool PollPrompt(bool *confirmed, std::string *text);
+bool PollPrompt(uint64_t token, bool *confirmed, std::string *text);
 
 /* The scene that has the focus now: where a menu opened by the user should
  * appear, whatever is on screen. Null when it cannot be told. */

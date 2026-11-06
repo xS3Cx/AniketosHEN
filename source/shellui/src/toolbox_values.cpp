@@ -57,6 +57,14 @@ const ExactValueEntry kExactValues[] = {
      +[]() -> std::string { return bool_str(g_settings.overlay_ram); }},
     {"id_plugin_kstuff_autoload",
      +[]() -> std::string { return bool_str(g_settings.kstuff_autoload); }},
+    {"id_plugin_shadowmount_autoload",
+     +[]() -> std::string {
+       return bool_str(g_settings.shadowmount_autoload);
+     }},
+    {"id_pldc_master",
+     +[]() -> std::string {
+       return bool_str(g_settings.payload_autostart_enabled);
+     }},
     {"id_disp_titleids",
      +[]() -> std::string { return bool_str(g_settings.display_tids); }},
     {"id_enable_fan_speed",
