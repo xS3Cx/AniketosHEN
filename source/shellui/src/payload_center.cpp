@@ -155,6 +155,8 @@ void scan_payloads() {
           installed.match_key = json_string(root, "match_key");
           installed.name = json_string(root, "name");
           installed.version = json_string(root, "item_version");
+          if (installed.version.empty())
+            installed.version = json_string(root, "version");
           installed.last_update = json_string(root, "last_update");
           cJSON_Delete(root);
         }

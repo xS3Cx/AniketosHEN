@@ -262,6 +262,8 @@ bool read_meta(const std::string &payload_path, ItemMeta *meta) {
   parsed.source_name = json_string(root, "source_name");
   parsed.name = json_string(root, "name");
   parsed.item_version = json_string(root, "item_version");
+  if (parsed.item_version.empty())
+    parsed.item_version = json_string(root, "version");
   parsed.filename = json_string(root, "filename");
   parsed.checksum = json_string(root, "checksum");
   parsed.last_update = json_string(root, "last_update");

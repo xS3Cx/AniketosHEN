@@ -51,12 +51,17 @@ std::string subtitle_for(const Entry &entry) {
 }
 
 bool unmanaged_target(const Entry &entry) {
-  const std::string path = std::string(ONION_DIST_DATA_ROOT) + "/payloads/" +
-                           onion::payload_catalog::slug(entry.item.name) +
-                           ".elf";
-  if (access(path.c_str(), F_OK) != 0)
-    return false;
-  return access((path + ".meta.json").c_str(), F_OK) != 0;
+  const std::string name =
+      onion::payload_catalog::slug(entry.item.name) + ".elf";
+  for (const char *root :
+       {ONION_DIST_USER_DATA_ROOT, ONION_DIST_DATA_ROOT}) {
+    const std::string path = std::string(root) + "/payloads/" + name;
+    if (access(path.c_str(), F_OK) != 0)
+      continue;
+    if (access((path + ".meta.json").c_str(), F_OK) != 0)
+      return true;
+  }
+  return false;
 }
 
 std::string install_confirm(const Entry &entry) {
