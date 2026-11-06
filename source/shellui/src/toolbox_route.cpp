@@ -35,6 +35,7 @@ RouteResult resolve_resource(const RouteInput &in) {
   out.flags.is_su_menu = (in.resource == kSuperuserXml);
   const PayloadCenterPage pldc =
       parse_payload_center_resource(in.resource);
+  out.flags.is_payload_center = pldc == PayloadCenterPage::Center;
   out.flags.is_payload_autostart = pldc == PayloadCenterPage::Autostart;
   out.flags.is_payload_order = pldc == PayloadCenterPage::Order;
   out.flags.is_payload_browse = pldc == PayloadCenterPage::Browse;
@@ -85,6 +86,8 @@ RouteResult resolve_resource(const RouteInput &in) {
     out.page = Page::Kbm;
   } else if (out.flags.is_su_menu) {
     out.page = Page::SuperuserPass;
+  } else if (out.flags.is_payload_center) {
+    out.page = Page::PayloadCenter;
   } else if (out.flags.is_payload_autostart) {
     out.page = Page::PayloadAutostart;
   } else if (out.flags.is_payload_order) {

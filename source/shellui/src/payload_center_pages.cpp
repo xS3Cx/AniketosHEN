@@ -279,12 +279,7 @@ bool installed_model(ps5ui::Node &model) {
                      all.begin(), all.end(),
                      [](const InstalledRow &row) { return row.enabled; })),
                  updates_available()),
-             ps5ui::Style::Center)
-      .link("id_pldc_browse", toolbox_i18n::tr("payload_center.browse"),
-            "pldc_browse.xml", toolbox_i18n::tr("payload_center.browse.sub"))
-      .link("id_pldc_autostart", toolbox_i18n::tr("payload_center.autostart"),
-            "pldc_autostart.xml",
-            toolbox_i18n::tr("payload_center.autostart.sub"));
+             ps5ui::Style::Center);
 
   for (const auto &row : all) {
     page.link("id_payload_item_" + row.entry->id, row.display,
@@ -379,7 +374,18 @@ bool order_model(ps5ui::Node &model) {
                   toolbox_i18n::tr("payload_center.order.delay"),
                   toolbox_i18n::tr("payload_center.order.delay.sub"), "number",
                   "1", "3", std::nullopt, std::nullopt, std::nullopt,
-                  std::to_string(config.delay_seconds));
+                  std::to_string(config.delay_seconds))
+      .button("id_pldc_order_disable",
+              toolbox_i18n::tr("payload_center.order.disable"));
+  const bool removable =
+      entry.path.rfind(ONION_DIST_DATA_ROOT "/payloads/", 0) == 0;
+  if (removable) {
+    page.button("id_pldc_order_delete", toolbox_i18n::tr("payload_center.remove"),
+                std::nullopt, std::nullopt, std::nullopt, ps5ui::Style::None,
+                toolbox_i18n::format("payload_center.confirm.remove_fmt",
+                                     display_name(entry).c_str()),
+                toolbox_i18n::confirm_phrase());
+  }
   model = page.root();
   return true;
 }
@@ -405,11 +411,7 @@ bool browse_model(ps5ui::Node &model) {
     page.label("id_pldc_browse_empty",
                toolbox_i18n::tr("payload_center.list.empty"),
                ps5ui::Style::Center);
-  page.link("id_pldc_settings",
-            toolbox_i18n::tr("payload_center.catalog_settings"),
-            "pldc_settings.xml",
-            toolbox_i18n::tr("payload_center.catalog_settings.sub"))
-      .button("id_pldc_refresh", toolbox_i18n::tr("payload_center.refresh"),
+  page.button("id_pldc_refresh", toolbox_i18n::tr("payload_center.refresh"),
               std::nullopt);
   model = page.root();
   return true;
@@ -518,6 +520,23 @@ bool post_install_model(ps5ui::Node &model) {
 }
 
 } // namespace
+
+void generate_center_xml(std::string &xml) {
+  ps5ui::Page page("id_pldc_center",
+                   toolbox_i18n::tr("payload_center.title"));
+  page.link("id_pldc_installed", toolbox_i18n::tr("payload_center.manage"),
+            "payloads.xml", toolbox_i18n::tr("payload_center.manage.sub"))
+      .link("id_pldc_autostart", toolbox_i18n::tr("payload_center.autostart"),
+            "pldc_autostart.xml",
+            toolbox_i18n::tr("payload_center.autostart.sub"))
+      .link("id_pldc_browse", toolbox_i18n::tr("payload_center.browse"),
+            "pldc_browse.xml", toolbox_i18n::tr("payload_center.browse.sub"))
+      .link("id_pldc_settings",
+            toolbox_i18n::tr("payload_center.catalog_settings"),
+            "pldc_settings.xml",
+            toolbox_i18n::tr("payload_center.catalog_settings.sub"));
+  xml = page.build();
+}
 
 void generate_installed_xml(std::string &xml) {
   ps5ui::Node model;

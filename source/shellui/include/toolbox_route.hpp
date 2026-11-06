@@ -15,6 +15,7 @@ enum class Page : unsigned char {
   None = 0,           /**< unknown → original stream */
   DebugSettings,      /**< embedded toolbox XML */
   Payloads,
+  PayloadCenter,      /**< Payload Center hub */
   PayloadConfig,      /**< per-Payload configuration page */
   OverlayMetrics,     /**< overlay metric list (overlay_metrics.xml) */
   OverlayMetricConfig, /**< per-overlay metric page (overlay_<id>.xml) */
@@ -57,6 +58,7 @@ struct RouteInput {
 /** Flag snapshot after matching resource. */
 struct RouteFlags {
   bool is_payloads = false;
+  bool is_payload_center = false;
   bool is_payload_config = false;
   bool is_overlay_metrics = false;
   bool is_overlay_metric = false;
@@ -105,6 +107,7 @@ constexpr bool restores_parent_on_pop(Page page) {
 
 enum class PayloadCenterPage : unsigned char {
   None = 0,
+  Center,
   Autostart,
   Order,
   Browse,
@@ -161,6 +164,8 @@ inline PayloadCenterPage parse_payload_center_resource(std::string_view resource
   std::string_view relative;
   if (!settings_plugins_relative(resource, &relative))
     return PayloadCenterPage::None;
+  if (relative == "pldc_center.xml")
+    return PayloadCenterPage::Center;
   if (relative == "pldc_autostart.xml")
     return PayloadCenterPage::Autostart;
   if (relative == "pldc_order.xml")

@@ -127,6 +127,9 @@ uint64_t GetManifestResourceStream_Hook(uint64_t inst, MonoString *FileName) {
     LoadSettings();
     generate_toolbox_xml(new_xml_string);
     break;
+  case toolbox::Page::PayloadCenter:
+    onion::shellui::payload_center::generate_center_xml(new_xml_string);
+    break;
   case toolbox::Page::Payloads:
     onion::shellui::payload_center::generate_installed_xml(new_xml_string);
     break;

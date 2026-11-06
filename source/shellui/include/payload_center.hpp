@@ -61,6 +61,7 @@ bool post_install_autostart_enabled();
 void request_navigate_installed();
 void clear_post_install_page();
 
+void generate_center_xml(std::string &xml);
 void generate_installed_xml(std::string &xml);
 void generate_autostart_xml(std::string &xml);
 void generate_order_xml(std::string &xml);

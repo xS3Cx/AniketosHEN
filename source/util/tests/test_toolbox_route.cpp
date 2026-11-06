@@ -470,6 +470,7 @@ static int test_progress_page_restore_is_reusable(void) {
 
 static int test_payload_center_pages(void) {
   const std::pair<const char *, Page> pages[] = {
+      {"pldc_center.xml", Page::PayloadCenter},
       {"pldc_autostart.xml", Page::PayloadAutostart},
       {"pldc_order.xml", Page::PayloadOrder},
       {"pldc_browse.xml", Page::PayloadBrowse},
@@ -484,8 +485,6 @@ static int test_payload_center_pages(void) {
   }
   TEST_ASSERT_TRUE(
       resolve_resource(make_in(cfg_res("pldc_unknown.xml"))).page == Page::None);
-  TEST_ASSERT_TRUE(
-      resolve_resource(make_in(cfg_res("pldc_center.xml"))).page == Page::None);
   TEST_ASSERT_TRUE(
       resolve_resource(make_in(cfg_res("pldc_list.xml"))).page == Page::None);
   TEST_ASSERT_TRUE(restores_parent_on_pop(Page::PayloadDetail));

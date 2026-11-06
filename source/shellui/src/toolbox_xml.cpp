@@ -29,6 +29,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <ctime>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -100,6 +101,9 @@ struct PayloadMetaView {
   std::string source_url;
   std::string last_update;
   std::string category;
+  std::string filename;
+  std::string checksum;
+  long long installed_at = 0;
   bool present = false;
 };
 
@@ -118,8 +122,40 @@ PayloadMetaView payload_meta_view(const std::string& path) {
   view.source_url = onion_cjson::string_item(root.get(), "source_url", "");
   view.last_update = onion_cjson::string_item(root.get(), "last_update", "");
   view.category = onion_cjson::string_item(root.get(), "category", "");
+  view.filename = onion_cjson::string_item(root.get(), "filename", "");
+  view.checksum = onion_cjson::string_item(root.get(), "checksum", "");
+  const cJSON *installed =
+      cJSON_GetObjectItemCaseSensitive(root.get(), "installed_at");
+  if (cJSON_IsNumber(installed))
+    view.installed_at = static_cast<long long>(installed->valuedouble);
   view.present = !view.id.empty();
   return view;
+}
+
+std::string format_size(long long bytes) {
+  char text[32] = {};
+  if (bytes >= 1024 * 1024)
+    std::snprintf(text, sizeof(text), "%.1f MB",
+                  static_cast<double>(bytes) / (1024.0 * 1024.0));
+  else if (bytes >= 1024)
+    std::snprintf(text, sizeof(text), "%.1f KB",
+                  static_cast<double>(bytes) / 1024.0);
+  else
+    std::snprintf(text, sizeof(text), "%lld B", bytes);
+  return text;
+}
+
+std::string format_installed(long long epoch) {
+  if (epoch <= 0)
+    return "-";
+  const time_t stamp = static_cast<time_t>(epoch);
+  struct tm value {};
+  if (!localtime_r(&stamp, &value))
+    return "-";
+  char text[32] = {};
+  if (!std::strftime(text, sizeof(text), "%Y-%m-%d %H:%M", &value))
+    return "-";
+  return text;
 }
 
 void append_payload_entry(std::vector<PayloadEntry>& list,
@@ -432,10 +468,45 @@ static bool payload_config_model(ps5ui::Node& model,
       onion::shellui::payload_center::find_installed_identity(found->id);
   const bool update_available =
       catalog_entry && catalog_entry->update_available;
+  struct stat payload_stat {};
+  const long long payload_size =
+      stat(found->shellui_path.c_str(), &payload_stat) == 0
+          ? static_cast<long long>(payload_stat.st_size)
+          : 0;
+  page.label("id_payload_meta_size",
+             toolbox_i18n::format("payload_center.meta.size_fmt",
+                                  format_size(payload_size).c_str()));
   if (meta.present) {
-    page.label("id_payload_meta_version", meta.version)
-        .label("id_payload_meta_source", meta.source_name)
-        .label("id_payload_meta_updated", meta.last_update);
+    page.label("id_payload_meta_version",
+               toolbox_i18n::format("payload_center.meta.version_fmt",
+                                    meta.version.empty() ? "-"
+                                                         : meta.version.c_str()))
+        .label("id_payload_meta_source",
+               toolbox_i18n::format("payload_center.meta.source_fmt",
+                                    meta.source_name.empty()
+                                        ? "-"
+                                        : meta.source_name.c_str()))
+        .label("id_payload_meta_updated",
+               toolbox_i18n::format("payload_center.meta.updated_fmt",
+                                    meta.last_update.empty()
+                                        ? "-"
+                                        : meta.last_update.c_str()))
+        .label("id_payload_meta_category",
+               toolbox_i18n::format("payload_center.meta.category_fmt",
+                                    meta.category.empty() ? "-"
+                                                          : meta.category.c_str()))
+        .label("id_payload_meta_filename",
+               toolbox_i18n::format("payload_center.meta.filename_fmt",
+                                    meta.filename.empty() ? "-"
+                                                          : meta.filename.c_str()))
+        .label("id_payload_meta_installed",
+               toolbox_i18n::format("payload_center.meta.installed_fmt",
+                                    format_installed(meta.installed_at).c_str()))
+        .label("id_payload_meta_checksum",
+               toolbox_i18n::format("payload_center.meta.checksum_fmt",
+                                    meta.checksum.empty()
+                                        ? "-"
+                                        : meta.checksum.substr(0, 16).c_str()));
     if (update_available) {
       page.button("id_payload_update_" + found->id,
                   toolbox_i18n::tr("payload_center.update"),
@@ -805,7 +876,7 @@ void append_toolbox_pkg_group(ps5ui::Group& g) {
 
 void append_toolbox_payloads_group(ps5ui::Group& g) {
   g.link("id_payload_center", toolbox_i18n::tr("payload_center.link"),
-         "payloads.xml", toolbox_i18n::tr("payload_center.link.sub"),
+         "pldc_center.xml", toolbox_i18n::tr("payload_center.link.sub"),
          kIconPlugins)
       .link("id_plugins", toolbox_i18n::tr("plugins.link"), "plugins.xml",
             toolbox_i18n::tr("plugins.link.sub"), kIconPlugins);

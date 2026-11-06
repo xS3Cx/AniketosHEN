@@ -35,6 +35,7 @@ constexpr OnPressDomain onpress_domain_for_page(Page page) {
   switch (page) {
   case Page::DebugSettings:
     return OnPressDomain::Root;
+  case Page::PayloadCenter:
   case Page::Payloads:
     return OnPressDomain::PayloadCenter;
   case Page::PayloadConfig:

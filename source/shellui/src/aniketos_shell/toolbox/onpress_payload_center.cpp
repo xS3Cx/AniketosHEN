@@ -188,6 +188,36 @@ OnPressResult order_selected(OnPressContext &ctx) {
   return OnPressResult::Consumed;
 }
 
+OnPressResult order_disable(OnPressContext &ctx) {
+  ctx.dirty = false;
+  if (g_ui.payloads_list.empty())
+    g_ui.payloads_list = shellui_scan_payloads();
+  for (const auto &entry : g_ui.payloads_list) {
+    if (entry.id != g_ui.active_pldc_order)
+      continue;
+    unlink((entry.shellui_path + ".auto_start").c_str());
+    notify("notify.payload_center.order_saved");
+    toolbox_pop_page();
+    return OnPressResult::Consumed;
+  }
+  return OnPressResult::Consumed;
+}
+
+OnPressResult order_delete(OnPressContext &ctx) {
+  ctx.dirty = false;
+  if (g_ui.payloads_list.empty())
+    g_ui.payloads_list = shellui_scan_payloads();
+  for (const auto &entry : g_ui.payloads_list) {
+    if (entry.id != g_ui.active_pldc_order)
+      continue;
+    if (!onion::shellui::payload_center::remove_installed(entry.id, entry.name))
+      notify("notify.payload_center.remove_failed");
+    toolbox_pop_page();
+    return OnPressResult::Consumed;
+  }
+  return OnPressResult::Consumed;
+}
+
 OnPressResult post_autostart(OnPressContext &ctx) {
   ctx.dirty = false;
   const std::string identity =
@@ -232,6 +262,8 @@ const OnPressExactEntry kExact[] = {
     {"id_pldc_search", search},
     {"id_pldc_clear_filter", clear_filter},
     {"id_pldc_order", order_selected},
+    {"id_pldc_order_disable", order_disable},
+    {"id_pldc_order_delete", order_delete},
     {"id_pldc_post_autostart", post_autostart},
     {"id_pldc_post_done", post_done},
     {"id_pldc_post_installed", post_installed},

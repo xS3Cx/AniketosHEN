@@ -34,6 +34,8 @@ static int test_page_domain_matrix(void) {
                    OnPressDomain::PassThrough);
   TEST_ASSERT_TRUE(toolbox::onpress_domain_for_page(Page::DebugSettings) ==
                    OnPressDomain::Root);
+  TEST_ASSERT_TRUE(toolbox::onpress_domain_for_page(Page::PayloadCenter) ==
+                   OnPressDomain::PayloadCenter);
   TEST_ASSERT_TRUE(toolbox::onpress_domain_for_page(Page::Payloads) ==
                    OnPressDomain::PayloadCenter);
   TEST_ASSERT_TRUE(toolbox::onpress_domain_for_page(Page::PayloadConfig) ==
