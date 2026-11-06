@@ -13,6 +13,7 @@
 #include "plugin_progress.hpp"
 #include "payload_progress.hpp"
 #include "remote_play.hpp"
+#include "update_progress.hpp"
 #include "toolbox_values.hpp"
 #include "settings_page_refresh.hpp"
 
@@ -100,6 +101,11 @@ int OnPreCreate_Hook(MonoObject *Instance, MonoObject *element) {
 
   if (g_ui.active_page == toolbox::Page::PayloadProgress) {
     payload_progress_bind_page(Instance);
+    return call_original(Instance, element);
+  }
+
+  if (g_ui.active_page == toolbox::Page::HenUpdateProgress) {
+    update_progress_bind_page(Instance);
     return call_original(Instance, element);
   }
 

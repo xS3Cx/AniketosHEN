@@ -26,6 +26,7 @@ file(GLOB SrcFiles CONFIGURE_DEPENDS
   ${D_SRC}/cheats/*.cpp
   ${D_SRC}/cheats/sync/*.cpp
   ${D_SRC}/payload_center/*.cpp
+  ${D_SRC}/update/*.cpp
   ${ONIONHEN_THIRD_PARTY_DIR}/cheat_support/*.c
   ${D_SRC}/../include/*.h
   ${D_SRC}/../include/*.hpp

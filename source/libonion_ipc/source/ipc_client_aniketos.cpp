@@ -113,3 +113,52 @@ bool IPC_Client::RemovePayload(const std::string &identity, std::string &out) {
   }
   return true;
 }
+
+bool IPC_Client::UpdateCheck(const std::string &channel, std::string &out) {
+  if (!require_util("UpdateCheck"))
+    return false;
+  cJSON *j = cJSON_CreateObject();
+  cJSON_AddStringToObject(j, "channel", channel.c_str());
+  if (!IPCSendCommand(BREW_UTIL_UPDATE_CHECK, out,
+                      onion_cjson::print_owned(j))) {
+    LOG_ERROR("Failed to check for updates");
+    return false;
+  }
+  return true;
+}
+
+bool IPC_Client::UpdateDownload(const std::string &channel, std::string &out) {
+  if (!require_util("UpdateDownload"))
+    return false;
+  cJSON *j = cJSON_CreateObject();
+  cJSON_AddStringToObject(j, "channel", channel.c_str());
+  if (!IPCSendCommand(BREW_UTIL_UPDATE_DOWNLOAD, out,
+                      onion_cjson::print_owned(j))) {
+    LOG_ERROR("Failed to download update");
+    return false;
+  }
+  return true;
+}
+
+bool IPC_Client::UpdateStatus(std::string &out) {
+  if (!require_util("UpdateStatus"))
+    return false;
+  if (!IPCSendCommand(BREW_UTIL_UPDATE_STATUS, out,
+                      onion_cjson::print_owned(cJSON_CreateObject()))) {
+    LOG_ERROR("Failed to query update status");
+    return false;
+  }
+  return true;
+}
+
+bool IPC_Client::UpdateCancel(uint32_t task_id, std::string &out) {
+  if (!require_util("UpdateCancel"))
+    return false;
+  cJSON *j = cJSON_CreateObject();
+  cJSON_AddNumberToObject(j, "task_id", task_id);
+  if (!IPCSendCommand(BREW_UTIL_UPDATE_CANCEL, out, onion_cjson::print_owned(j))) {
+    LOG_ERROR("Failed to cancel update task");
+    return false;
+  }
+  return true;
+}

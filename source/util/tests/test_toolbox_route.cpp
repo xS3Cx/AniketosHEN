@@ -499,6 +499,27 @@ static int test_payload_order_restores_parent(void) {
   return 0;
 }
 
+static int test_update_pages(void) {
+  const std::pair<const char *, Page> pages[] = {
+      {"hen_update.xml", Page::HenUpdate},
+      {"hen_update_releases.xml", Page::HenUpdateReleases},
+      {"hen_update_progress.xml", Page::HenUpdateProgress},
+  };
+  for (const auto &page : pages) {
+    const RouteResult result = resolve_resource(make_in(cfg_res(page.first)));
+    TEST_ASSERT_TRUE(result.page == page.second);
+    TEST_ASSERT_TRUE(onpress_domain_for_page(result.page) ==
+                     OnPressDomain::Update);
+  }
+  TEST_ASSERT_TRUE(
+      resolve_resource(make_in(cfg_res("hen_update_unknown.xml"))).page ==
+      Page::None);
+  TEST_ASSERT_TRUE(!restores_parent_on_pop(Page::HenUpdate));
+  TEST_ASSERT_TRUE(restores_parent_on_pop(Page::HenUpdateReleases));
+  TEST_ASSERT_TRUE(restores_parent_on_pop(Page::HenUpdateProgress));
+  return 0;
+}
+
 extern "C" int test_toolbox_route_suite(void) {
   int fails = 0;
   fails += onion_test_run("route.unknown", test_unknown_passthrough);
@@ -526,6 +547,7 @@ extern "C" int test_toolbox_route_suite(void) {
   fails += onion_test_run("route.cheat_progress", test_cheat_progress_page);
   fails += onion_test_run("route.plugin_progress", test_plugin_progress_page);
   fails += onion_test_run("route.payload_center", test_payload_center_pages);
+  fails += onion_test_run("route.update_pages", test_update_pages);
   fails += onion_test_run("payload.order_restores_parent",
                           test_payload_order_restores_parent);
   fails += onion_test_run("route.remote_play", test_remote_play_page);

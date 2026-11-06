@@ -66,6 +66,9 @@ static int test_defaults_and_serialize_keys(void) {
   TEST_ASSERT_TRUE(text.find("autoload=false") != std::string::npos);
   TEST_ASSERT_TRUE(text.find("[payload_center]\n") != std::string::npos);
   TEST_ASSERT_TRUE(text.find("autostart_enabled=true") != std::string::npos);
+  TEST_ASSERT_TRUE(text.find("[update]\n") != std::string::npos);
+  TEST_ASSERT_TRUE(text.find("auto_check=false") != std::string::npos);
+  TEST_ASSERT_TRUE(text.find("channel=stable") != std::string::npos);
   return 0;
 }
 
@@ -145,6 +148,8 @@ static int test_full_schema_roundtrip(void) {
   in.kstuff_autoload = true;
   in.shadowmount_autoload = true;
   in.payload_autostart_enabled = false;
+  in.update_auto_check = true;
+  in.update_channel = onion::kUpdateChannelBeta;
   in.app_jailbreak_allowlist.exact_title_ids = {};
   in.app_jailbreak_allowlist.exact_title_ids[0] = "ITEM00001";
   in.app_jailbreak_allowlist.exact_title_ids[1] = "CUSA12345";
@@ -190,6 +195,8 @@ static int test_full_schema_roundtrip(void) {
   TEST_ASSERT_TRUE(out.shadowmount_autoload == in.shadowmount_autoload);
   TEST_ASSERT_TRUE(out.payload_autostart_enabled ==
                    in.payload_autostart_enabled);
+  TEST_ASSERT_TRUE(out.update_auto_check == in.update_auto_check);
+  TEST_ASSERT_EQ_INT(in.update_channel, out.update_channel);
   TEST_ASSERT_EQ_U64(
       in.app_jailbreak_allowlist.exact_title_id_count,
       out.app_jailbreak_allowlist.exact_title_id_count);

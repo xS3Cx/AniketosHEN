@@ -16,6 +16,7 @@
 #include "payload_progress.hpp"
 #include "remote_play.hpp"
 #include "shellui_state.hpp"
+#include "update_progress.hpp"
 #include "dynamic_ui_runtime.hpp"
 #include "settings_page_refresh.hpp"
 #include "toolbox_route.hpp"
@@ -37,6 +38,9 @@ void SettingPageStackOnPopping_Hook(MonoObject *instance,
     } else if (payload_progress_handle_popping(outgoing)) {
       g_ui.leave_page(toolbox::Page::PayloadProgress);
       LOG_DEBUG("payload_progress_xml: progress page popped and state cleared");
+    } else if (update_progress_handle_popping(outgoing)) {
+      g_ui.leave_page(toolbox::Page::HenUpdateProgress);
+      LOG_DEBUG("hen_update_progress.xml: progress page popped and state cleared");
     } else if (remote_play_handle_popping(outgoing)) {
       g_ui.leave_page(toolbox::Page::RemotePlay);
       LOG_DEBUG("remote_play_xml: page popped and parent route restored");

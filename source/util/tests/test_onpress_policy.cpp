@@ -66,6 +66,12 @@ static int test_page_domain_matrix(void) {
                    OnPressDomain::Sprx);
   TEST_ASSERT_TRUE(toolbox::onpress_domain_for_page(Page::SprxConfig) ==
                    OnPressDomain::Sprx);
+  TEST_ASSERT_TRUE(toolbox::onpress_domain_for_page(Page::HenUpdate) ==
+                   OnPressDomain::Update);
+  TEST_ASSERT_TRUE(toolbox::onpress_domain_for_page(Page::HenUpdateReleases) ==
+                   OnPressDomain::Update);
+  TEST_ASSERT_TRUE(toolbox::onpress_domain_for_page(Page::HenUpdateProgress) ==
+                   OnPressDomain::Update);
   TEST_ASSERT_TRUE(toolbox::onpress_domain_for_page(Page::Payloads) ==
                    OnPressDomain::PayloadCenter);
   TEST_ASSERT_TRUE(toolbox::onpress_domain_for_page(Page::PayloadAutostart) ==

@@ -41,6 +41,9 @@ enum class Page : unsigned char {
   PayloadIncluded,
   PayloadPostInstall,
   PayloadProgress,
+  HenUpdate,
+  HenUpdateReleases,
+  HenUpdateProgress,
 };
 
 struct ResourceNames {
@@ -83,6 +86,9 @@ struct RouteFlags {
   bool is_payload_included = false;
   bool is_payload_post_install = false;
   bool is_payload_progress = false;
+  bool is_hen_update = false;
+  bool is_hen_update_releases = false;
+  bool is_hen_update_progress = false;
 };
 
 struct RouteResult {
@@ -104,7 +110,8 @@ constexpr bool restores_parent_on_pop(Page page) {
          page == Page::PluginProgress ||
          page == Page::PayloadDetail || page == Page::PayloadOrder ||
          page == Page::PayloadPostInstall ||
-         page == Page::PayloadProgress;
+         page == Page::PayloadProgress || page == Page::HenUpdateReleases ||
+         page == Page::HenUpdateProgress;
 }
 
 enum class PayloadCenterPage : unsigned char {
@@ -161,6 +168,26 @@ inline bool settings_plugins_relative(std::string_view resource,
   if (out)
     *out = relative;
   return true;
+}
+
+enum class UpdatePage : unsigned char {
+  None = 0,
+  Hub,
+  Releases,
+  Progress,
+};
+
+inline UpdatePage parse_update_resource(std::string_view resource) {
+  std::string_view relative;
+  if (!settings_plugins_relative(resource, &relative))
+    return UpdatePage::None;
+  if (relative == "hen_update.xml")
+    return UpdatePage::Hub;
+  if (relative == "hen_update_releases.xml")
+    return UpdatePage::Releases;
+  if (relative == "hen_update_progress.xml")
+    return UpdatePage::Progress;
+  return UpdatePage::None;
 }
 
 inline PayloadCenterPage parse_payload_center_resource(std::string_view resource) {

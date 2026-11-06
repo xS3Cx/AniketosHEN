@@ -20,6 +20,7 @@ along with this program; see the file COPYING. If not, see
 #include "util_language.h"
 #include "util_toolbox.h"
 #include "report_sender.hpp"
+#include "update/update_service.hpp"
 #include <onion/settings.hpp>
 #include <onion/log_settings.hpp>
 #include <onion/platform.h>
@@ -154,6 +155,8 @@ int main(void) {
     /* Marks this start finished after a while, then sends pending error
        reports when that is allowed. */
     report_sender_start();
+
+    onion::update::start_boot_check();
 
     LOG_INFO("Initializing cheat engine...");
     onion::cheats::CheatService::instance().ensureDir();

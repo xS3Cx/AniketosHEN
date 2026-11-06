@@ -27,6 +27,7 @@ extern "C" {
 #include "cheats/sync/cheat_sync_service.hpp"
 #include "payload_center/payload_center_service.hpp"
 #include "payload_center/payload_center_install.hpp"
+#include "update/update_service.hpp"
 #include "web_tile_icon.hpp"
 #include <cstdio>
 #include <cerrno>
@@ -105,6 +106,44 @@ std::string make_payload_status_json(
       !cJSON_AddStringToObject(root, "error", status.error.c_str()) ||
       !cJSON_AddStringToObject(root, "item", status.item.c_str()) ||
       !cJSON_AddStringToObject(root, "identity", status.identity.c_str())) {
+    cJSON_Delete(root);
+    return {};
+  }
+  return onion_cjson::print_owned(root);
+}
+
+const char *update_state_name(onion::update::Status::State state) {
+  using State = onion::update::Status::State;
+  switch (state) {
+  case State::Running:
+    return "running";
+  case State::Ok:
+    return "ok";
+  case State::Error:
+    return "error";
+  case State::Idle:
+  default:
+    return "idle";
+  }
+}
+
+std::string make_update_status_json(const onion::update::Status &status) {
+  cJSON *root = cJSON_CreateObject();
+  if (!root ||
+      !cJSON_AddNumberToObject(root, "task_id", status.task_id) ||
+      !cJSON_AddStringToObject(root, "state",
+                               update_state_name(status.state)) ||
+      !cJSON_AddStringToObject(root, "phase", status.phase.c_str()) ||
+      !cJSON_AddNumberToObject(root, "progress", status.progress) ||
+      !cJSON_AddStringToObject(root, "error", status.error.c_str()) ||
+      !cJSON_AddStringToObject(root, "version", status.version.c_str()) ||
+      !cJSON_AddStringToObject(root, "installed", status.installed.c_str()) ||
+      !cJSON_AddStringToObject(root, "summary", status.summary.c_str()) ||
+      !cJSON_AddStringToObject(root, "channel", status.channel.c_str()) ||
+      !cJSON_AddNumberToObject(root, "size",
+                               static_cast<double>(status.size)) ||
+      !cJSON_AddBoolToObject(root, "newer", status.newer) ||
+      !cJSON_AddBoolToObject(root, "downloaded", status.downloaded)) {
     cJSON_Delete(root);
     return {};
   }
@@ -447,6 +486,55 @@ void handleIPC(clientArgs *client, std::string &inputStr,
     }
     const std::string body = onion_cjson::print_owned(root);
     reply(sender_app, !removed.ok, body);
+    break;
+  }
+  case BREW_UTIL_UPDATE_CHECK: {
+    using onion::update::Service;
+    const std::string channel =
+        onion_cjson::string_item(my_json.get(), "channel", "");
+    uint32_t task_id = 0;
+    const auto started = Service::instance().check(channel, false, &task_id);
+    const std::string body = make_state_json(
+        started == Service::StartResult::Started
+            ? "started"
+            : started == Service::StartResult::AlreadyRunning ? "already_running"
+                                                              : "rejected",
+        task_id);
+    reply(sender_app, started == Service::StartResult::Rejected, body);
+    break;
+  }
+  case BREW_UTIL_UPDATE_DOWNLOAD: {
+    using onion::update::Service;
+    const std::string channel =
+        onion_cjson::string_item(my_json.get(), "channel", "");
+    uint32_t task_id = 0;
+    const auto started = Service::instance().download(channel, &task_id);
+    const std::string body = make_state_json(
+        started == Service::StartResult::Started
+            ? "started"
+            : started == Service::StartResult::AlreadyRunning ? "already_running"
+                                                              : "rejected",
+        task_id);
+    reply(sender_app, started == Service::StartResult::Rejected, body);
+    break;
+  }
+  case BREW_UTIL_UPDATE_STATUS: {
+    const auto status = onion::update::Service::instance().status();
+    const std::string body = make_update_status_json(status);
+    reply(sender_app, body.empty(), body);
+    break;
+  }
+  case BREW_UTIL_UPDATE_CANCEL: {
+    const int requested_task_id =
+        onion_cjson::int_item(my_json.get(), "task_id", 0);
+    const bool requested =
+        requested_task_id > 0 &&
+        onion::update::Service::instance().cancel(
+            static_cast<uint32_t>(requested_task_id));
+    const std::string body = make_state_json(
+        requested ? "cancel_requested" : "cancel_ignored",
+        requested_task_id > 0 ? static_cast<uint32_t>(requested_task_id) : 0);
+    reply(sender_app, body.empty(), body);
     break;
   }
   case BREW_UTIL_WEB_TILE_ICON:

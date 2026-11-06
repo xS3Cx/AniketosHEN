@@ -14,6 +14,7 @@
 #include <onion/settings.hpp>
 #include "plugin_progress.hpp"
 #include "payload_progress.hpp"
+#include "update_progress.hpp"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -748,4 +749,5 @@ void OnRender_Hook(MonoObject* instance) {
   shellui_poll_cheat_progress();
   shellui_poll_plugin_progress();
   shellui_poll_payload_progress();
+  shellui_poll_update_progress();
 }

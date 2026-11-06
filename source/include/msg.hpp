@@ -83,6 +83,10 @@ enum DaemonCommands : unsigned int {
   BREW_UTIL_PAYLOAD_STATUS = 0x800001Du,
   BREW_UTIL_PAYLOAD_CANCEL = 0x800001Eu,
   BREW_UTIL_PAYLOAD_REMOVE = 0x800001Fu,
+  BREW_UTIL_UPDATE_CHECK = 0x8000020u,
+  BREW_UTIL_UPDATE_DOWNLOAD = 0x8000021u,
+  BREW_UTIL_UPDATE_STATUS = 0x8000022u,
+  BREW_UTIL_UPDATE_CANCEL = 0x8000023u,
 
   // Crit daemon plugin management. Payloads contain only validated plugin IDs;
   // filesystem paths never cross the IPC boundary.

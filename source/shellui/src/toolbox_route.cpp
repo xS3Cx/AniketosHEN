@@ -45,6 +45,10 @@ RouteResult resolve_resource(const RouteInput &in) {
   out.flags.is_payload_post_install =
       pldc == PayloadCenterPage::PostInstall;
   out.flags.is_payload_progress = pldc == PayloadCenterPage::Progress;
+  const UpdatePage update = parse_update_resource(in.resource);
+  out.flags.is_hen_update = update == UpdatePage::Hub;
+  out.flags.is_hen_update_releases = update == UpdatePage::Releases;
+  out.flags.is_hen_update_progress = update == UpdatePage::Progress;
 
   if (in.cheats_shortcut || in.cheats_shortcut_not_open) {
     out.flags.is_debug_settings = false;
@@ -105,6 +109,12 @@ RouteResult resolve_resource(const RouteInput &in) {
     out.page = Page::PayloadPostInstall;
   } else if (out.flags.is_payload_progress) {
     out.page = Page::PayloadProgress;
+  } else if (out.flags.is_hen_update) {
+    out.page = Page::HenUpdate;
+  } else if (out.flags.is_hen_update_releases) {
+    out.page = Page::HenUpdateReleases;
+  } else if (out.flags.is_hen_update_progress) {
+    out.page = Page::HenUpdateProgress;
   } else {
     out.page = Page::None;
   }

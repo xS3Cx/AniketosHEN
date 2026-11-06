@@ -12,6 +12,8 @@
 #include "payload_progress.hpp"
 #include "remote_play.hpp"
 #include "toolbox_route.hpp"
+#include "update_pages.hpp"
+#include "update_progress.hpp"
 #include "dynamic_ui_runtime.hpp"
 #include "external_plugin_ui.hpp"
 #include "external_sprx_ui.hpp"
@@ -217,6 +219,15 @@ uint64_t GetManifestResourceStream_Hook(uint64_t inst, MonoString *FileName) {
     break;
   case toolbox::Page::PayloadProgress:
     generate_payload_progress_xml(new_xml_string);
+    break;
+  case toolbox::Page::HenUpdate:
+    generate_hen_update_xml(new_xml_string);
+    break;
+  case toolbox::Page::HenUpdateReleases:
+    generate_hen_update_releases_xml(new_xml_string);
+    break;
+  case toolbox::Page::HenUpdateProgress:
+    generate_hen_update_progress_xml(new_xml_string);
     break;
   case toolbox::Page::Kbm:
     kbm_toolbox::generate_xml(new_xml_string, resourceName);

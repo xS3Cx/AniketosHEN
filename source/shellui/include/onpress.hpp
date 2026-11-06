@@ -75,6 +75,9 @@ const OnPressPrefixEntry *onpress_plugins_prefix(size_t *count);
 const OnPressExactEntry *onpress_payload_center_exact(size_t *count);
 const OnPressPrefixEntry *onpress_payload_center_prefix(size_t *count);
 
+const OnPressExactEntry *onpress_update_exact(size_t *count);
+const OnPressPrefixEntry *onpress_update_prefix(size_t *count);
+
 /** Enable/disable a payload's .auto_start marker. Enabling appends it last;
  * disabling never stops a running payload. */
 bool shellui_payload_set_autostart(PayloadEntry &entry, bool enabled);

@@ -860,6 +860,8 @@ constexpr const char* kIconSocialTelegram =
     ONION_DIST_USER_DATA_ROOT "/assets/icon_xml_social_telegram.png";
 constexpr const char* kIconSocialTikTok =
     ONION_DIST_USER_DATA_ROOT "/assets/icon_xml_social_tiktok.png";
+constexpr const char* kIconUpdate =
+    ONION_DIST_USER_DATA_ROOT "/assets/icon_xml_update.png";
 
 bool toolbox_on(const char* id) {
   return resolve_toolbox_control_value(id) == "1";
@@ -878,16 +880,9 @@ void append_toolbox_pkg_group(ps5ui::Group& g) {
          toolbox_i18n::tr("pkg.installer.sub"))
       .link("id_game_add_content_manager", toolbox_i18n::tr("pkg.add_content"),
             "Addcontent/data/addcontent.xml",
-            toolbox_i18n::tr("pkg.add_content.sub"));
-}
-
-void append_toolbox_payloads_group(ps5ui::Group& g) {
-  g.link("id_payload_center", toolbox_i18n::tr("payload_center.link"),
-         "pldc_center.xml", toolbox_i18n::tr("payload_center.link.sub"),
-         kIconPlugins)
+            toolbox_i18n::tr("pkg.add_content.sub"))
       .link("id_plugins", toolbox_i18n::tr("plugins.link"), "plugins.xml",
             toolbox_i18n::tr("plugins.link.sub"), kIconPlugins);
-  /* SPRX catalog UI is untested; restore id_sprx -> sprx.xml when it is. */
 }
 
 void append_toolbox_game_group(ps5ui::Group& g) {
@@ -1211,18 +1206,18 @@ void append_toolbox_about_group(ps5ui::Group& g) {
 
 void generate_toolbox_xml(std::string& new_xml) {
   ps5ui::Page page("id_debug_settings", toolbox_i18n::tr("root.title"));
-  page.root_focus("id_group_pkg");
+  page.root_focus("id_hen_update");
 
-  page.group(
+  page.link("id_hen_update", toolbox_i18n::tr("hen_update.title"),
+            "hen_update.xml", toolbox_i18n::tr("hen_update.sub"), kIconUpdate)
+      .link("id_payload_manager", toolbox_i18n::tr("payload_center.title"),
+            "pldc_center.xml", toolbox_i18n::tr("payload_manager.sub"),
+            kIconPlugins)
+      .group(
           "id_group_pkg", toolbox_i18n::tr("group.pkg"),
           [](ps5ui::Group& g) { append_toolbox_pkg_group(g); },
           toolbox_i18n::tr("group.pkg.sub"), kIconPkg,
           "id_game_package_installer")
-      .group(
-          "id_group_payloads", toolbox_i18n::tr("group.payloads"),
-          [](ps5ui::Group& g) { append_toolbox_payloads_group(g); },
-          toolbox_i18n::tr("group.payloads.sub"), kIconPlugins,
-          "id_payload_center")
       .group(
           "id_group_game", toolbox_i18n::tr("group.game"),
           [](ps5ui::Group& g) { append_toolbox_game_group(g); },

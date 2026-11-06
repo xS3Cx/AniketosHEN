@@ -126,6 +126,15 @@ toolbox=off
 # Available values: true, false
 autostart_enabled=true
 
+[update]
+# auto_check checks GitHub for a newer AniketosHEN build at boot. Downloads are
+# always started manually from the Toolbox.
+# Available values: true, false
+auto_check=false
+# channel selects the release channel used by the update check.
+# Available values: stable, beta
+channel=stable
+
 [kstuff]
 # autoload loads kstuff when AniketosHEN starts. Off by default; kstuff stays
 # embedded as a fallback and can be started from the Toolbox.

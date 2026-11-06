@@ -25,6 +25,7 @@ enum class OnPressDomain : unsigned char {
   RemotePlay,
   DynamicPlugin,
   PayloadCenter,
+  Update,
 };
 
 /**
@@ -73,6 +74,10 @@ constexpr OnPressDomain onpress_domain_for_page(Page page) {
     return OnPressDomain::PayloadCenter;
   case Page::PayloadProgress:
     return OnPressDomain::Progress;
+  case Page::HenUpdate:
+  case Page::HenUpdateReleases:
+  case Page::HenUpdateProgress:
+    return OnPressDomain::Update;
   case Page::Kbm:
     return OnPressDomain::Root;
   case Page::None:

@@ -66,6 +66,12 @@ const ExactValueEntry kExactValues[] = {
      +[]() -> std::string {
        return bool_str(g_settings.payload_autostart_enabled);
      }},
+    {"id_update_auto_check",
+     +[]() -> std::string { return bool_str(g_settings.update_auto_check); }},
+    {"id_update_beta",
+     +[]() -> std::string {
+       return bool_str(g_settings.update_channel == onion::kUpdateChannelBeta);
+     }},
     {"id_pldc_post_autostart",
      +[]() -> std::string {
        return bool_str(

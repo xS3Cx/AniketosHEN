@@ -128,6 +128,10 @@ public:
   bool PayloadInstallStatus(std::string &out);
   bool CancelPayloadInstall(uint32_t task_id, std::string &out);
   bool RemovePayload(const std::string &identity, std::string &out);
+  bool UpdateCheck(const std::string &channel, std::string &out);
+  bool UpdateDownload(const std::string &channel, std::string &out);
+  bool UpdateStatus(std::string &out);
+  bool UpdateCancel(uint32_t task_id, std::string &out);
   void Reload_Daemon_Settings();
   bool Launch_Elfldr();
   bool Set_Fan_Threshold(int temp, bool enabled);

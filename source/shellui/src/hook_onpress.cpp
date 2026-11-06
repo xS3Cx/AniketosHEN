@@ -95,6 +95,10 @@ OnPressResult dispatch_toolbox_press(toolbox::OnPressDomain domain,
     /* Order page reuses the per-payload delay field handler. */
     run_prefix(onpress_payloads_prefix);
     break;
+  case toolbox::OnPressDomain::Update:
+    run_exact(onpress_update_exact);
+    run_prefix(onpress_update_prefix);
+    break;
   case toolbox::OnPressDomain::PassThrough:
   case toolbox::OnPressDomain::DynamicPlugin:
     break;

@@ -30,6 +30,7 @@ extern "C" int test_util_language_suite(void);
 extern "C" int test_msg_protocol_suite(void);
 extern "C" int test_payload_catalog_suite(void);
 extern "C" int test_payload_version_suite(void);
+extern "C" int test_update_manifest_suite(void);
 extern "C" int test_payload_install_suite(void);
 extern "C" int test_app_jailbreak_policy_suite(void);
 extern "C" int test_big_app_collect_policy_suite(void);
@@ -98,6 +99,7 @@ int main() {
   failures += test_msg_protocol_suite();
   failures += test_payload_catalog_suite();
   failures += test_payload_version_suite();
+  failures += test_update_manifest_suite();
   failures += test_payload_install_suite();
   failures += test_app_jailbreak_policy_suite();
   failures += test_big_app_collect_policy_suite();
