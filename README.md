@@ -71,9 +71,10 @@ existing OnionHEN installation, and adds a large set of features of its own.
 
 - **ShellUI Toolbox** — a settings page injected into the PS5 ShellUI
 - **System preparation** — raise privileges, remount filesystems, and block the update partition
-- **fSELF / fPKG** — bundled kstuff for homebrew SELF / PKG; loads by default, can be turned off in the Toolbox
+- **fSELF / fPKG** - bundled kstuff for homebrew SELF / PKG; embedded as a fallback and off by default, can be enabled in the Toolbox or `[kstuff] autoload=true`
 - **Plugin runtime** — discovers, validates, starts, stops, and removes descriptor-bearing plugin ELFs
-- **User payload manager** — start and stop user-provided `.elf` payloads, with optional auto-start
+- **User payload manager** - start and stop user-provided `.elf` payloads, with optional auto-start
+- **Payload Center** - browse an online catalog, install, update and remove payloads over HTTPS, with optional checksums, icons, categories, search, per-payload autostart and FTP drop support; see [docs/payload-center.md](docs/payload-center.md)
 - **Game overlay** — an in-game bar for FPS, CPU, GPU, RAM, fan, temperatures, and network info
 - **Cheat engine** — local JSON, SHN (also named `.xml.shn`), MC4 and ShnExt files that can be toggled at runtime, plus an online cheat catalog sync
 - **Remote Play pairing** — enable the native PS5 Remote Play service, generate a pairing PIN, register a client, save the details to USB
@@ -83,7 +84,7 @@ existing OnionHEN installation, and adds a large set of features of its own.
 - **Resilient runtime** — the critical daemon and utility daemon run apart; the main daemon can restart the utility
 - **Shared configuration** — the Toolbox and daemons use one versioned `config.ini`
 - **Toolbox in 14 languages**
-- **External plugins** — FTP server, ShadowMount+ and DPI v2 as optional OnionHEN plugins (see [Run](#run))
+- **External plugins** - FTP server, ShadowMount+ and DPI v2 as optional OnionHEN plugins (see [Run](#run)); ShadowMount's built-in autoload is off by default and can be enabled from the Plugins page
 
 ### Added by AniketosHEN
 

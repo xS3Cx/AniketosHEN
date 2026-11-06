@@ -603,3 +603,26 @@ export PS5_PAYLOAD_SDK=/path/to/ps5-payload-sdk
 ./scripts/ps5_cmake.sh -S source -B build -G Ninja
 cmake --build build
 ```
+
+---
+
+## 9. Payload Center
+
+Payload Center is a catalog client, not a new payload loader. Catalog parsing and
+policy live in `libonion_payload_catalog` (host-testable: no PS5, Mono or network).
+`util.elf` owns networking, disk and task state:
+
+- `payload_center_service`: one worker, one task id, cooperative cancel and status.
+- `payload_center_install`: temp-file download, streaming SHA-256, ELF check, atomic
+  rename, `0644` and metadata sidecar.
+- `payload_center_icons`: bounded icon download, base64 data URIs, PNG/JPEG
+  validation and letter-tile fallback.
+- `payload_center_store`: sources, cache, status and metadata files.
+
+ShellUI (`payload_center.cpp`, `payload_center_pages.cpp`) only reads cached
+catalogs and sends `source_id`/`item_id` over util IPC. No filesystem path
+crosses IPC. Install progress is a `user_custom` page: the shared UI3 panel
+plumbing lives in `progress_ui3` and is used by the cheat, plugin and payload
+progress pages. Routing uses the `pldc_*` resources because `payload_*.xml` is
+reserved for per-payload configuration.
+

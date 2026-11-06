@@ -242,7 +242,9 @@ InstallResult install_payload(const InstallRequest &request,
     unlink(temp_path.c_str());
     return fail("cancelled");
   }
-  if (fsync(fd) != 0 || close(fd) != 0) {
+  const bool synced = fsync(fd) == 0;
+  const bool closed = close(fd) == 0;
+  if (!synced || !closed) {
     unlink(temp_path.c_str());
     return fail("io");
   }

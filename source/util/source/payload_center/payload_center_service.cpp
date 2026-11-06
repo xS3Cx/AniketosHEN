@@ -337,7 +337,6 @@ void Service::worker_install(std::string source_id, std::string item_id,
     request.source_name = "URL";
     request.source_url = url;
     request.match_key = url + "#" + request.item_id;
-    request.item_id = request.match_key;
   } else {
     onion::payload_catalog::SourcesFile sources;
     (void)onion::payload_catalog::load_sources_file(kSourcesPath, &sources);

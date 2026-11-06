@@ -18,6 +18,14 @@ namespace {
 bool atomic_write(const char *path, const std::string &body) {
   if (!path || !path[0])
     return false;
+  const std::string full(path);
+  const std::size_t slash = full.find_last_of('/');
+  if (slash != std::string::npos) {
+    const std::string directory = full.substr(0, slash);
+    if (!directory.empty() && mkdir(directory.c_str(), 0755) != 0 &&
+        errno != EEXIST)
+      return false;
+  }
   std::string pattern(path);
   pattern += ".tmp.XXXXXX";
   std::vector<char> buffer(pattern.begin(), pattern.end());

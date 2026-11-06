@@ -9,6 +9,7 @@
 #include <onion/payload_catalog_policy.hpp>
 
 #include <algorithm>
+#include <optional>
 #include <string>
 #include <unistd.h>
 #include <vector>
@@ -28,6 +29,21 @@ std::string status_text(const Entry &entry) {
   if (entry.installed)
     return toolbox_i18n::tr("payload_center.status.installed");
   return toolbox_i18n::tr("payload_center.status.available");
+}
+
+std::string or_dash(const std::string &text) {
+  return text.empty() ? "-" : text;
+}
+
+std::optional<std::string> icon_for(const Entry &entry) {
+  if (entry.item.icon_key.empty())
+    return std::nullopt;
+  const std::string path =
+      std::string(ONION_DIST_USER_DATA_ROOT) + "/payload_center/icons/" +
+      onion::payload_catalog::icon_cache_name(entry.item.icon_key) + ".png";
+  if (access(path.c_str(), F_OK) != 0)
+    return std::nullopt;
+  return path;
 }
 
 std::string subtitle_for(const Entry &entry) {
@@ -63,6 +79,7 @@ std::string install_confirm(const Entry &entry) {
 }
 
 void generate_center_xml(std::string &xml) {
+  reload(false);
   ps5ui::Page page("id_pldc_center",
                    toolbox_i18n::tr("payload_center.title"));
   const std::string hint = ftp_hint();
@@ -106,6 +123,7 @@ void generate_autostart_xml(std::string &xml) {
 }
 
 void generate_browse_xml(std::string &xml) {
+  reload(false);
   ps5ui::Page page("id_pldc_browse",
                    toolbox_i18n::tr("payload_center.browse"));
   page.button("id_pldc_cat_all", toolbox_i18n::tr("payload_center.all"),
@@ -125,6 +143,7 @@ void generate_browse_xml(std::string &xml) {
 }
 
 void generate_list_xml(std::string &xml) {
+  reload(false);
   const auto visible = visible_entries();
   ps5ui::Page page("id_pldc_list",
                    toolbox_i18n::tr("payload_center.list"));
@@ -137,7 +156,8 @@ void generate_list_xml(std::string &xml) {
                 toolbox_i18n::tr("payload_center.clear_filter"), std::nullopt);
   for (std::size_t i = 0; i < visible.size(); ++i) {
     page.link("id_pldc_pick_" + std::to_string(i), visible[i]->item.name,
-              "pldc_detail.xml", subtitle_for(*visible[i]));
+              "pldc_detail.xml", subtitle_for(*visible[i]),
+              icon_for(*visible[i]));
   }
   if (visible.empty())
     page.label("id_pldc_list_empty",
@@ -147,6 +167,7 @@ void generate_list_xml(std::string &xml) {
 }
 
 void generate_detail_xml(std::string &xml) {
+  reload(false);
   const Entry *entry = find_entry(g_ui.active_pldc_item);
   if (!entry) {
     ps5ui::Page page("id_pldc_detail",
@@ -160,10 +181,10 @@ void generate_detail_xml(std::string &xml) {
   ps5ui::Page page("id_pldc_detail", entry->item.name);
   page.label("id_pldc_name", entry->item.name)
       .label("id_pldc_version", version_text(*entry))
-      .label("id_pldc_category", entry->item.category)
+      .label("id_pldc_category", or_dash(entry->item.category))
       .label("id_pldc_size", "-")
-      .label("id_pldc_updated", entry->item.last_update)
-      .label("id_pldc_source", entry->source_name);
+      .label("id_pldc_updated", or_dash(entry->item.last_update))
+      .label("id_pldc_source", or_dash(entry->source_name));
   if (!entry->item.description.empty())
     page.label("id_pldc_description", entry->item.description,
                ps5ui::Style::Center);
@@ -201,6 +222,7 @@ void generate_detail_xml(std::string &xml) {
 }
 
 void generate_settings_xml(std::string &xml) {
+  reload(false);
   ps5ui::Page page("id_pldc_settings",
                    toolbox_i18n::tr("payload_center.settings"));
   page.toggle("id_pldc_master", toolbox_i18n::tr("payload_center.master"),
@@ -217,12 +239,13 @@ void generate_settings_xml(std::string &xml) {
       .button("id_pldc_add_source",
               toolbox_i18n::tr("payload_center.add_source"), std::nullopt);
   for (const auto &source : sources()) {
-    page.label("id_pldc_source_" +
-                   onion::payload_catalog::source_hash8(source.url),
-               source.name + "\n" + source.url, ps5ui::Style::Center);
+    const std::string key =
+        onion::payload_catalog::source_hash8(source.url);
+    page.label("id_pldc_source_" + key, source.name, ps5ui::Style::Center)
+        .label("id_pldc_source_url_" + key, source.url,
+               ps5ui::Style::Center);
     if (!source.builtin) {
-      page.button("id_pldc_remove_source_" +
-                      onion::payload_catalog::source_hash8(source.url),
+      page.button("id_pldc_remove_source_" + key,
                   toolbox_i18n::tr("payload_center.remove_source"),
                   source.name);
     }

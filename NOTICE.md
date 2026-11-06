@@ -106,3 +106,18 @@ whose authors are credited under *About → Credits → Lineage*, in the README
 and above. OnionHEN's donation page, donor list, contributor list and tester
 list were removed from the Toolbox and the README because they describe
 OnionHEN, not this fork; they are in OnionHEN's own repository.
+
+## Payload Center catalog credits
+
+The default Payload Center catalog is hosted by **itsPLK** at
+<https://github.com/itsPLK/ps5-payloads-mirror>. The catalog format is
+compatible with the PS5 payload manager catalog (payloads_v2.json). The
+catalog and the payload binaries it lists remain the work of their respective
+authors and are not part of this repository. This project only reads the
+catalog and downloads the payloads the user selects.
+
+The Payload Center client code added by this fork is distributed under the same
+GNU GPL v3-or-later terms as the rest of AniketosHEN. The remote payloads are
+covered by their own licenses; check each payload's project page before
+redistributing it.
+

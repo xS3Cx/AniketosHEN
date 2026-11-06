@@ -120,7 +120,7 @@ uint32_t fnv1a32(std::string_view text) {
 }
 
 uint64_t fnv1a64(std::string_view text) {
-  uint64_t hash = 1469598103934665603ull;
+  uint64_t hash = 14695981039346656037ull;
   for (const char c : text) {
     hash ^= static_cast<uint8_t>(c);
     hash *= 1099511628211ull;

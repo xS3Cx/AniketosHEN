@@ -6,6 +6,7 @@
 #include <cerrno>
 #include <algorithm>
 #include <cstdlib>
+#include <iterator>
 #include <fcntl.h>
 #include <pthread.h>
 #include <string>

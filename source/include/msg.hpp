@@ -78,8 +78,6 @@ enum DaemonCommands : unsigned int {
   // Fetch a website's icon for its Home tile. Carries the tile id and the
   // page; util derives the file from the validated id.
   BREW_UTIL_WEB_TILE_ICON = 0x800001Au,
-  // Payload Center: catalog refresh, install, status, cancel and remove.
-  // Payload files are resolved by the util daemon from (source_id, item_id).
   BREW_UTIL_PAYLOAD_CATALOG_REFRESH = 0x800001Bu,
   BREW_UTIL_PAYLOAD_INSTALL = 0x800001Cu,
   BREW_UTIL_PAYLOAD_STATUS = 0x800001Du,
