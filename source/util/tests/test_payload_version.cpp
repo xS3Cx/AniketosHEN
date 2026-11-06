@@ -21,12 +21,16 @@ static int test_version_order(void) {
 }
 
 static int test_slug_and_hash(void) {
-  TEST_ASSERT_STREQ("ftpsrv", slug("FTPSrv").c_str());
-  TEST_ASSERT_STREQ("ps5-linux-loader", slug("PS5 Linux Loader").c_str());
-  TEST_ASSERT_STREQ("v1-2-3", slug("v1.2.3").c_str());
-  TEST_ASSERT_STREQ("payload", slug("***").c_str());
-  TEST_ASSERT_STREQ("0123456789abcdef",
-                    icon_cache_name("icon").c_str());
+  const std::string ftp = slug("FTPSrv");
+  const std::string loader = slug("PS5 Linux Loader");
+  const std::string version = slug("v1.2.3");
+  const std::string empty = slug("***");
+  const std::string icon = icon_cache_name("icon");
+  TEST_ASSERT_STREQ("ftpsrv", ftp.c_str());
+  TEST_ASSERT_STREQ("ps5-linux-loader", loader.c_str());
+  TEST_ASSERT_STREQ("v1-2-3", version.c_str());
+  TEST_ASSERT_STREQ("payload", empty.c_str());
+  TEST_ASSERT_STREQ("dbff4cc56c2092f0", icon.c_str());
   TEST_ASSERT_EQ_INT(8, static_cast<int>(source_hash8("https://x/y").size()));
   TEST_ASSERT_TRUE(fnv1a32("abc") == 0x1a47e90bu);
   return 0;

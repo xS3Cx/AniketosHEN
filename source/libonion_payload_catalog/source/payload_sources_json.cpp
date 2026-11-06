@@ -6,6 +6,7 @@
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
+#include <cctype>
 #include <fcntl.h>
 #include <string>
 #include <sys/stat.h>
@@ -81,7 +82,18 @@ SourcesFile default_sources() {
 bool parse_sources(std::string_view json, SourcesFile *out) {
   if (!out || json.empty() || json.size() > kMaxCatalogBytes)
     return false;
-  cJSON *root = cJSON_ParseWithLength(json.data(), json.size());
+  const std::string text(json);
+  const char *end = nullptr;
+  cJSON *root = cJSON_ParseWithOpts(text.c_str(), &end, 0);
+  if (root) {
+    while (end && *end &&
+           std::isspace(static_cast<unsigned char>(*end)))
+      ++end;
+    if (end && *end) {
+      cJSON_Delete(root);
+      root = nullptr;
+    }
+  }
   if (!root)
     return false;
   const cJSON *items = root;

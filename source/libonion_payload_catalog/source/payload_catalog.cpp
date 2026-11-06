@@ -4,6 +4,7 @@
 
 #include <cJSON.hpp>
 
+#include <cctype>
 #include <string>
 #include <utility>
 
@@ -106,7 +107,18 @@ ParseResult parse_catalog(std::string_view json) {
     result.error = "size";
     return result;
   }
-  cJSON *root = cJSON_ParseWithLength(json.data(), json.size());
+  const std::string text(json);
+  const char *end = nullptr;
+  cJSON *root = cJSON_ParseWithOpts(text.c_str(), &end, 0);
+  if (root) {
+    while (end && *end &&
+           std::isspace(static_cast<unsigned char>(*end)))
+      ++end;
+    if (end && *end) {
+      cJSON_Delete(root);
+      root = nullptr;
+    }
+  }
   if (!root) {
     result.error = "json";
     return result;
