@@ -421,10 +421,8 @@ bool start_refresh() {
 }
 
 void show_progress(uint32_t task_id) {
-  extern void payload_progress_show(uint32_t);
-  payload_progress_show(task_id);
-  extern bool payload_progress_open_page(void);
-  if (!payload_progress_open_page())
+  ::payload_progress_show(task_id);
+  if (!::payload_progress_open_page())
     notify("notify.payload_center.navigation_failed");
 }
 
