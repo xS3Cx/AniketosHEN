@@ -12,7 +12,6 @@
 #include "toolbox_navigation.hpp"
 
 #include <onion/distribution.h>
-#include <onion/net.h>
 #include <onion/payload_catalog_policy.hpp>
 #include <onion/payload_catalog.hpp>
 #include <onion/payload_identity.h>
@@ -270,7 +269,9 @@ void reload(bool force) {
 }
 
 void Tick() {
-  if (s_pending_navigate_installed && !toolbox_is_stack_under_transition()) {
+  if (s_pending_navigate_installed &&
+      g_ui.active_page != toolbox::Page::PayloadPostInstall &&
+      !toolbox_is_stack_under_transition()) {
     s_pending_navigate_installed = false;
     if (!toolbox_push_resource("payloads.xml"))
       notify("notify.payload_center.navigation_failed");
