@@ -9,46 +9,52 @@ Open it from **Toolbox → Payloads & Kernel → Payload Center**.
 
 ## Pages
 
-The hub has exactly four entries:
+Opening **Payload Center** goes straight to **Installed**. That page shows
+every installed payload with its version, Enabled/Disabled state,
+Running/Stopped state and autostart position, plus links to **Browse Catalog**
+and **Autostart**:
 
-- **Manage** — every installed payload, with its Enabled/Disabled state,
-  Running/Stopped state and autostart position. Selecting one opens its
-  per-payload page.
+- **Installed** — selecting a payload opens its per-payload page. The header
+  shows the FTP drop path and the USB drop path; **Refresh list** rescans both.
 - **Autostart** — the master switch plus an ordered list of the enabled
   payloads. The top row loads first.
-- **Browse** — the online catalog by category or search. Each entry shows its
-  icon, name, version and install/update status.
-- **Settings** — catalog sources, cache controls and the last refresh date.
+- **Browse Catalog** — the online catalog with icons, category/version/status
+  subtitles and search. **Catalog settings** at the bottom controls sources,
+  cache and the last refresh date.
 
 There is no **Install from URL** entry. Payloads are installed from a catalog
 entry only.
 
-### Manage and per-payload pages
+### Installed and per-payload pages
 
 Selecting an installed payload opens `payload_<id>.xml`. That page has:
 
 - **Enabled** — adds or removes the adjacent `.auto_start` marker.
 - **Current session** — starts or stops the payload now.
-- **Update**, **Remove** and the **delay** field.
+- **Update** only when the catalog has a newer version.
+- **Remove** only for payloads under `/data/AniketosHEN/payloads`.
 
 Enabling a payload appends it to the end of the boot order. Disabling removes
 the marker only: a payload that is already running keeps running until it is
 stopped from **Current session**. The old priority text field, Move up/Move
 down buttons and separate "Auto-start next time" toggle are gone.
 
-The Manage status line is a combination of Enabled/Disabled, Running/Stopped
-and, when enabled, the 1-based autostart position.
+The Installed status line is a combination of Enabled/Disabled,
+Running/Stopped, the 1-based autostart position and, when available, an update
+marker.
 
 ### Autostart
 
 Autostart only lists enabled payloads, ordered by the payloads' persisted
-`priority` (`1000 - position * 10`, so the first row has the highest priority).
+`priority` (`999 - index * 10`, so the first row has the highest priority).
 The master switch is `[payload_center] autostart_enabled` in `config.ini`; when
 it is off the bootstrapper returns before scanning.
 
-Pressing an Autostart row opens a small **Position** page. Selecting a position
-moves that payload there, renumbers the others, rewrites every enabled payload's
-`priority`, saves, and returns to Autostart. The Autostart list is published
+Pressing an Autostart row opens a small **Position** page with a **1..N**
+position list and a **Delay (s)** field. Selecting a position moves that
+payload there, renumbers the others, rewrites every enabled payload's
+`priority`, saves, and returns to Autostart. The Delay field is validated
+(0-300 seconds) and saved on the same page. The Autostart list is published
 through the Settings reconciler, so it reorders in place without reopening the
 page.
 
@@ -241,7 +247,7 @@ errors are reported as `clock`; other verification failures as `tls`.
 
 The Toolbox **Payloads & Kernel** group contains only **Payload Center** and
 **Plugins**. The old **User Payloads** entry is gone; installed payloads are
-reached through **Payload Center → Manage**.
+reached directly from **Payload Center**.
 
 `elfldr` payloads never autostart: the bootstrapper already skips filenames
 containing `elfldr`. `kstuff`, `etaHEN`, `pldmgr`, `lapy-jb`, `backpork`,
@@ -266,8 +272,8 @@ payloads are not blocked, but the detail page warns and asks for confirmation.
 ## FTP drop
 
 The optional FTP plugin exposes `/data/AniketosHEN/payloads`, so a payload can
-be dropped manually without the online catalog. The Payload Center no longer
-displays the FTP address on its hub.
+be dropped manually without the online catalog. The Installed page shows the
+FTP drop path and the USB drop path, but no IP address.
 
 ## Settings
 

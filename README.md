@@ -209,7 +209,7 @@ guide is in [docs/kbm.md](docs/kbm.md).
 
 Place standalone payloads in `/data/AniketosHEN/payloads/` (or
 `AniketosHEN/payloads/` on a USB drive). Only plain `.elf` files are
-supported. **Toolbox → Payloads & Kernel → Payload Center → Manage** lists
+supported. **Toolbox → Payloads & Kernel → Payload Center** lists
 every installed payload. Enabling a payload creates the matching `.auto_start`
 file and appends it to the end of the boot order; disabling removes the marker
 without stopping a running payload. The **Autostart** page shows only enabled

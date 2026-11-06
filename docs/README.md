@@ -12,6 +12,6 @@ configuration, usage, and credits.
 | [shellui-injection.md](shellui-injection.md) | ShellUI injection path, runtime contract, and failure behavior |
 | [shell-menu.md](shell-menu.md) | Shell Menu (L1+R3): features and wiring |
 | [home-tabs.md](home-tabs.md) | Home's four tabs: data file, icons, Copy/Move and Hide App |
-| [payload-center.md](payload-center.md) | Payload Center: Manage, Autostart, Browse, catalog sources, install pipeline, security |
+| [payload-center.md](payload-center.md) | Payload Center: Installed, Autostart, Browse, catalog sources, install pipeline, security |
 | [kbm.md](kbm.md) | Keyboard and mouse for games |
 | [aniketoshen-migration.md](aniketoshen-migration.md) | Distribution identity, path audit, and the OnionHEN data migration |
