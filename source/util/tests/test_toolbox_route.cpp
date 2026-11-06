@@ -91,11 +91,7 @@ static std::string cfg_res(const char *rel) {
 
 static int test_plugin_config_page(void) {
   RouteResult r = resolve_resource(make_in(cfg_res("kstuff.xml")));
-  TEST_ASSERT_TRUE(r.page == Page::PluginConfig);
-  TEST_ASSERT_TRUE(r.flags.is_plugin_config);
-  TEST_ASSERT_TRUE(onpress_domain_for_page(r.page) ==
-                   OnPressDomain::PluginConfig);
-  TEST_ASSERT_TRUE(restores_parent_on_pop(r.page));
+  TEST_ASSERT_TRUE(r.page == Page::None);
 
   RouteResult ext = resolve_resource(make_in(cfg_res("plugin_FTPS00001.xml")));
   TEST_ASSERT_TRUE(ext.page == Page::PluginConfig);
@@ -212,24 +208,15 @@ static int test_payload_config_page(void) {
 static int test_plugins_registry(void) {
   using namespace onion::plugins;
 
-  TEST_ASSERT_EQ_INT(2, static_cast<int>(kRegistrySize));
-  TEST_ASSERT_TRUE(find_by_key("missing") == nullptr);
-  TEST_ASSERT_TRUE(find_by_toggle_id("id_plugin_kstuff") != nullptr);
+  TEST_ASSERT_EQ_INT(0, static_cast<int>(kRegistrySize));
+  TEST_ASSERT_TRUE(find_by_key("kstuff") == nullptr);
+  TEST_ASSERT_TRUE(find_by_key("shadowmount") == nullptr);
+  TEST_ASSERT_TRUE(find_by_toggle_id("id_plugin_kstuff") == nullptr);
   TEST_ASSERT_TRUE(find_by_toggle_id("id_nope") == nullptr);
-  TEST_ASSERT_STREQ("kstuff", find_by_key("kstuff")->key);
-  TEST_ASSERT_STREQ("id_plugin_kstuff", find_by_key("kstuff")->toggle_id);
-  TEST_ASSERT_STREQ("kstuff.xml", find_by_key("kstuff")->config_xml);
-  TEST_ASSERT_TRUE(default_key() == std::string_view("kstuff"));
-  TEST_ASSERT_TRUE(find_by_key("shadowmount") != nullptr);
-  TEST_ASSERT_STREQ("shadowmount.xml",
-                    find_by_key("shadowmount")->config_xml);
-  TEST_ASSERT_TRUE(find_by_config_xml_resource(cfg_res("shadowmount.xml")) !=
-                   nullptr);
-
-  const Descriptor *by_kstuff =
-      find_by_config_xml_resource(cfg_res("kstuff.xml"));
-  TEST_ASSERT_TRUE(by_kstuff != nullptr);
-  TEST_ASSERT_STREQ("kstuff", by_kstuff->key);
+  TEST_ASSERT_TRUE(default_key().empty());
+  TEST_ASSERT_TRUE(find_by_config_xml_resource(cfg_res("kstuff.xml")) == nullptr);
+  TEST_ASSERT_TRUE(
+      find_by_config_xml_resource(cfg_res("shadowmount.xml")) == nullptr);
   TEST_ASSERT_TRUE(find_by_config_xml_resource(cfg_res("nope.xml")) == nullptr);
   return 0;
 }

@@ -9,6 +9,7 @@
 
 #include "toolbox_route.hpp"
 
+#include <array>
 #include <cstddef>
 #include <string>
 #include <string_view>
@@ -27,16 +28,11 @@ struct Descriptor {
   const char *sub_key;    /* i18n key for the entry description */
 };
 
-/* Order is the display order on the Plugins page. */
-inline constexpr Descriptor kRegistry[] = {
-    {"kstuff", "id_plugin_kstuff", "kstuff.xml", "plugin.kstuff.title",
-     "plugin.kstuff.sub"},
-    {"shadowmount", "id_plugin_shadowmount", "shadowmount.xml",
-     "plugin.shadowmount.title", "plugin.shadowmount.sub"},
-};
+/* kstuff and ShadowMountPlus are managed from Payload Center -> Included
+ * Payloads, so the Plugins page lists external plugins only. */
+inline constexpr std::array<Descriptor, 0> kRegistry{};
 
-inline constexpr std::size_t kRegistrySize =
-    sizeof(kRegistry) / sizeof(kRegistry[0]);
+inline constexpr std::size_t kRegistrySize = kRegistry.size();
 
 inline const Descriptor *find_by_key(std::string_view key) {
   for (const auto &d : kRegistry)
@@ -61,6 +57,6 @@ inline const Descriptor *find_by_config_xml_resource(std::string_view resource) 
 }
 
 /** Fallback key used before any plugin has been focused. */
-inline constexpr std::string_view default_key() { return kRegistry[0].key; }
+inline constexpr std::string_view default_key() { return {}; }
 
 } // namespace onion::plugins

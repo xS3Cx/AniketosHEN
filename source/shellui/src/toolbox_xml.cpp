@@ -666,7 +666,8 @@ void generate_sprx_xml(std::string &xml_buffer) {
 static bool kstuff_model(ps5ui::Node &model) {
   using namespace onion::plugins;
   const Descriptor *d = find_by_key("kstuff");
-  ps5ui::Page page("id_plugin_config", toolbox_i18n::tr(d->title_key));
+  ps5ui::Page page("id_plugin_config",
+                   toolbox_i18n::tr(d ? d->title_key : "plugins.title"));
   page.toggle("id_plugin_kstuff_autoload", toolbox_i18n::tr("kstuff.autoload"),
               g_settings.kstuff_autoload, toolbox_i18n::tr("kstuff.autoload.sub"))
       .button("id_plugin_delete_kstuff", toolbox_i18n::tr("kstuff.delete"),
@@ -699,7 +700,13 @@ void generate_plugin_config_xml(std::string &xml_buffer) {
     xml_buffer = onion::shellui::settings::publish(model, shadowmount_model);
     return;
   }
-  generate_kstuff_config_xml(xml_buffer);
+  if (g_ui.active_plugin == "kstuff") {
+    generate_kstuff_config_xml(xml_buffer);
+    return;
+  }
+  ps5ui::Page page("id_plugin_config", toolbox_i18n::tr("plugins.title"));
+  page.label("id_plugin_missing", toolbox_i18n::tr("payload.missing"));
+  xml_buffer = page.build();
 }
 
 void generate_cheats_xml(std::string& new_xml, std::string& not_open_tid,
