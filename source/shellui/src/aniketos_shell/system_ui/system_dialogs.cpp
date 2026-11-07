@@ -257,6 +257,11 @@ bool ShowPrompt(const PromptOptions &options, std::string *failure,
   return true;
 }
 
+bool PromptPending(uint64_t token) {
+  return token != 0 && token == s_prompt_token &&
+         Reflect::Target(s_prompt_handle) != nullptr;
+}
+
 bool PollPrompt(uint64_t token, bool *confirmed, std::string *text) {
   if (token == 0 || token != s_prompt_token)
     return false;

@@ -49,6 +49,8 @@ bool ShowPrompt(const PromptOptions &options, std::string *failure = nullptr,
 /* The prompt opened last has closed: true once, with whether it was
  * confirmed and what its field held. False while it is open. */
 bool PollPrompt(uint64_t token, bool *confirmed, std::string *text);
+/* The prompt with `token` is the one watched and has not been polled closed. */
+bool PromptPending(uint64_t token);
 
 /* The scene that has the focus now: where a menu opened by the user should
  * appear, whatever is on screen. Null when it cannot be told. */

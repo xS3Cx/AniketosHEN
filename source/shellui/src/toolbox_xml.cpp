@@ -42,6 +42,7 @@
 #include "toolbox_helpers.hpp"
 #include "overlay_metrics.hpp"
 #include "toolbox_route.hpp"
+#include "aniketos_shell/system_ui/pin_lock.hpp"
 
 #include <onion/payload_identity.h>
 
@@ -1083,6 +1084,7 @@ void append_toolbox_preferences_group(ps5ui::Group& g) {
             },
             toolbox_i18n::tr("cheats.repo.mirror.sub"),
             toolbox_val("id_cheats_mirror"));
+  PinLock::AppendRows(g);
 }
 
 void append_toolbox_debug_group(ps5ui::Group& g) {

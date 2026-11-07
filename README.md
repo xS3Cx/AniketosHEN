@@ -102,6 +102,7 @@ existing OnionHEN installation, and adds a large set of features of its own.
 - **Controller tools** — light bar colours and animations, player lights, vibration test, console sound mirrored to the DualSense speaker
 - **Console tools** — power LED colour, buzzer, live hardware information, fan threshold from the Shell Menu
 - **Error reports** — failed starts, crashes and failed imports are kept, scrubbed of IDs, and can be sent to the publisher's relay
+- **PIN lock** (off by default) — a PIN before the Toolbox, the Shell Menu and the HEN button menu open, for consoles children use; see [PIN lock](#pin-lock)
 - **Debug toggles** — the system's DevKit/TestKit info overlay and the "expired" banner
 - **Translations** — the Shell Menu, keyboard & mouse, Payload Manager, HEN Update Manager and the other new pages in all 14 language catalogs
 
@@ -189,6 +190,25 @@ The Toolbox opens with two direct entries, **HEN Update Manager** and
 (Package Installer, Add-on Content Manager, Plugins), Game Tools, Account &
 Remote Play, Monitoring & Display, System & Hardware, Preferences, Advanced
 Debug and About.
+
+### PIN lock
+
+**Toolbox → Preferences → PIN lock** sets, changes or removes a PIN of 4 to
+8 digits (changing or removing it asks for the current one). Once a PIN is
+set, opening the Toolbox (from PS5 Settings, a shortcut or the HEN button),
+the Shell Menu (**L1 + R3**) or the HEN button menu first asks for it with the
+system's own prompt. A wrong PIN keeps them locked; the Toolbox then shows only
+an **Enter PIN** row, and Back still leaves it. The right PIN keeps them open
+until rest mode, another user takes over, or 10 minutes pass without opening a
+Toolbox page or one of the menus. Progress pages of work already started are
+never locked, and the rest of PS5 Settings is never affected. The in-game
+Visual Cheats Menu is not locked.
+
+Only a salted SHA-256 hash of the PIN is kept, in `/data/AniketosHEN/pin_lock`.
+Forgot the PIN? Delete that file over FTP, or put an empty file named
+`no_pin_lock` on the first USB drive (`/mnt/usb0`): while it is plugged in the
+lock is off, and **Set or change PIN** / **Remove PIN** work without the old
+PIN.
 
 ### Remote Play
 
@@ -468,6 +488,7 @@ and are best changed from the menu itself.
 | `/data/AniketosHEN/fonts/` | Custom system fonts |
 | `/data/AniketosHEN/home_tabs.json` | Home's custom tabs, their names, icons and titles (v2) |
 | `/data/AniketosHEN/reports/` | Scrubbed error reports |
+| `/data/AniketosHEN/pin_lock` | Salted hash of the PIN lock's PIN (delete it to turn the lock off) |
 | `/data/AniketosHEN/kstuff.elf` | Optional runtime override with priority over the embedded `kstuff` |
 | `/data/AniketosHEN/AniketosHEN.log` | Main runtime log |
 | `/data/AniketosHEN/AniketosHEN_crash.log`, `AniketosHEN_util_crash.log` | Preserved signal and backtrace logs |

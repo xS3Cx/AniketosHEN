@@ -53,6 +53,7 @@ extern "C" int test_particle_sim_suite(void);
 extern "C" int test_logo_tint_suite(void);
 extern "C" int test_web_icon_suite(void);
 extern "C" int test_rco_names_suite(void);
+extern "C" int test_pin_lock_suite(void);
 extern "C" int test_fps_formula_suite(void);
 extern "C" int test_kbm_engine_suite(void);
 extern "C" int test_kbm_model_suite(void);
@@ -123,6 +124,7 @@ int main() {
   failures += test_logo_tint_suite();
   failures += test_web_icon_suite();
   failures += test_rco_names_suite();
+  failures += test_pin_lock_suite();
   failures += test_fps_formula_suite();
   failures += test_kbm_engine_suite();
   failures += test_kbm_model_suite();

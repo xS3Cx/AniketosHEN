@@ -6,6 +6,7 @@
 #include "hooked_funcs.hpp"
 #include "shellui_state.hpp"
 #include "dynamic_ui_runtime.hpp"
+#include "aniketos_shell/system_ui/pin_lock.hpp"
 
 namespace {
 
@@ -132,6 +133,9 @@ int OnPress_Hook(MonoObject *Instance, MonoObject *element, MonoObject *e) {
   ctx.id = GetPropertyValue(element, "Id");
   ctx.value = GetPropertyValue(element, "Value");
   ctx.title = GetPropertyValue(element, "Title");
+
+  if (PinLock::HandlePress(ctx.id))
+    return 0;
 
   if (domain == toolbox::OnPressDomain::DynamicPlugin) {
     const auto dynamic_result = onion::shellui::dynamic_ui::dispatch_control(

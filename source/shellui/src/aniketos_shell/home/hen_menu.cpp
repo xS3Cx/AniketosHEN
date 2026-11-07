@@ -5,6 +5,7 @@
 #include "aniketos_shell/games/cheats_menu.hpp"
 #include "aniketos_shell/home/internet_switch.hpp"
 #include "aniketos_shell/home/package_files.hpp"
+#include "aniketos_shell/system_ui/pin_lock.hpp"
 #include "aniketos_shell/system_ui/popup_menu.hpp"
 #include "aniketos_shell/system_ui/system_dialogs.hpp"
 #include "aniketos_ui/mono_reflect.hpp"
@@ -297,7 +298,8 @@ void Tick() {
   }
   MonoObject *scene = Reflect::Target(s_scene_handle);
   if (request != kNoRequest)
-    open_menu(scene);
+    PinLock::Require(
+        +[] { open_menu(Reflect::Target(s_scene_handle)); });
 
   follow_internet_switch();
 

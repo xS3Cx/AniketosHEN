@@ -23,6 +23,7 @@
 #include "aniketos_shell/system_ui/account_avatar.hpp"
 #include "aniketos_shell/system_ui/devkit_overlay.hpp"
 #include "aniketos_shell/system_ui/migration_notice.hpp"
+#include "aniketos_shell/system_ui/pin_lock.hpp"
 #include "aniketos_shell/system_ui/popup_menu.hpp"
 #include "aniketos_shell/toolbox/kbm_toolbox.hpp"
 #include "payload_center.hpp"
@@ -91,6 +92,7 @@ void BeforeNativeFrame() {
   }
   {
     Profile::Scope scope(Profile::kHomeFeatures);
+    PinLock::Tick();
     HenMenu::Tick();
     ControlCenterEntry::Tick();
     MigrationNotice::Tick();

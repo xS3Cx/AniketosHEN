@@ -18,6 +18,7 @@
 #include "external_plugin_ui.hpp"
 #include "external_sprx_ui.hpp"
 #include "aniketos_shell/toolbox/kbm_toolbox.hpp"
+#include "aniketos_shell/system_ui/pin_lock.hpp"
 #include <onion/platform.h>
 #include <string>
 
@@ -84,7 +85,8 @@ uint64_t GetManifestResourceStream_Hook(uint64_t inst, MonoString *FileName) {
         g_ui.active_page, route.page, resourceName));
   }
 
-  if (route.page == toolbox::Page::RedirectOgDebug) {
+  const bool pin_locked = PinLock::Blocks(route.page, dynamic_page);
+  if (route.page == toolbox::Page::RedirectOgDebug && !pin_locked) {
     MonoString *debug_resource =
         (domain && mono_string_new)
             ? mono_string_new(domain, debug_settings_xml.c_str())
@@ -123,7 +125,9 @@ uint64_t GetManifestResourceStream_Hook(uint64_t inst, MonoString *FileName) {
     }
   }
 
-  if (!dynamic_page) {
+  if (pin_locked) {
+    new_xml_string = PinLock::LockedPageXml(resourceName);
+  } else if (!dynamic_page) {
     switch (route.page) {
   case toolbox::Page::DebugSettings:
     LoadSettings();

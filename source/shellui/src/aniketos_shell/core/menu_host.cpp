@@ -7,6 +7,7 @@
 #include "aniketos_shell/core/frame_profile.hpp"
 #include "aniketos_shell/input/pad_reader.hpp"
 #include "aniketos_shell/core/host_scene.hpp"
+#include "aniketos_shell/system_ui/pin_lock.hpp"
 #include "aniketos_shell/hardware/telemetry.hpp"
 #include "aniketos_ui/monotonic_clock.hpp"
 
@@ -109,13 +110,21 @@ void resolve_host() {
   }
 }
 
-void request_toggle() {
+void toggle_now() {
   if (!s_host.root)
     resolve_host();
   ShellMenu::Toggle();
   LOG_INFO("[ANIVSH:INPUT] toggle visible=%d attached=%d backend=%s",
            ShellMenu::IsVisible() ? 1 : 0, ShellMenu::IsAttached() ? 1 : 0,
            s_host.path ? s_host.path : "none");
+}
+
+/* Closing never needs the PIN; opening does when the lock is on. */
+void request_toggle() {
+  if (ShellMenu::IsVisible())
+    toggle_now();
+  else
+    PinLock::Require(toggle_now);
 }
 
 } // namespace
