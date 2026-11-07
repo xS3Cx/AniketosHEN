@@ -30,5 +30,5 @@ endif()
 # Version shown to users (welcome notification, About page, Settings banner,
 # error reports). Bump it for every build handed out. Empty falls back to the
 # git tag, or dirty-<sha> for an untagged tree.
-set(ANIKETOSHEN_VERSION "0.04q" CACHE STRING
+set(ANIKETOSHEN_VERSION "0.04r" CACHE STRING
 	"Release version shown to users (empty: derive from git)")
