@@ -1,5 +1,7 @@
 #include "payload_center.hpp"
 
+#include "aniketos_shell/core/host_scene.hpp"
+#include "aniketos_shell/system_ui/popup_menu.hpp"
 #include "aniketos_shell/system_ui/system_dialogs.hpp"
 #include "hooked_funcs.hpp"
 #include "ipc.hpp"
@@ -67,6 +69,18 @@ enum class PromptKind { None, AddSource, Search };
 PromptKind s_prompt_kind = PromptKind::None;
 
 MonoObject *s_installed_page = nullptr;
+MonoObject *s_refresh_page = nullptr; /* UI thread only */
+std::string s_refresh_focus;
+/* The Autostart page, and whether it is the page in front: set when it is
+   created or comes back, cleared when another page comes in front or it is
+   torn down. */
+MonoObject *s_autostart_page = nullptr;
+bool s_autostart_front = false;
+constexpr const char *kAutostartPageId = "id_pldc_autostart";
+/* OPTIONS was pressed: the payload whose menu to open, or empty for the
+   focused row. */
+bool s_options_requested = false;
+std::string s_options_id;
 std::mutex s_pending_mu;
 bool s_pending_reload = false;
 std::string s_pending_post_identity;
@@ -283,6 +297,25 @@ void Tick() {
   }
   if (force_reload)
     reload(true);
+
+  if (s_refresh_page) {
+    MonoObject *page = s_refresh_page;
+    s_refresh_page = nullptr;
+    onion::shellui::settings::refresh(page, s_refresh_focus);
+  }
+  if (s_options_requested && !toolbox_is_stack_under_transition()) {
+    s_options_requested = false;
+    constexpr std::string_view kRow = "id_pldc_move_";
+    std::string id = std::move(s_options_id);
+    if (id.empty() && s_autostart_page) {
+      const std::string focus = onion::shellui::settings::focused(s_autostart_page);
+      if (focus.rfind(kRow, 0) == 0)
+        id = focus.substr(kRow.size());
+    }
+    if (!id.empty() && !SystemDialogs::PopupMenuOpen())
+      (void)open_autostart_options(id);
+  }
+  tick_autostart_options();
 
   if (s_pending_navigate_installed &&
       g_ui.active_page != toolbox::Page::PayloadPostInstall &&
@@ -523,6 +556,56 @@ void bind_installed_page(MonoObject *page) { s_installed_page = page; }
 void release_installed_page(MonoObject *page) {
   if (s_installed_page == page)
     s_installed_page = nullptr;
+}
+
+void request_page_refresh(MonoObject *page, std::string focus) {
+  s_refresh_page = page;
+  s_refresh_focus = std::move(focus);
+}
+
+void bind_autostart_page(MonoObject *page) {
+  if (!page || page == s_autostart_page ||
+      onion::shellui::settings::page_id(page) != kAutostartPageId)
+    return;
+  s_autostart_page = page;
+  s_autostart_front = true;
+}
+
+void note_page_activated(MonoObject *page) {
+  const bool autostart =
+      page && onion::shellui::settings::page_id(page) == kAutostartPageId;
+  if (autostart)
+    s_autostart_page = page;
+  s_autostart_front = autostart;
+  if (!autostart)
+    g_ui.pldc_held.clear();
+}
+
+void release_autostart_page(MonoObject *page) {
+  if (!page || s_autostart_page != page)
+    return;
+  s_autostart_page = nullptr;
+  s_autostart_front = false;
+  g_ui.pldc_held.clear();
+}
+
+bool autostart_in_front() {
+  if (!s_autostart_page || !s_autostart_front)
+    return false;
+  /* Settings left for Home or a game (PS button) without a page change. */
+  const AniketosShell::FocusLayer layer = AniketosShell::CurrentFocusLayer();
+  return layer != AniketosShell::FocusLayer::TopMenu &&
+         layer != AniketosShell::FocusLayer::Game;
+}
+
+void request_autostart_refresh(std::string focus) {
+  if (s_autostart_page)
+    request_page_refresh(s_autostart_page, std::move(focus));
+}
+
+void request_autostart_options(std::string id) {
+  s_options_requested = true;
+  s_options_id = std::move(id);
 }
 
 bool refresh_installed_page() {

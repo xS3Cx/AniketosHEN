@@ -40,6 +40,11 @@ bool ShowPopupMenu(const std::vector<MenuEntry> &entries,
                    const std::string &header, std::string *failure = nullptr,
                    MonoObject *scene = nullptr, bool stay_open = false,
                    int focus = 0);
+/* Counts the menus shown: tells an owner whether its menu is still the one
+ * on screen (the menu is one at a time). */
+uint32_t PopupMenuSerial();
+/* A menu of ours (this one or the HEN menu) is on screen. */
+bool PopupMenuOpen();
 /* True once, when a stay-open menu has been backed out of by the user. */
 bool PopupMenuDismissed();
 void ClosePopupMenu();

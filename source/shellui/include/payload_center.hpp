@@ -8,6 +8,7 @@
 #include <vector>
 
 struct MonoObject;
+struct GamePadData;
 
 namespace onion::shellui::payload_center {
 
@@ -52,6 +53,27 @@ std::string last_refresh_text();
 void bind_installed_page(MonoObject *page);
 void release_installed_page(MonoObject *page);
 bool refresh_installed_page();
+/* Redraw a page in place on the next frame, then focus `focus`. */
+void request_page_refresh(MonoObject *page, std::string focus);
+
+/* Autostart page: binding, and the controller while a payload is moved. */
+void bind_autostart_page(MonoObject *page);
+void release_autostart_page(MonoObject *page);
+/* Any settings page came in front (push or pop). */
+void note_page_activated(MonoObject *page);
+/* The Autostart page is the one on screen. */
+bool autostart_in_front();
+void request_autostart_refresh(std::string focus);
+/* Opens the OPTIONS menu (delay, remove) of payload `id`, or of the focused
+   row when empty, on the next frame. */
+void request_autostart_options(std::string id);
+bool open_autostart_options(const std::string &id);
+void tick_autostart_options();
+/* GamePad.GetData filter: X picks a payload up and puts it down, up/down move
+   it, OPTIONS opens its menu. Returns true when it changed the pad state. */
+bool filter_autostart_pad(GamePadData &data);
+/* False right after X put a payload down (that press is not a new pick). */
+bool autostart_pick_allowed();
 
 /* Post-install page state. */
 void request_post_install(std::string identity, std::string name);
@@ -66,7 +88,6 @@ void generate_installed_xml(std::string &xml);
 void generate_included_xml(std::string &xml);
 void generate_autostart_xml(std::string &xml);
 void generate_add_payload_xml(std::string &xml);
-void generate_order_xml(std::string &xml);
 void generate_browse_xml(std::string &xml);
 void generate_detail_xml(std::string &xml);
 void generate_settings_xml(std::string &xml);

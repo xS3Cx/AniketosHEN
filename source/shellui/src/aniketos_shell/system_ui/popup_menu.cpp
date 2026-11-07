@@ -21,6 +21,7 @@ std::string s_submenu_selected;
    and has been seen open since it was shown. */
 bool s_menu_stays = false;
 bool s_menu_was_open = false;
+uint32_t s_menu_serial = 0; /* ShowPopupMenu calls so far */
 
 using NotifyItemSelected = void (*)(MonoObject *, MonoObject *, int, int);
 NotifyItemSelected s_notify_item_selected_original = nullptr;
@@ -195,10 +196,15 @@ bool ShowPopupMenu(const std::vector<MenuEntry> &entries,
   s_menu_selected = -1;
   s_menu_stays = stay_open;
   s_menu_was_open = false;
+  ++s_menu_serial;
   LOG_INFO("[SYSDIALOG] popup menu opened entries=%zu stay=%d", entries.size(),
            stay_open ? 1 : 0);
   return true;
 }
+
+uint32_t PopupMenuSerial() { return s_menu_serial; }
+
+bool PopupMenuOpen() { return menu_is_open(Reflect::Target(s_menu_handle)); }
 
 bool PopupMenuDismissed() {
   if (!s_menu_handle || !s_menu_stays)

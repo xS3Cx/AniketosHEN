@@ -35,7 +35,6 @@ enum class Page : unsigned char {
   Kbm,                /**< Keyboard and Mouse pages (kbm.xml, kbm-*.xml) */
   PayloadAutostart,
   PayloadAdd,
-  PayloadOrder,
   PayloadBrowse,
   PayloadDetail,
   PayloadSettings,
@@ -82,7 +81,6 @@ struct RouteFlags {
   bool is_plugin_progress = false;
   bool is_payload_autostart = false;
   bool is_payload_add = false;
-  bool is_payload_order = false;
   bool is_payload_browse = false;
   bool is_payload_detail = false;
   bool is_payload_settings = false;
@@ -113,7 +111,6 @@ constexpr bool restores_parent_on_pop(Page page) {
          page == Page::DynamicPlugin ||
          page == Page::PluginProgress ||
          page == Page::PayloadDetail || page == Page::PayloadAdd ||
-         page == Page::PayloadOrder ||
          page == Page::PayloadPostInstall ||
          page == Page::PayloadProgress || page == Page::HenUpdateOptions ||
          page == Page::HenUpdateReleases || page == Page::HenUpdateProgress;
@@ -124,7 +121,6 @@ enum class PayloadCenterPage : unsigned char {
   Center,
   Autostart,
   AddPayload,
-  Order,
   Browse,
   Detail,
   Settings,
@@ -209,8 +205,6 @@ inline PayloadCenterPage parse_payload_center_resource(std::string_view resource
     return PayloadCenterPage::Autostart;
   if (relative == "pldc_add_payload.xml")
     return PayloadCenterPage::AddPayload;
-  if (relative == "pldc_order.xml")
-    return PayloadCenterPage::Order;
   if (relative == "pldc_browse.xml")
     return PayloadCenterPage::Browse;
   if (relative == "pldc_detail.xml")

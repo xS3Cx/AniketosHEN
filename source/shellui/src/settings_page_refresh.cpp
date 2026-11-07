@@ -240,7 +240,7 @@ void bind(MonoObject *page) {
   }
 }
 
-void refresh(MonoObject *page) {
+void refresh(MonoObject *page, const std::string &wanted_focus) {
   std::shared_ptr<Bound> bound;
   {
     std::lock_guard lock(bindings_mutex);
@@ -263,7 +263,8 @@ void refresh(MonoObject *page) {
     return;
   }
   Pinned focused(get(page, "SettingList", "GetFocusedItem"));
-  const std::string focus = id(focused.get(), "SettingElement");
+  const std::string focus = wanted_focus.empty()
+      ? id(focused.get(), "SettingElement") : wanted_focus;
   const bool ok = reconcile(view, bound->content.model, next);
   if (!focus.empty() && std::any_of(bound->content.model.children.begin(),
       bound->content.model.children.end(), [&](const auto &node) {
@@ -275,6 +276,13 @@ void refresh(MonoObject *page) {
   }
   LOG_DEBUG("settings_refresh: %s %s", bound->content.model.attrs.id.c_str(),
             ok ? "updated" : "incomplete; retained applied snapshot");
+}
+
+std::string page_id(MonoObject *page) { return id(page, "SettingList"); }
+
+std::string focused(MonoObject *page) {
+  Pinned item(get(page, "SettingList", "GetFocusedItem"));
+  return id(item.get(), "SettingElement");
 }
 
 void release(MonoObject *page) {

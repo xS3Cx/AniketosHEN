@@ -1,4 +1,7 @@
 #include "onpress.hpp"
+#include "aniketos_ui/monotonic_clock.hpp"
+#include "aniketos_shell/system_ui/popup_menu.hpp"
+#include "hooked_funcs.hpp"
 #include "payload_center.hpp"
 #include "shellui_payload_state.hpp"
 #include "shellui_payloads.hpp"
@@ -37,6 +40,19 @@ PayloadEntry *entry_by_identity(const std::string &identity) {
     if (entry.id == identity)
       return &entry;
   return nullptr;
+}
+
+/* Writes priorities so `ordered` is the load order, first loads first. */
+void save_order(const std::vector<PayloadEntry *> &ordered) {
+  for (std::size_t i = 0; i < ordered.size(); ++i) {
+    OnionPayloadConfig config{};
+    onion_payload_config_load(ordered[i]->shellui_path.c_str(), &config);
+    config.priority = std::max(
+        0, ONION_PAYLOAD_PRIORITY_MAX - static_cast<int>(i) * 10);
+    if (!onion_payload_config_save(ordered[i]->shellui_path.c_str(), &config))
+      notify("notify.payload.config_save_failed", ordered[i]->name.c_str());
+    ordered[i]->config = config;
+  }
 }
 
 OnPressResult master_toggle(OnPressContext &ctx) {
@@ -155,83 +171,18 @@ OnPressResult add_pick(OnPressContext &ctx) {
   return OnPressResult::Consumed;
 }
 
-OnPressResult pick_order(OnPressContext &ctx) {
+/* X on a row picks the payload up; from then on filter_autostart_pad has the
+   controller until X puts it down. */
+OnPressResult reorder_pick(OnPressContext &ctx) {
   ctx.dirty = false;
-  constexpr const char *kPrefix = "id_pldc_pick_order_";
+  constexpr const char *kPrefix = "id_pldc_move_";
   if (ctx.id.rfind(kPrefix, 0) != 0)
     return OnPressResult::NotMine;
-  g_ui.active_pldc_order = ctx.id.substr(std::string(kPrefix).size());
-  return OnPressResult::Handled;
-}
-
-OnPressResult order_selected(OnPressContext &ctx) {
-  ctx.dirty = false;
-  char *end = nullptr;
-  const long position = std::strtol(ctx.value.c_str(), &end, 10);
-  if (ctx.value.empty() || !end || *end || position < 1)
+  if (!g_ui.pldc_held.empty() ||
+      !onion::shellui::payload_center::autostart_pick_allowed())
     return OnPressResult::Consumed;
-  if (g_ui.payloads_list.empty())
-    g_ui.payloads_list = shellui_scan_payloads();
-
-  std::vector<PayloadEntry *> ordered;
-  for (auto &entry : g_ui.payloads_list)
-    if (marker_present(entry))
-      ordered.push_back(&entry);
-  if (position > static_cast<long>(ordered.size()))
-    return OnPressResult::Consumed;
-
-  const auto selected = std::find_if(
-      ordered.begin(), ordered.end(),
-      [&](const PayloadEntry *entry) {
-        return entry->id == g_ui.active_pldc_order;
-      });
-  if (selected == ordered.end())
-    return OnPressResult::Consumed;
-
-  PayloadEntry *moving = *selected;
-  ordered.erase(selected);
-  ordered.insert(ordered.begin() + (position - 1), moving);
-  for (std::size_t i = 0; i < ordered.size(); ++i) {
-    OnionPayloadConfig config{};
-    onion_payload_config_load(ordered[i]->shellui_path.c_str(), &config);
-    config.priority = std::max(
-        0, ONION_PAYLOAD_PRIORITY_MAX - static_cast<int>(i) * 10);
-    if (!onion_payload_config_save(ordered[i]->shellui_path.c_str(), &config))
-      notify("notify.payload.config_save_failed", ordered[i]->name.c_str());
-    ordered[i]->config = config;
-  }
-  notify("notify.payload_center.order_saved");
-  toolbox_pop_page();
-  return OnPressResult::Consumed;
-}
-
-OnPressResult order_disable(OnPressContext &ctx) {
-  ctx.dirty = false;
-  if (g_ui.payloads_list.empty())
-    g_ui.payloads_list = shellui_scan_payloads();
-  for (const auto &entry : g_ui.payloads_list) {
-    if (entry.id != g_ui.active_pldc_order)
-      continue;
-    unlink((entry.shellui_path + ".auto_start").c_str());
-    notify("notify.payload_center.order_saved");
-    toolbox_pop_page();
-    return OnPressResult::Consumed;
-  }
-  return OnPressResult::Consumed;
-}
-
-OnPressResult order_delete(OnPressContext &ctx) {
-  ctx.dirty = false;
-  if (g_ui.payloads_list.empty())
-    g_ui.payloads_list = shellui_scan_payloads();
-  for (const auto &entry : g_ui.payloads_list) {
-    if (entry.id != g_ui.active_pldc_order)
-      continue;
-    if (!onion::shellui::payload_center::remove_installed(entry.id, entry.name))
-      notify("notify.payload_center.remove_failed");
-    toolbox_pop_page();
-    return OnPressResult::Consumed;
-  }
+  g_ui.pldc_held = ctx.id.substr(std::string(kPrefix).size());
+  onion::shellui::payload_center::request_page_refresh(ctx.instance, ctx.id);
   return OnPressResult::Consumed;
 }
 
@@ -278,9 +229,6 @@ const OnPressExactEntry kExact[] = {
     {"id_pldc_add_source", add_source},
     {"id_pldc_search", search},
     {"id_pldc_clear_filter", clear_filter},
-    {"id_pldc_order", order_selected},
-    {"id_pldc_order_disable", order_disable},
-    {"id_pldc_order_delete", order_delete},
     {"id_pldc_post_autostart", post_autostart},
     {"id_pldc_post_done", post_done},
     {"id_pldc_post_installed", post_installed},
@@ -288,7 +236,7 @@ const OnPressExactEntry kExact[] = {
 
 const OnPressPrefixEntry kPrefix[] = {
     {"id_pldc_add_pick_", add_pick},
-    {"id_pldc_pick_order_", pick_order},
+    {"id_pldc_move_", reorder_pick},
     {"id_pldc_pick_", pick},
     {"id_pldc_remove_source_", remove_source},
 };
@@ -299,6 +247,89 @@ const OnPressExactEntry *onpress_payload_center_exact(size_t *count) {
   *count = sizeof(kExact) / sizeof(kExact[0]);
   return kExact;
 }
+
+namespace onion::shellui::payload_center {
+
+/* Buttons whose press was taken here: kept from ShellUI, ButtonsPrev
+   included, until let go, so their release cannot select anything either. */
+static uint32_t s_taken = 0;
+/* When X last put a payload down: the press that did it must not pick it up
+   again on its way back up. */
+static uint64_t s_dropped_ms = 0;
+constexpr uint64_t kPickAfterDropMs = 400;
+
+static void take(GamePadData &data, uint32_t buttons) {
+  data.Buttons = GamePadButtons(data.Buttons & ~buttons);
+  data.ButtonsPrev = GamePadButtons(data.ButtonsPrev & ~buttons);
+  data.ButtonsDown = GamePadButtons(data.ButtonsDown & ~buttons);
+  data.ButtonsUp = GamePadButtons(data.ButtonsUp & ~buttons);
+}
+
+bool autostart_pick_allowed() {
+  return AniketosUI::MonotonicMs() - s_dropped_ms >= kPickAfterDropMs;
+}
+
+bool filter_autostart_pad(GamePadData &data) {
+  bool changed = false;
+  if (s_taken) {
+    const uint32_t still = static_cast<uint32_t>(data.Buttons) & s_taken;
+    take(data, s_taken);
+    s_taken = still;
+    changed = true;
+  }
+  if (!autostart_in_front()) {
+    g_ui.pldc_held.clear();
+    return changed;
+  }
+  const uint32_t down = data.ButtonsDown;
+  if (g_ui.pldc_held.empty()) {
+    /* A menu on screen (ours or the HEN menu) has OPTIONS to itself. */
+    if (!(down & Option) || SystemDialogs::PopupMenuOpen())
+      return changed;
+    s_taken |= Option;
+    take(data, Option);
+    request_autostart_options({});
+    return true;
+  }
+
+  constexpr uint32_t kMoving = Left | Up | Right | Down | Cross | Circle |
+                               Option | Enter | Back | TouchPad;
+  /* The sticks would move the focus off the held row. */
+  data.AnalogLeftX = data.AnalogLeftY = 0.0f;
+  data.AnalogRightX = data.AnalogRightY = 0.0f;
+  const std::string held = g_ui.pldc_held;
+  if (down & (Up | Down)) {
+    g_ui.payloads_list = shellui_scan_payloads();
+    std::vector<PayloadEntry *> ordered;
+    for (auto &entry : g_ui.payloads_list)
+      if (marker_present(entry))
+        ordered.push_back(&entry);
+    const auto at = std::find_if(ordered.begin(), ordered.end(),
+        [&](const PayloadEntry *e) { return e->id == held; });
+    if (at == ordered.end()) {
+      g_ui.pldc_held.clear();
+    } else {
+      const auto to = (down & Up) ? at - (at != ordered.begin())
+                                  : at + (at + 1 != ordered.end());
+      if (to != at) {
+        std::iter_swap(at, to);
+        save_order(ordered);
+      }
+    }
+  } else if (down & (Cross | Circle | Enter | Back | Option)) {
+    g_ui.pldc_held.clear();
+    s_dropped_ms = AniketosUI::MonotonicMs();
+    if (down & Option)
+      request_autostart_options(held);
+  }
+  if (down & kMoving)
+    request_autostart_refresh("id_pldc_move_" + held);
+  s_taken |= down & kMoving;
+  take(data, kMoving);
+  return true;
+}
+
+} // namespace onion::shellui::payload_center
 
 const OnPressPrefixEntry *onpress_payload_center_prefix(size_t *count) {
   *count = sizeof(kPrefix) / sizeof(kPrefix[0]);

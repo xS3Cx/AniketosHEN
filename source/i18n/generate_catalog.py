@@ -228,6 +228,16 @@ def generate(catalog: str, locales: list[dict[str, Any]]) -> str:
     # relocations (a const char * per locale per key is resident for the
     # process's life, written by the loader).
     offsets: list[list[int]] = []
+    # A blob grows past the 64 KiB literal the standard guarantees (Thai is
+    # three bytes a letter); clang takes it, so only its pedantic warning goes.
+    lines.extend(
+        [
+            "#if defined(__clang__)",
+            "#pragma clang diagnostic push",
+            '#pragma clang diagnostic ignored "-Woverlength-strings"',
+            "#endif",
+        ]
+    )
     for i, locale in enumerate(locales):
         lines.append(f"static const char kI18nText{i}[] =")
         at = 0
@@ -239,6 +249,7 @@ def generate(catalog: str, locales: list[dict[str, Any]]) -> str:
             at += len(text.encode("utf-8")) + 1
         offsets.append(column)
         lines.append(";")
+    lines.extend(["#if defined(__clang__)", "#pragma clang diagnostic pop", "#endif"])
     lines.extend(
         [
             "static const char *const kI18nText[I18N_LOCALE_COUNT] = {",

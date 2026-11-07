@@ -28,6 +28,7 @@ void SettingPageStackOnPopping_Hook(MonoObject *instance,
                                     MonoObject *incoming) {
   if (shellui_hooks_are_ready() && outgoing) {
     onion::shellui::payload_center::release_installed_page(outgoing);
+    onion::shellui::payload_center::release_autostart_page(outgoing);
     onion::shellui::settings::release(outgoing);
     if (cheat_progress_handle_popping(outgoing)) {
       g_ui.leave_page(toolbox::Page::CheatProgress);
@@ -78,9 +79,12 @@ void SettingPageOnActivated_Hook(MonoObject *page, int transition) {
     if (g_ui.active_page == toolbox::Page::Payloads)
       onion::shellui::payload_center::bind_installed_page(page);
   }
+  if (shellui_hooks_are_ready() && page)
+    onion::shellui::payload_center::note_page_activated(page);
 }
 
 void SettingListCleanup_Hook(MonoObject *page) {
   onion::shellui::settings::release(page);
+  onion::shellui::payload_center::release_autostart_page(page);
   if (oSettingListCleanup) oSettingListCleanup(page);
 }

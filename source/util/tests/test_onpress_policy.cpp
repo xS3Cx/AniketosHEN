@@ -80,8 +80,6 @@ static int test_page_domain_matrix(void) {
                    OnPressDomain::PayloadCenter);
   TEST_ASSERT_TRUE(toolbox::onpress_domain_for_page(Page::PayloadAdd) ==
                    OnPressDomain::PayloadCenter);
-  TEST_ASSERT_TRUE(toolbox::onpress_domain_for_page(Page::PayloadOrder) ==
-                   OnPressDomain::PayloadCenter);
   TEST_ASSERT_TRUE(toolbox::onpress_domain_for_page(Page::PayloadBrowse) ==
                    OnPressDomain::PayloadCenter);
   TEST_ASSERT_TRUE(toolbox::onpress_domain_for_page(Page::PayloadDetail) ==

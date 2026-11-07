@@ -114,6 +114,8 @@ int OnPreCreate_Hook(MonoObject *Instance, MonoObject *element) {
 
   if (g_ui.active_page == toolbox::Page::Payloads)
     onion::shellui::payload_center::bind_installed_page(Instance);
+  if (g_ui.active_page == toolbox::Page::PayloadAutostart)
+    onion::shellui::payload_center::bind_autostart_page(Instance);
 
   if (!ensure_set_value_method())
     return -1;

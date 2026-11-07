@@ -297,6 +297,9 @@ bool installed_model(ps5ui::Node &model) {
   return true;
 }
 
+/* U+F876, the system font's clock, and a space. */
+const std::string kClockGlyph = "\xEF\xA1\xB6 ";
+
 bool autostart_model(ps5ui::Node &model) {
   g_ui.payloads_list = shellui_scan_payloads();
   ps5ui::Page page("id_pldc_autostart",
@@ -307,20 +310,33 @@ bool autostart_model(ps5ui::Node &model) {
       .link("id_pldc_add_payload",
             toolbox_i18n::tr("payload_center.add_payload"),
             "pldc_add_payload.xml",
-            toolbox_i18n::tr("payload_center.add_payload.sub"))
-      .label("id_pldc_autostart_hint",
-             toolbox_i18n::tr("payload_center.autostart.order_hint"),
-             ps5ui::Style::Center);
-  int position = 0;
-  for (const auto &entry : g_ui.payloads_list) {
-    if (!marker_present(entry))
-      continue;
-    ++position;
-    page.link("id_pldc_pick_order_" + entry.id,
-              std::to_string(position) + ". " + display_name(entry),
-              "pldc_order.xml");
+            toolbox_i18n::tr("payload_center.add_payload.sub"));
+  std::vector<const PayloadEntry *> enabled;
+  for (const auto &entry : g_ui.payloads_list)
+    if (marker_present(entry))
+      enabled.push_back(&entry);
+
+  const bool moving = std::any_of(enabled.begin(), enabled.end(),
+      [](const PayloadEntry *e) { return e->id == g_ui.pldc_held; });
+  if (!enabled.empty())
+    page.label("id_pldc_autostart_hint",
+               toolbox_i18n::tr(moving ? "payload_center.reorder.moving_hint"
+                                       : "payload_center.reorder.hint"),
+               ps5ui::Style::Center);
+  for (std::size_t i = 0; i < enabled.size(); ++i) {
+    const PayloadEntry &entry = *enabled[i];
+    const int delay = entry.config.delay_seconds;
+    page.button("id_pldc_move_" + entry.id,
+                std::to_string(i + 1) + ". " + display_name(entry),
+                entry.id == g_ui.pldc_held
+                    ? std::string(toolbox_i18n::tr("payload_center.reorder.held"))
+                    : kClockGlyph +
+                          (delay > 0 ? toolbox_i18n::format(
+                                           "payload_center.delay_value_fmt", delay)
+                                     : std::string(toolbox_i18n::tr(
+                                           "payload_center.delay_none"))));
   }
-  if (position == 0)
+  if (enabled.empty())
     page.label("id_pldc_autostart_empty",
                toolbox_i18n::tr("payload_center.autostart.empty"),
                ps5ui::Style::Center);
@@ -343,72 +359,6 @@ bool add_payload_model(ps5ui::Node &model) {
     page.label("id_pldc_add_empty",
                toolbox_i18n::tr("payload_center.add_payload.empty"),
                ps5ui::Style::Center);
-  model = page.root();
-  return true;
-}
-
-bool order_model(ps5ui::Node &model) {
-  g_ui.payloads_list = shellui_scan_payloads();
-  const PayloadEntry *selected = nullptr;
-  for (const auto &entry : g_ui.payloads_list) {
-    if (entry.id == g_ui.active_pldc_order && marker_present(entry)) {
-      selected = &entry;
-      break;
-    }
-  }
-  if (!selected) {
-    ps5ui::Page page("id_pldc_order_page",
-                     toolbox_i18n::tr("payload_center.order.title"));
-    page.label("id_pldc_order_missing",
-               toolbox_i18n::tr("payload_center.order.missing"),
-               ps5ui::Style::Center);
-    model = page.root();
-    return true;
-  }
-
-  std::vector<const PayloadEntry *> ordered;
-  for (const auto &entry : g_ui.payloads_list)
-    if (marker_present(entry))
-      ordered.push_back(&entry);
-
-  int current = 0;
-  for (std::size_t i = 0; i < ordered.size(); ++i)
-    if (ordered[i]->id == selected->id)
-      current = static_cast<int>(i) + 1;
-
-  const PayloadEntry &entry = *selected;
-  OnionPayloadConfig config{};
-  onion_payload_config_load(entry.shellui_path.c_str(), &config);
-  ps5ui::Page page("id_pldc_order_page", display_name(entry));
-  const int count = static_cast<int>(ordered.size());
-  page.label("id_pldc_order_position",
-             toolbox_i18n::format("payload_center.order.position_fmt", current,
-                                  count),
-             ps5ui::Style::Center)
-      .list(
-          "id_pldc_order", toolbox_i18n::tr("payload_center.order.position"),
-          [count](ps5ui::ListBuilder &L) {
-            for (int i = 1; i <= count; ++i)
-              L.item("id_pldc_order_" + std::to_string(i), std::to_string(i),
-                     std::to_string(i));
-          },
-          toolbox_i18n::tr("payload_center.order.sub"), std::to_string(current))
-      .text_field("id_payload_delay_" + entry.id,
-                  toolbox_i18n::tr("payload_center.order.delay"),
-                  toolbox_i18n::tr("payload_center.order.delay.sub"), "number",
-                  "1", "3", std::nullopt, std::nullopt, std::nullopt,
-                  std::to_string(config.delay_seconds))
-      .button("id_pldc_order_disable",
-              toolbox_i18n::tr("payload_center.order.disable"));
-  const bool removable =
-      entry.path.rfind(ONION_DIST_DATA_ROOT "/payloads/", 0) == 0;
-  if (removable) {
-    page.button("id_pldc_order_delete", toolbox_i18n::tr("payload_center.remove"),
-                std::nullopt, std::nullopt, std::nullopt, ps5ui::Style::None,
-                toolbox_i18n::format("payload_center.confirm.remove_fmt",
-                                     display_name(entry).c_str()),
-                toolbox_i18n::confirm_phrase());
-  }
   model = page.root();
   return true;
 }
@@ -594,6 +544,7 @@ void generate_installed_xml(std::string &xml) {
 }
 
 void generate_autostart_xml(std::string &xml) {
+  g_ui.pldc_held.clear(); /* every visit starts with nothing picked up */
   ps5ui::Node model;
   autostart_model(model);
   xml = onion::shellui::settings::publish(model, autostart_model);
@@ -603,12 +554,6 @@ void generate_add_payload_xml(std::string &xml) {
   ps5ui::Node model;
   add_payload_model(model);
   xml = onion::shellui::settings::publish(model, add_payload_model);
-}
-
-void generate_order_xml(std::string &xml) {
-  ps5ui::Node model;
-  order_model(model);
-  xml = onion::shellui::settings::publish(model, order_model);
 }
 
 void generate_browse_xml(std::string &xml) {

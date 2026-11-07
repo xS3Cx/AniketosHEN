@@ -7,6 +7,7 @@
 #include "aniketos_shell/input/mouse_control.hpp"
 #include <onion/distribution.h>
 #include "hooked_funcs.hpp"
+#include "payload_center.hpp"
 #include "debug_settings_route_runtime.hpp"
 #include "detour.h"
 #include "ipc.hpp"
@@ -156,6 +157,8 @@ bool handle_uri_boot_common(MonoString* uri, int opt, MonoString* titleIdForBoot
     controller_tick();
 
     if (AniketosShell::FilterPad(result))
+      return result;
+    if (onion::shellui::payload_center::filter_autostart_pad(result))
       return result;
 
     // Cheats Shortcut

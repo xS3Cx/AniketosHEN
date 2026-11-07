@@ -40,7 +40,8 @@ struct ToolboxUiState {
   std::string active_plugin;
 
   std::string active_pldc_item;
-  std::string active_pldc_order;
+  /* Autostart page: the payload being moved with up/down, if any. */
+  std::string pldc_held;
   std::string pldc_query;
   std::vector<onion::payload_catalog::Item> pldc_items;
   std::string pldc_sources_json;

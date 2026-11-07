@@ -38,7 +38,6 @@ RouteResult resolve_resource(const RouteInput &in) {
   out.flags.is_payload_center = pldc == PayloadCenterPage::Center;
   out.flags.is_payload_autostart = pldc == PayloadCenterPage::Autostart;
   out.flags.is_payload_add = pldc == PayloadCenterPage::AddPayload;
-  out.flags.is_payload_order = pldc == PayloadCenterPage::Order;
   out.flags.is_payload_browse = pldc == PayloadCenterPage::Browse;
   out.flags.is_payload_detail = pldc == PayloadCenterPage::Detail;
   out.flags.is_payload_settings = pldc == PayloadCenterPage::Settings;
@@ -99,8 +98,6 @@ RouteResult resolve_resource(const RouteInput &in) {
     out.page = Page::PayloadAutostart;
   } else if (out.flags.is_payload_add) {
     out.page = Page::PayloadAdd;
-  } else if (out.flags.is_payload_order) {
-    out.page = Page::PayloadOrder;
   } else if (out.flags.is_payload_browse) {
     out.page = Page::PayloadBrowse;
   } else if (out.flags.is_payload_detail) {

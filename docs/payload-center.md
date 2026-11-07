@@ -35,9 +35,10 @@ Selecting an installed payload opens `payload_<id>.xml`. That page has:
 - **Update** only when the catalog has a newer version.
 
 Autostart membership is managed only from **Autostart**. Adding a payload there
-appends it to the end of the boot order; disabling or deleting it from its
-Autostart row removes the marker only, so a payload that is already running
-keeps running until it is stopped from **Current session**. The old priority
+appends it to the end of the boot order; **OPTIONS → Remove** on its row
+deletes it (or, outside the payloads folder, removes the marker only). A payload
+that is already running keeps running until it is stopped from **Current
+session**. The old priority
 text field, Move up/Move down buttons, Enabled toggle and separate "Auto-start
 next time" toggle are gone.
 
@@ -53,13 +54,14 @@ autostart; selecting one appends it to the end of the order. The master switch
 is `[payload_center] autostart_enabled` in `config.ini`; when it is off the
 bootstrapper returns before scanning.
 
-Pressing an Autostart row opens a small **Position** page with a **1..N**
-position list and a **Delay (s)** field. Selecting a position moves that
-payload there, renumbers the others, rewrites every enabled payload's
-`priority`, saves, and returns to Autostart. The Delay field is validated
-(0-300 seconds) and saved on the same page. The Autostart list is published
-through the Settings reconciler, so it reorders in place without reopening the
-page.
+Each row shows its load delay on the right. Pressing **X** on a row picks the
+payload up; **Up**/**Down** move it one place (every move rewrites the enabled
+payloads' `priority` at once) and **X** or **O** puts it down. While a payload
+is held the page keeps the controller, so the focus cannot leave the row.
+**OPTIONS** on a row opens a native menu with **Delay** (0-10 s or 15 s) and
+**Remove**: payloads under `/data/AniketosHEN/payloads` are deleted, others
+only leave autostart. The list is published through the Settings reconciler,
+so it redraws in place without reopening the page.
 
 ## Files
 
