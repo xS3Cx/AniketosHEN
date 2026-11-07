@@ -3,6 +3,7 @@
 - Preferences > PIN lock: an optional PIN (off by default) that the Toolbox, the Shell Menu and the HEN button menu ask for before they open, so children cannot change HEN settings; forgot it? Delete /data/AniketosHEN/pin_lock over FTP or put a file named no_pin_lock on the first USB drive.
 - Shell Menu > Home screen > Game tiles: custom game icons. A picture named after a game's title id in /data/AniketosHEN/ShellUI/icons (for example PPSA01234.gif) replaces its tile icon on Home; animated GIF and WebP play while Home is on screen.
 - SPRX loader: GoldHEN-style `plugins.ini` support. List plugins by title ID in `/data/AniketosHEN/plugins.ini` (or keep your existing `/data/GoldHEN/plugins.ini`) and they load into the matching game like GoldHEN does.
+- Game plugins: put .sprx/.prx plugins in /data/AniketosHEN/sprx and pick the games each one loads into (or all games) in Toolbox > Game Tools > Game plugins, with its status and the reason a load failed; a game's Options menu has ★ Plugins to switch them on or off for that game.
 
 ## Changed
 - Start-up: the "Loading Kstuff / Loading ShadowMountPlus" notification is gone; "AniketosHEN is starting..." and the welcome remain.

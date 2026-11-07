@@ -8,6 +8,15 @@
 
 #include <ps5/kernel.h>
 
+#include <dirent.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include <algorithm>
+#include <cerrno>
+#include <cstdio>
+#include <map>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -56,9 +65,46 @@ struct Runtime {
   PreparedTargetAccess access;
   CurrentGameTarget target;
   onion::sprx::SprxPluginManager manager;
+  /* Plugin ID -> why it last failed to load; dropped when it loads. */
+  std::map<std::string, std::string> last_error;
 
   Runtime() : manager(transport, access, target) {}
 };
+
+/* Every game: PS5 titles and PS4 ones. */
+const std::vector<std::string> kAllGamePrefixes = {"PPSA", "CUSA"};
+
+struct FolderFile {
+  std::string id;
+  std::string path;
+};
+
+std::vector<FolderFile> folder_files() {
+  std::vector<FolderFile> files;
+  DIR *dir = opendir(kFolder);
+  if (!dir)
+    return files;
+  while (dirent *entry = readdir(dir)) {
+    const std::string id = onion::sprx::plugin_id_for_file(entry->d_name);
+    if (!id.empty())
+      files.push_back({id, std::string(kFolder) + "/" + entry->d_name});
+  }
+  closedir(dir);
+  std::sort(files.begin(), files.end(),
+            [](const FolderFile &a, const FolderFile &b) { return a.id < b.id; });
+  return files;
+}
+
+/* A first start has no folder and no catalog: make both, so the folder is
+   there to drop files in and the catalog loads (empty). */
+void ensure_catalog() {
+  (void)mkdir(kFolder, 0777);
+  const int fd = open(kCatalogPath, O_WRONLY | O_CREAT | O_EXCL, 0644);
+  if (fd >= 0) {
+    close(fd);
+    LOG_INFO("[sprx-manager] created empty catalog %s", kCatalogPath);
+  }
+}
 
 Runtime &runtime() {
   static Runtime value;
@@ -67,6 +113,24 @@ Runtime &runtime() {
 
 void log_report(const char *operation,
                 const onion::sprx::SprxStartupReport &report) {
+  for (const auto &item : report.results) {
+    if (item.load.succeeded()) {
+      runtime().last_error.erase(item.id);
+      continue;
+    }
+    char text[96];
+    if (item.skipped_dependency)
+      std::snprintf(text, sizeof(text), "dependency failed");
+    else if (item.load.status == onion::sprx::LoadStatus::RemoteError)
+      std::snprintf(text, sizeof(text), "%s 0x%08x",
+                    onion::sprx::load_status_name(item.load.status),
+                    static_cast<uint32_t>(item.load.remote_result));
+    else
+      std::snprintf(text, sizeof(text), "%s",
+                    onion::sprx::load_status_name(item.load.status));
+    runtime().last_error[item.id] = text;
+    LOG_WARN("[sprx-manager] %s: %s", item.id.c_str(), text);
+  }
   for (const auto &issue : report.issues)
     LOG_WARN("[sprx-manager] line=%zu plugin=%s: %s", issue.line,
              issue.plugin_id.empty() ? "-" : issue.plugin_id.c_str(),
@@ -128,13 +192,69 @@ bool is_current_target(Runtime &current, pid_t pid, uint32_t app_id,
 
 } // namespace
 
-void start() { run("startup", true); }
+void start() {
+  ensure_catalog();
+  run("startup", true);
+}
 void reconcile() { run("reconcile", false); }
 
 std::vector<onion::sprx::SprxInventoryEntry> inventory() {
   Runtime &current = runtime();
   std::lock_guard<std::mutex> lock(current.mutex);
-  return current.manager.inventory();
+  std::vector<onion::sprx::SprxInventoryEntry> entries =
+      current.manager.inventory();
+  for (auto &entry : entries) {
+    const auto error = current.last_error.find(entry.id);
+    if (error != current.last_error.end())
+      entry.last_error = error->second;
+  }
+  for (const FolderFile &file : folder_files()) {
+    const bool named = std::any_of(entries.begin(), entries.end(),
+                                   [&](const auto &entry) {
+                                     return entry.id == file.id ||
+                                            entry.path == file.path;
+                                   });
+    if (named)
+      continue;
+    onion::sprx::SprxInventoryEntry entry;
+    entry.id = file.id;
+    entry.path = file.path;
+    entry.enabled = false;
+    entries.push_back(std::move(entry));
+  }
+  return entries;
+}
+
+onion::sprx::SprxOperationResult
+set_targets(std::string_view id, const std::vector<std::string> &title_ids,
+            bool all_games) {
+  Runtime &current = runtime();
+  std::lock_guard<std::mutex> lock(current.mutex);
+  const onion::sprx::SprxCatalog catalog = current.manager.catalog();
+  onion::sprx::SprxManifestEntry entry;
+  if (const auto *existing = catalog.find(id)) {
+    entry = *existing;
+  } else {
+    const auto files = folder_files();
+    const auto file = std::find_if(files.begin(), files.end(),
+                                   [&](const FolderFile &f) { return f.id == id; });
+    if (file == files.end())
+      return {false, "SPRX plugin is not in " + std::string(kFolder)};
+    entry.id = file->id;
+    entry.path = file->path;
+    entry.enabled = true;
+  }
+  entry.exact_title_ids = title_ids;
+  if (!all_games)
+    entry.title_id_prefixes.clear();
+  else if (entry.title_id_prefixes.empty()) /* keep hand-written prefixes */
+    entry.title_id_prefixes = kAllGamePrefixes;
+  entry.auto_start = true; /* chosen games are where it should load */
+  const auto result = current.manager.put(std::move(entry));
+  LOG_INFO("[sprx-manager] targets %.*s titles=%zu all=%d -> %s",
+           static_cast<int>(id.size()), id.data(), title_ids.size(),
+           all_games ? 1 : 0, result.success ? "ok" : result.error.c_str());
+  return result;
 }
 
 onion::sprx::SprxOperationResult set_enabled(std::string_view id,
@@ -147,7 +267,30 @@ onion::sprx::SprxOperationResult set_enabled(std::string_view id,
 onion::sprx::SprxOperationResult remove(std::string_view id) {
   Runtime &current = runtime();
   std::lock_guard<std::mutex> lock(current.mutex);
-  return current.manager.remove(id);
+  std::string path;
+  const onion::sprx::SprxCatalog catalog = current.manager.catalog();
+  if (const auto *entry = catalog.find(id)) {
+    path = entry->path;
+    const auto result = current.manager.remove(id);
+    if (!result)
+      return result;
+  } else {
+    for (const FolderFile &file : folder_files())
+      if (file.id == id)
+        path = file.path;
+    if (path.empty())
+      return {false, "SPRX plugin is not declared"};
+  }
+  current.last_error.erase(std::string(id));
+  /* Only a file of the plugins folder is the player's to delete from here. */
+  const std::string folder = std::string(kFolder) + "/";
+  if (path.compare(0, folder.size(), folder) == 0 &&
+      path.find('/', folder.size()) == std::string::npos &&
+      unlink(path.c_str()) != 0 && errno != ENOENT)
+    return {false, "cannot delete " + path};
+  LOG_INFO("[sprx-manager] removed %.*s (%s)", static_cast<int>(id.size()),
+           id.data(), path.c_str());
+  return {true, {}};
 }
 
 void on_big_app_started(pid_t pid, uint32_t app_id,

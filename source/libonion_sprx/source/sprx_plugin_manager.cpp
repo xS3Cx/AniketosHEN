@@ -159,6 +159,11 @@ SprxOperationResult SprxPluginManager::remove(std::string_view id) {
   return catalog_store_.remove(id);
 }
 
+SprxOperationResult SprxPluginManager::put(SprxManifestEntry entry) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return catalog_store_.put(std::move(entry));
+}
+
 void SprxPluginManager::stop() noexcept {
   /* SPRX modules belong to the target process; unload is intentionally absent. */
 }

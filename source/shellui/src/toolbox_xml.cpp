@@ -888,6 +888,8 @@ void append_toolbox_game_group(ps5ui::Group& g) {
          toolbox_i18n::tr("cheats.link.sub"), kIconCheats)
       .link("id_kbm", toolbox_i18n::tr("kbm.link"), "kbm.xml",
             toolbox_i18n::tr("kbm.link.sub"), kIconGame)
+      .link("id_sprx", toolbox_i18n::tr("sprx.link"), "sprx.xml",
+            toolbox_i18n::tr("sprx.link.sub"), kIconPlugins)
       .group("id_cheats_visual_opts", toolbox_i18n::tr("cheats.visual_menu"),
              append_cheats_visual_options,
              toolbox_i18n::tr("cheats.visual_menu.sub"), kIconCheats)

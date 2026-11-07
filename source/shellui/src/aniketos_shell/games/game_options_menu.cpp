@@ -1,5 +1,6 @@
 #include "aniketos_shell/games/game_options_menu.hpp"
 
+#include "aniketos_shell/games/sprx_game_menu.hpp"
 #include "aniketos_shell/games/trophy_tools.hpp"
 #include "aniketos_shell/home/hidden_apps.hpp"
 #include "aniketos_shell/home/home_tabs_store.hpp"
@@ -92,6 +93,8 @@ void OnEntry(const Entry &entry) {
   const std::string title = note_title(entry);
   add_row(entry, "MENU_ID_CHEATS", toolbox_i18n::tr("cheats.game_menu"),
           "OnionHEN?Cheats_not_open");
+  add_row(entry, "MENU_ID_ANIKETOS_PLUGINS", toolbox_i18n::tr("sprx.game_menu"),
+          SprxGameMenu::kMenuUri);
   add_row(entry, "MENU_ID_TROPHY_UNLOCK_ALL",
           toolbox_i18n::tr("trophy.game_menu"), TrophyTools::kUnlockAllUri);
   add_tabs_row(entry, title);

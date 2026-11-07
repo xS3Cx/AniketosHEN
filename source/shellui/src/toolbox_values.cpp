@@ -224,17 +224,26 @@ bool try_external_plugin_value(const std::string &id, std::string &out) {
 }
 
 bool try_external_sprx_value(const std::string &id, std::string &out) {
-  using onion::shellui::plugin_pages::kSprxEnabledPrefix;
-  using onion::shellui::plugin_pages::split_control_id;
+  using namespace onion::shellui::plugin_pages;
 
-  std::string sprx_id;
-  if (!split_control_id(id, kSprxEnabledPrefix, sprx_id, 1, 31))
+  std::string sprx_id, title;
+  enum { Enabled, AllGames, Game } kind;
+  if (split_control_id(id, kSprxEnabledPrefix, sprx_id, 1, 31))
+    kind = Enabled;
+  else if (split_control_id(id, kSprxAllGamesPrefix, sprx_id, 1, 31))
+    kind = AllGames;
+  else if (split_sprx_game_control_id(id, title, sprx_id))
+    kind = Game;
+  else
     return false;
   const auto it =
       std::ranges::find(g_ui.external_sprx, sprx_id, &SprxInventoryItem::id);
   if (it == g_ui.external_sprx.end())
     return false;
-  out = bool_str(it->enabled);
+  out = bool_str(kind == Enabled    ? it->enabled
+                 : kind == AllGames ? it->all_games
+                                    : std::ranges::find(it->titles, title) !=
+                                          it->titles.end());
   return true;
 }
 

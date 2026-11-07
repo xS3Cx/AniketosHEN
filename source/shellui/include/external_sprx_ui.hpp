@@ -10,6 +10,7 @@ namespace onion::shellui::external_sprx {
 enum class Action {
   None,
   EnabledChanged,
+  TargetsChanged,
   Deleted,
 };
 

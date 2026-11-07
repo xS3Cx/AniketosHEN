@@ -58,6 +58,11 @@ struct SprxInventoryItem {
   int priority = 0;
   bool matches_current_target = false;
   bool loaded_for_current_target = false;
+  /* Games it loads into: these title IDs, or every game. Neither: a file of
+     the plugins folder not set up yet. */
+  std::vector<std::string> titles;
+  bool all_games = false;
+  std::string error; /* last load failure, empty when none */
 };
 
 class IPC_Client {
@@ -145,7 +150,10 @@ public:
   bool SetPluginAutoStart(const std::string &plugin_id, bool enabled);
   bool ListSprx(std::vector<SprxInventoryItem> &sprx);
   bool SetSprxEnabled(const std::string &id, bool enabled);
-  /** Removes the catalog entry; it does not delete or unload the SPRX file. */
+  bool SetSprxTargets(const std::string &id,
+                      const std::vector<std::string> &titles, bool all_games);
+  /** Removes the catalog entry and deletes the file when it is in the plugins
+   *  folder; a module already in a game stays there. */
   bool DeleteSprx(const std::string &id);
 
   // Kept for call-site readability (matches historical public field).

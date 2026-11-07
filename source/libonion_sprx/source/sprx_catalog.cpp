@@ -514,6 +514,17 @@ bool SprxCatalog::remove(std::string_view id) noexcept {
   return true;
 }
 
+void SprxCatalog::put(SprxManifestEntry entry) {
+  const auto found = std::find_if(entries_.begin(), entries_.end(),
+                                  [&](const SprxManifestEntry &existing) {
+                                    return existing.id == entry.id;
+                                  });
+  if (found == entries_.end())
+    entries_.push_back(std::move(entry));
+  else
+    *found = std::move(entry);
+}
+
 std::string SprxCatalog::serialize() const {
   std::string result;
   for (const SprxManifestEntry &entry : entries_) {
@@ -685,8 +696,16 @@ std::vector<SprxInventoryEntry> SprxCatalogStore::inventory() const {
   std::vector<SprxInventoryEntry> result;
   result.reserve(catalog_.entries().size());
   for (const SprxManifestEntry &entry : catalog_.entries()) {
-    result.push_back({entry.id, entry.path, entry.enabled, entry.auto_start,
-                      entry.priority, false, false, entry.source});
+    SprxInventoryEntry item;
+    item.id = entry.id;
+    item.path = entry.path;
+    item.enabled = entry.enabled;
+    item.auto_start = entry.auto_start;
+    item.priority = entry.priority;
+    item.exact_title_ids = entry.exact_title_ids;
+    item.title_id_prefixes = entry.title_id_prefixes;
+    item.source = entry.source;
+    result.push_back(std::move(item));
   }
   return result;
 }
@@ -775,6 +794,45 @@ SprxOperationResult SprxCatalogStore::remove(std::string_view id) {
   if (persisted)
     return persisted;
   catalog_ = std::move(previous);
+  return persisted;
+}
+
+std::string plugin_id_for_file(std::string_view file_name) {
+  const size_t dot = file_name.find_last_of('.');
+  if (dot == 0 || dot == std::string_view::npos ||
+      file_name.find('/') != std::string_view::npos ||
+      !valid_path("/" + std::string(file_name)))
+    return {};
+  for (const char c : file_name)
+    if (static_cast<unsigned char>(c) < 0x20 || c == 0x7f)
+      return {}; /* would break the INI line */
+  std::string id(file_name.substr(0, std::min<size_t>(dot, 31)));
+  for (char &c : id)
+    if (!valid_id(std::string_view(&c, 1)))
+      c = '_';
+  return id;
+}
+
+SprxOperationResult SprxCatalogStore::put(SprxManifestEntry entry) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  if (!loaded_)
+    return {false, "catalog is not loaded"};
+  SprxCatalog previous = catalog_;
+  if (entry.exact_title_ids.empty() && entry.title_id_prefixes.empty()) {
+    if (!catalog_.remove(entry.id))
+      return {true, {}};
+  } else {
+    catalog_.put(std::move(entry));
+  }
+  /* The whole catalog is rejected on the next load when one entry is bad. */
+  SprxCatalog check;
+  if (!check.parse(catalog_.serialize())) {
+    catalog_ = std::move(previous);
+    return {false, "invalid SPRX plugin entry"};
+  }
+  const SprxOperationResult persisted = persist_locked();
+  if (!persisted)
+    catalog_ = std::move(previous);
   return persisted;
 }
 

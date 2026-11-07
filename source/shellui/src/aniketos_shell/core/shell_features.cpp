@@ -4,6 +4,7 @@
 #include "aniketos_shell/core/frame_profile.hpp"
 #include "aniketos_shell/core/host_scene.hpp"
 #include "aniketos_shell/core/menu_host.hpp"
+#include "aniketos_shell/games/sprx_game_menu.hpp"
 #include "aniketos_shell/games/trophy_tools.hpp"
 #include "aniketos_shell/hardware/pad_speaker.hpp"
 #include "aniketos_shell/hardware/telemetry.hpp"
@@ -120,6 +121,7 @@ void BeforeNativeFrame() {
   {
     Profile::Scope scope(Profile::kHomeFeatures);
     TrophyTools::Tick();
+    SprxGameMenu::Tick();
     AniketosTheme::CustomFont::Tick();
     PadSpeaker::Tick();
   }

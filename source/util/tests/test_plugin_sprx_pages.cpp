@@ -87,7 +87,8 @@ static int test_sprx_list_is_flat_links(void) {
       {.id = "fps.overlay",
        .path = "/data/AniketosHEN/sprx/fps.sprx",
        .enabled = true,
-       .matches_current_target = true},
+       .matches_current_target = true,
+       .titles = {"CUSA12345"}},
   };
 
   ps5ui::Page page("id_sprx", "SPRX");
@@ -115,10 +116,11 @@ static int test_sprx_config_has_status_and_path(void) {
   const SprxInventoryItem entry{.id = "overlay",
                                 .path = "/data/AniketosHEN/sprx/overlay.sprx",
                                 .enabled = false,
-                                .matches_current_target = true};
+                                .matches_current_target = true,
+                                .titles = {"PPSA01234"}};
 
   ps5ui::Page page("id_sprx_config", entry.id);
-  fill_sprx_config(page, entry);
+  fill_sprx_config(page, entry, {});
   const std::string xml = page.build();
 
   TEST_ASSERT_TRUE(xml.find("id=\"id_external_sprx_status_overlay\"") !=
@@ -133,6 +135,53 @@ static int test_sprx_config_has_status_and_path(void) {
   return 0;
 }
 
+static int test_sprx_config_game_switches(void) {
+  toolbox_i18n::set_lang(toolbox_i18n::Lang::En);
+  SprxInventoryItem entry{.id = "menu",
+                          .path = "/data/AniketosHEN/sprx/menu.sprx",
+                          .titles = {"CUSA00001"}};
+  const std::vector<SprxGame> games = {{"PPSA01234", "Astro Bot"}};
+
+  ps5ui::Page page("id_sprx_config", entry.id);
+  fill_sprx_config(page, entry, games);
+  std::string xml = page.build();
+  /* Installed games first, then a chosen title that is not installed. */
+  const auto astro = xml.find("id=\"id_external_sprx_game_PPSA01234_menu\"");
+  const auto other = xml.find("id=\"id_external_sprx_game_CUSA00001_menu\"");
+  TEST_ASSERT_TRUE(astro != std::string::npos);
+  TEST_ASSERT_TRUE(other != std::string::npos && astro < other);
+  TEST_ASSERT_TRUE(xml.find("Astro Bot") != std::string::npos);
+  TEST_ASSERT_TRUE(xml.find("id=\"id_external_sprx_all_menu\"") !=
+                   std::string::npos);
+
+  std::string title, id;
+  TEST_ASSERT_TRUE(split_sprx_game_control_id(
+      sprx_game_control_id("PPSA01234", "my.mod-1"), title, id));
+  TEST_ASSERT_TRUE(title == "PPSA01234" && id == "my.mod-1");
+  TEST_ASSERT_TRUE(!split_sprx_game_control_id("id_external_sprx_game_PPSA01234",
+                                               title, id));
+  TEST_ASSERT_TRUE(sprx_loads_into(entry, "CUSA00001"));
+  TEST_ASSERT_TRUE(!sprx_loads_into(entry, "PPSA01234"));
+
+  /* Every game: no per-game switches, and not "not set up" any more. */
+  entry.all_games = true;
+  entry.titles.clear();
+  ps5ui::Page all("id_sprx_config", entry.id);
+  fill_sprx_config(all, entry, games);
+  xml = all.build();
+  TEST_ASSERT_TRUE(xml.find("id_external_sprx_game_") == std::string::npos);
+  TEST_ASSERT_TRUE(xml.find("Loads into every game you start") !=
+                   std::string::npos);
+  TEST_ASSERT_TRUE(sprx_loads_into(entry, "PPSA01234"));
+
+  entry.all_games = false;
+  TEST_ASSERT_TRUE(sprx_list_status(entry) ==
+                   "Not set up: choose the games it loads into");
+  entry.error = "Timeout (0x0)";
+  TEST_ASSERT_TRUE(sprx_list_status(entry) == "Last load failed: Timeout (0x0)");
+  return 0;
+}
+
 extern "C" int test_plugin_sprx_pages_suite(void) {
   int fails = 0;
   fails += onion_test_run("plugin_pages.flat_list", test_plugin_list_is_flat_links);
@@ -140,5 +189,7 @@ extern "C" int test_plugin_sprx_pages_suite(void) {
   fails += onion_test_run("sprx_pages.flat_list", test_sprx_list_is_flat_links);
   fails += onion_test_run("sprx_pages.config_status",
                           test_sprx_config_has_status_and_path);
+  fails += onion_test_run("sprx_pages.game_switches",
+                          test_sprx_config_game_switches);
   return fails;
 }

@@ -227,6 +227,63 @@ int test_import_skips_path_already_in_catalog() {
   return 0;
 }
 
+int test_put_adds_replaces_and_drops() {
+  char path[256] = {};
+  TEST_ASSERT_EQ_INT(0, onion_test_write_temp_text_file(".ini", "", path,
+                                                        sizeof(path)));
+  onion::sprx::SprxCatalogStore store;
+  TEST_ASSERT_TRUE(store.load(path));
+
+  onion::sprx::SprxManifestEntry entry;
+  entry.id = "mod_menu";
+  entry.path = "/data/AniketosHEN/sprx/mod menu.sprx";
+  entry.exact_title_ids = {"PPSA01234"};
+  entry.auto_start = true;
+  TEST_ASSERT_TRUE(store.put(entry));
+  entry.title_id_prefixes = {"PPSA", "CUSA"};
+  entry.exact_title_ids.clear();
+  TEST_ASSERT_TRUE(store.put(entry));
+
+  onion::sprx::SprxCatalogStore reloaded;
+  TEST_ASSERT_TRUE(reloaded.load(path));
+  const auto inventory = reloaded.inventory();
+  TEST_ASSERT_EQ_INT(1, static_cast<int>(inventory.size()));
+  TEST_ASSERT_EQ_INT(2, static_cast<int>(inventory[0].title_id_prefixes.size()));
+  TEST_ASSERT_EQ_INT(1, static_cast<int>(reloaded.snapshot()
+                                             .startup_order("CUSA99999")
+                                             .size()));
+
+  /* More titles than the catalog reads back: refused, nothing changes. */
+  entry.title_id_prefixes.clear();
+  for (int i = 0; i < 65; ++i)
+    entry.exact_title_ids.push_back("PPSA" + std::to_string(10000 + i));
+  TEST_ASSERT_TRUE(!store.put(entry));
+  TEST_ASSERT_TRUE(reloaded.load(path));
+  TEST_ASSERT_EQ_INT(2, static_cast<int>(
+                            reloaded.inventory()[0].title_id_prefixes.size()));
+
+  /* No game left: the entry goes, the catalog stays loadable. */
+  entry.exact_title_ids.clear();
+  TEST_ASSERT_TRUE(store.put(entry));
+  TEST_ASSERT_TRUE(reloaded.load(path));
+  TEST_ASSERT_TRUE(reloaded.inventory().empty());
+  unlink(path);
+  return 0;
+}
+
+int test_plugin_id_for_file() {
+  using onion::sprx::plugin_id_for_file;
+  TEST_ASSERT_TRUE(plugin_id_for_file("menu.sprx") == "menu");
+  TEST_ASSERT_TRUE(plugin_id_for_file("Mod Menu.PRX") == "Mod_Menu");
+  TEST_ASSERT_TRUE(plugin_id_for_file("catalog.ini").empty());
+  TEST_ASSERT_TRUE(plugin_id_for_file(".sprx").empty());
+  TEST_ASSERT_TRUE(plugin_id_for_file("bad\nname.sprx").empty());
+  TEST_ASSERT_EQ_INT(31, static_cast<int>(
+                             plugin_id_for_file(std::string(40, 'x') + ".sprx")
+                                 .size()));
+  return 0;
+}
+
 } // namespace
 
 extern "C" int test_sprx_catalog_suite(void) {
@@ -240,5 +297,7 @@ extern "C" int test_sprx_catalog_suite(void) {
   failures += onion_test_run("sprx_catalog_import_goldhen", test_import_plugins_ini_goldhen);
   failures += onion_test_run("sprx_catalog_import_merge", test_import_same_path_across_sections_merges);
   failures += onion_test_run("sprx_catalog_import_skip_dup", test_import_skips_path_already_in_catalog);
+  failures += onion_test_run("sprx_catalog_put", test_put_adds_replaces_and_drops);
+  failures += onion_test_run("sprx_catalog_file_id", test_plugin_id_for_file);
   return failures;
 }

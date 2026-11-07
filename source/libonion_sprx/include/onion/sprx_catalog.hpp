@@ -46,6 +46,10 @@ struct SprxInventoryEntry {
   bool matches_current_target = false;
   bool loaded_for_current_target = false;
   std::string source;
+  std::vector<std::string> exact_title_ids;
+  std::vector<std::string> title_id_prefixes;
+  /** Last load failure in a game this session; empty after a success. */
+  std::string last_error;
 };
 
 /**
@@ -92,6 +96,8 @@ public:
 
   bool set_enabled(std::string_view id, bool enabled) noexcept;
   bool remove(std::string_view id) noexcept;
+  /** Replaces the entry with the same ID, or appends it. */
+  void put(SprxManifestEntry entry);
   std::string serialize() const;
 
   bool matches(const SprxManifestEntry &entry,
@@ -110,6 +116,13 @@ private:
   std::vector<SprxManifestEntry> entries_;
 };
 
+/**
+ * Catalog ID for a module file dropped in the plugins folder: its name
+ * without the .sprx/.prx suffix, other characters than the ID's turned into
+ * '_', cut to 31. Empty for any other file.
+ */
+std::string plugin_id_for_file(std::string_view file_name);
+
 /** Serialized catalog persistence. Mutations are atomically written to disk. */
 class SprxCatalogStore final {
 public:
@@ -124,6 +137,11 @@ public:
   SprxCatalog snapshot() const;
   SprxOperationResult set_enabled(std::string_view id, bool enabled);
   SprxOperationResult remove(std::string_view id);
+  /**
+   * Adds or replaces an entry; an entry without any title ID or prefix is
+   * removed instead. Refused when the result would not parse back.
+   */
+  SprxOperationResult put(SprxManifestEntry entry);
 
   std::string path() const;
   bool loaded() const;

@@ -102,6 +102,7 @@ enum DaemonCommands : unsigned int {
   BREW_SPRX_LIST = 0x9000110u,
   BREW_SPRX_SET_ENABLED = 0x9000111u,
   BREW_SPRX_DELETE = 0x9000112u,
+  BREW_SPRX_SET_TARGETS = 0x9000113u,
 
   // Keyboard & mouse for games: the Toolbox saved a profile, rewrite it into
   // the running game.

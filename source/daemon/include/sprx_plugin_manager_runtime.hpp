@@ -10,6 +10,8 @@
 
 namespace onion::daemon::sprx_plugins {
 
+/* Players drop .sprx/.prx files here; the catalog sits beside them. */
+inline constexpr const char *kFolder = ONION_DIST_DATA_ROOT "/sprx";
 inline constexpr const char *kCatalogPath =
     ONION_DIST_DATA_ROOT "/sprx/catalog.ini";
 /* GoldHEN-style plugins.ini files, merged read-only after the catalog. */
@@ -20,10 +22,17 @@ inline constexpr const char *kGoldHenPluginsIniPath =
 
 void start();
 void reconcile();
+/** Catalog entries, then files of kFolder that no entry names yet (those
+ *  have no title IDs). */
 std::vector<onion::sprx::SprxInventoryEntry> inventory();
 onion::sprx::SprxOperationResult set_enabled(std::string_view id,
                                               bool enabled);
-/** Removes only the manifest entry; it never deletes the module file. */
+/** The games a plugin loads into: these title IDs, or every game. No game at
+ *  all drops its catalog entry (the file stays). */
+onion::sprx::SprxOperationResult
+set_targets(std::string_view id, const std::vector<std::string> &title_ids,
+            bool all_games);
+/** Removes the manifest entry, and the module file when it is in kFolder. */
 onion::sprx::SprxOperationResult remove(std::string_view id);
 void on_big_app_started(pid_t pid, uint32_t app_id,
                         std::string_view title_id);

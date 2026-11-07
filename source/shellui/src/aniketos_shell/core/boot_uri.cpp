@@ -1,5 +1,6 @@
 #include "aniketos_shell/core/boot_uri.hpp"
 
+#include "aniketos_shell/games/sprx_game_menu.hpp"
 #include "aniketos_shell/games/trophy_tools.hpp"
 #include "aniketos_shell/home/hen_menu.hpp"
 #include "aniketos_shell/home/hidden_apps.hpp"
@@ -32,6 +33,10 @@ bool Handle(const std::string &uri, bool is_top_nav, int opt) {
     return true;
   if (uri == HiddenApps::kMenuUri) {
     HiddenApps::Hide(g_ui.current_menu_tid);
+    return true;
+  }
+  if (uri == SprxGameMenu::kMenuUri) {
+    SprxGameMenu::Request(g_ui.current_menu_tid);
     return true;
   }
   if (uri == TrophyTools::kUnlockAllUri) {

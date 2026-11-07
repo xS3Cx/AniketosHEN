@@ -61,7 +61,8 @@ std::string plugin_inventory_page(size_t offset) {
 }
 
 std::string sprx_inventory_page(size_t offset) {
-  constexpr size_t kPageSize = 8;
+  /* An entry can name 64 games: three of those fill most of a frame. */
+  constexpr size_t kPageSize = 3;
   const std::vector<onion::sprx::SprxInventoryEntry> inventory =
       onion::daemon::sprx_plugins::inventory();
   const size_t begin = std::min(offset, inventory.size());
@@ -82,6 +83,12 @@ std::string sprx_inventory_page(size_t offset) {
     cJSON_AddBoolToObject(item, "loaded_for_current_target",
                           entry.loaded_for_current_target);
     cJSON_AddStringToObject(item, "source", entry.source.c_str());
+    cJSON *titles = cJSON_AddArrayToObject(item, "titles");
+    for (const std::string &title : entry.exact_title_ids)
+      cJSON_AddItemToArray(titles, cJSON_CreateString(title.c_str()));
+    cJSON_AddBoolToObject(item, "all", !entry.title_id_prefixes.empty());
+    if (!entry.last_error.empty())
+      cJSON_AddStringToObject(item, "error", entry.last_error.c_str());
     cJSON_AddItemToArray(items, item);
   }
   cJSON_AddNumberToObject(root, "next",
@@ -207,6 +214,25 @@ void handleIPC(clientArgs *client, std::string &inputStr,
             ? onion::daemon::sprx_plugins::set_enabled(
                   id, onion_cjson::bool_item(my_json.get(), "enabled"))
             : onion::daemon::sprx_plugins::remove(id);
+    reply(sender_app, !result.success,
+          result.success ? std::string("ok") : result.error);
+    break;
+  }
+  case BREW_SPRX_SET_TARGETS: {
+    const char *id = onion_cjson::string_item(my_json.get(), "id");
+    if (!id || !*id) {
+      reply(sender_app, true, "missing SPRX id");
+      break;
+    }
+    std::vector<std::string> titles;
+    cJSON *title = nullptr;
+    cJSON_ArrayForEach(title, onion_cjson::item(my_json.get(), "titles"))
+      if (cJSON_IsString(title))
+        titles.emplace_back(title->valuestring);
+    /* The catalog check refuses bad title IDs and more than it can hold. */
+    const onion::sprx::SprxOperationResult result =
+        onion::daemon::sprx_plugins::set_targets(
+            id, titles, onion_cjson::bool_item(my_json.get(), "all"));
     reply(sender_app, !result.success,
           result.success ? std::string("ok") : result.error);
     break;

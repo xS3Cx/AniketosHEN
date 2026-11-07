@@ -49,6 +49,7 @@ public:
   std::vector<SprxInventoryEntry> inventory() const;
   SprxOperationResult set_enabled(std::string_view id, bool enabled);
   SprxOperationResult remove(std::string_view id);
+  SprxOperationResult put(SprxManifestEntry entry);
   void stop() noexcept;
 
   SprxCatalog catalog() const { return catalog_store_.snapshot(); }
