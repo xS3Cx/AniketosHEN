@@ -1521,6 +1521,7 @@
     "notify.payload_center.autostart_added": "تمت إضافة %s إلى التشغيل التلقائي",
     "notify.shadowmount.next_boot_on": "سيُحمَّل ShadowMount عند البدء التالي",
     "notify.shadowmount.next_boot_off": "لن يُحمَّل ShadowMount عند البدء التالي",
+    "notify.shadowmount.needs_kstuff": "يحتاج ShadowMountPlus إلى kstuff، وهو لا يعمل",
     "notify.update.available": "يتوفر AniketosHEN %s",
     "notify.update.downloaded": "تم تنزيل AniketosHEN %s؛ أعد التشغيل للتطبيق",
     "notify.update.failed": "فشلت مهمة التحديث",

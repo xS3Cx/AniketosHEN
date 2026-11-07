@@ -1,6 +1,7 @@
 #include "payload_center.hpp"
 
 #include "aniketos_shell/core/host_scene.hpp"
+#include "aniketos_shell/home/control_center_entry.hpp"
 #include "aniketos_shell/system_ui/popup_menu.hpp"
 #include "aniketos_shell/system_ui/system_dialogs.hpp"
 #include "hooked_funcs.hpp"
@@ -592,10 +593,12 @@ void release_autostart_page(MonoObject *page) {
 bool autostart_in_front() {
   if (!s_autostart_page || !s_autostart_front)
     return false;
-  /* Settings left for Home or a game (PS button) without a page change. */
+  /* Settings left for Home or a game (PS button) without a page change,
+     or the Control Center over it (the layer stays the page's). */
   const AniketosShell::FocusLayer layer = AniketosShell::CurrentFocusLayer();
   return layer != AniketosShell::FocusLayer::TopMenu &&
-         layer != AniketosShell::FocusLayer::Game;
+         layer != AniketosShell::FocusLayer::Game &&
+         !ControlCenterEntry::Visible();
 }
 
 void request_autostart_refresh(std::string focus) {

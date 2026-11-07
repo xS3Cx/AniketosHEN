@@ -1521,6 +1521,7 @@
     "notify.payload_center.autostart_added": "已将 %s 加入自动启动",
     "notify.shadowmount.next_boot_on": "下次启动时将加载 ShadowMount",
     "notify.shadowmount.next_boot_off": "下次启动时将不加载 ShadowMount",
+    "notify.shadowmount.needs_kstuff": "ShadowMountPlus 需要 kstuff，但 kstuff 未运行",
     "notify.update.available": "AniketosHEN %s 现已推出",
     "notify.update.downloaded": "AniketosHEN %s 已下载，重启以应用",
     "notify.update.failed": "更新任务失败",

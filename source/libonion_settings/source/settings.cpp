@@ -634,6 +634,13 @@ bool apply_parser(IniParser *parser, Settings *out) {
       kRestModeDelayMaxSeconds));
   out->cheats_mirror = parse_cheats_mirror(ini_get(parser, "cheats.mirror"),
                                            out->cheats_mirror);
+  /* A config written before kstuff and ShadowMountPlus became opt-in has
+     no [payload_center] yet; a missing autoload key there meant on, so it
+     keeps meaning on instead of switching them off on upgrade. */
+  if (!ini_get(parser, "payload_center.autostart_enabled")) {
+    out->kstuff_autoload = true;
+    out->shadowmount_autoload = true;
+  }
   apply_aniketos_keys(parser, out);
   out->app_jailbreak_enabled =
       parse_bool(ini_get(parser, "app_jailbreak.enabled"),

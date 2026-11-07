@@ -165,6 +165,10 @@ static bool launch_util(LaunchContext *context) {
   return true;
 }
 
+/* Set when ShadowMountPlus was wanted but kstuff was not up yet: a kstuff
+   from the user's autostart (kstuff-lite) may bring it up later. */
+static bool s_shadowmount_deferred = false;
+
 static void launch_shadowmount(LaunchContext *context,
                                uint32_t firmware_version, bool autoload) {
   const bool disabled_by_usb = if_exists("/mnt/usb0/no_shadowmount");
@@ -172,6 +176,12 @@ static void launch_shadowmount(LaunchContext *context,
     LOG_DEBUG("shadowmount disabled (%s)",
               disabled_by_usb ? "usb no_shadowmount"
                               : "shadowmount.autoload=false");
+    return;
+  }
+  /* A HEN reload leaves the earlier one running; a second copy would fight
+     it over the same mounts. */
+  if (onion_find_pid_substr("shadowmount") > 0) {
+    LOG_INFO("ShadowMountPlus already running -- skip launch");
     return;
   }
   if (firmware_version < 0x3000000) {
@@ -196,6 +206,13 @@ static void launch_shadowmount(LaunchContext *context,
 static bool launch_kstuff(LaunchContext *context, uint32_t firmware_version,
                           bool autoload, bool user_override) {
   char probe[100] = {0};
+  /* Whoever loaded it (the exploit chain, a previous start, a kstuff
+     payload), a running kstuff is ready for what needs it. */
+  if (firmware_version >= 0x3000000 && kstuff_already_running()) {
+    LOG_WARN("kstuff already running / mprotect OK -- skip launch");
+    onion_ready_signal(ONION_READY_KSTUFF);
+    return true;
+  }
   const bool disabled_by_usb = if_exists("/mnt/usb0/no_kstuff");
   if (disabled_by_usb || !autoload) {
     LOG_DEBUG("kstuff disabled (%s)",
@@ -298,12 +315,29 @@ int bootstrap_launch_services(uint32_t firmware_version,
     sleep(2);
     launch_shadowmount(&context, firmware_version,
                        plan->shadowmount_autoload);
-  } else if (!kstuff_ready) {
-    LOG_WARN("ShadowMount skipped: kstuff not ready");
+  } else if (!kstuff_ready && plan->shadowmount_autoload) {
+    s_shadowmount_deferred = true;
+    LOG_WARN("ShadowMount waits: kstuff not ready, tried again after autostart");
   }
   if (!plan->launch_daemon) {
     LOG_WARN("recovery start: daemon not launched, ShellUI left untouched");
     return 0;
   }
   return launch_daemon(&context) ? 0 : -2;
+}
+
+void bootstrap_launch_shadowmount_late(uint32_t firmware_version) {
+  if (!s_shadowmount_deferred)
+    return;
+  s_shadowmount_deferred = false;
+  if (firmware_version < 0x3000000 || !kstuff_already_running()) {
+    LOG_WARN("ShadowMount skipped: kstuff not running after autostart");
+    bootstrap_notify("notify.shadowmount.needs_kstuff");
+    return;
+  }
+  LaunchContext context = {
+      .loader_port = elfldr_remote_onion_available() ? ONION_ELFLDR_PORT
+                                                     : ELFLDR_REMOTE_PORT,
+  };
+  launch_shadowmount(&context, firmware_version, true);
 }

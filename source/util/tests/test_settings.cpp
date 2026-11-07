@@ -230,8 +230,10 @@ static int test_partial_ini_keeps_defaults(void) {
   TEST_ASSERT_TRUE(out.overlay_enabled);
   TEST_ASSERT_TRUE(out.overlay_background);
   TEST_ASSERT_TRUE(out.app_jailbreak_enabled);
-  TEST_ASSERT_TRUE(!out.kstuff_autoload);
-  TEST_ASSERT_TRUE(!out.shadowmount_autoload);
+  /* No [payload_center]: written before kstuff/ShadowMountPlus became
+     opt-in, so their missing keys keep the old default, on. */
+  TEST_ASSERT_TRUE(out.kstuff_autoload);
+  TEST_ASSERT_TRUE(out.shadowmount_autoload);
   TEST_ASSERT_TRUE(out.payload_autostart_enabled);
   TEST_ASSERT_EQ_U64(10, out.rest_mode_delay_seconds);
   TEST_ASSERT_EQ_INT(onion::kCheatsMirrorAuto, out.cheats_mirror);
@@ -590,6 +592,23 @@ static int test_update_check_migrates_on(void) {
   return 0;
 }
 
+/* A config from after the change ([payload_center] present) without the
+   keys gets the new default, off. */
+static int test_autoload_off_in_new_config(void) {
+  std::string path = temp_ini_path();
+  TEST_ASSERT_TRUE(!path.empty());
+  FILE *f = fopen(path.c_str(), "w");
+  TEST_ASSERT_TRUE(f != nullptr);
+  fputs("[meta]\nschema_version=1\n\n[payload_center]\nautostart_enabled=true\n", f);
+  fclose(f);
+  onion::Settings out{};
+  TEST_ASSERT_TRUE(onion::settings_load_file(path.c_str(), &out));
+  TEST_ASSERT_TRUE(!out.kstuff_autoload);
+  TEST_ASSERT_TRUE(!out.shadowmount_autoload);
+  unlink(path.c_str());
+  return 0;
+}
+
 static int test_clamp_fan_threshold(void) {
   TEST_ASSERT_EQ_INT(onion::kFanAutomaticThresholdCelsius,
                      onion::Settings{}.fan_threshold);
@@ -818,6 +837,8 @@ extern "C" int test_settings_suite(void) {
                              test_v0_0_10_config_keeps_kstuff_autoload);
   failures += onion_test_run("settings_update_check_migrates_on",
                              test_update_check_migrates_on);
+  failures += onion_test_run("settings_autoload_off_in_new_config",
+                             test_autoload_off_in_new_config);
   failures += onion_test_run("settings_clamp_fan_threshold",
                              test_clamp_fan_threshold);
   failures += onion_test_run("settings_shell_menu_section",

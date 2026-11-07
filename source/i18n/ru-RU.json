@@ -1521,6 +1521,7 @@
     "notify.payload_center.autostart_added": "Добавлено в автозапуск: %s",
     "notify.shadowmount.next_boot_on": "ShadowMount загрузится при следующем запуске",
     "notify.shadowmount.next_boot_off": "ShadowMount не загрузится при следующем запуске",
+    "notify.shadowmount.needs_kstuff": "Для ShadowMountPlus нужен kstuff, но он не запущен",
     "notify.update.available": "Доступна версия AniketosHEN %s",
     "notify.update.downloaded": "AniketosHEN %s скачан; перезагрузите консоль, чтобы применить",
     "notify.update.failed": "Не удалось выполнить обновление",

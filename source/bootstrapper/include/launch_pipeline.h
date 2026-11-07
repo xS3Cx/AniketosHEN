@@ -30,6 +30,10 @@ bool bootstrap_stack_running(void);
 int bootstrap_launch_services(uint32_t firmware_version,
                               const BootstrapLaunchPlan *plan);
 
+/** ShadowMountPlus skipped for want of kstuff is launched now if a kstuff
+ *  from the user's autostart is running; otherwise the user is told. */
+void bootstrap_launch_shadowmount_late(uint32_t firmware_version);
+
 #ifdef __cplusplus
 }
 #endif

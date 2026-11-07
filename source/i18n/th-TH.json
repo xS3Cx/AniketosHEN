@@ -1521,6 +1521,7 @@
     "notify.payload_center.autostart_added": "เพิ่ม %s ในการเริ่มอัตโนมัติแล้ว",
     "notify.shadowmount.next_boot_on": "ShadowMount จะโหลดในการเริ่มครั้งถัดไป",
     "notify.shadowmount.next_boot_off": "ShadowMount จะไม่โหลดในการเริ่มครั้งถัดไป",
+    "notify.shadowmount.needs_kstuff": "ShadowMountPlus ต้องใช้ kstuff แต่ kstuff ไม่ได้ทำงาน",
     "notify.update.available": "AniketosHEN %s พร้อมให้อัปเดตแล้ว",
     "notify.update.downloaded": "ดาวน์โหลด AniketosHEN %s แล้ว รีบูตเพื่อใช้งาน",
     "notify.update.failed": "งานอัปเดตล้มเหลว",

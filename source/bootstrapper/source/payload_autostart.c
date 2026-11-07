@@ -4,18 +4,22 @@
 #include "payload_autostart.h"
 
 #include "bootstrap_notify.h"
+#include "kstuff_probe.h"
 
 #include <elfldr_remote.h>
 #include <onion/log.h>
 #include <onion/payload.h>
 #include <onion/payload_config.h>
 #include <onion/platform.h>
+#include <onion/proc_query.h>
 
 #include <dirent.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 typedef struct PayloadEntry {
@@ -100,10 +104,8 @@ static bool is_elf_filename(const char *filename) {
   return extension && strcmp(extension, ".elf") == 0;
 }
 
-static void scan_payload_directory(PayloadList *list, const char *directory) {
-  DIR *dir = opendir(directory);
-  if (!dir)
-    return;
+static void scan_payload_directory(PayloadList *list, const char *directory,
+                                   DIR *dir) {
 
   struct dirent *entry;
   while ((entry = readdir(dir)) != NULL) {
@@ -139,7 +141,6 @@ static void scan_payload_directory(PayloadList *list, const char *directory) {
       break;
     }
   }
-  closedir(dir);
 }
 
 static int compare_payload_entries(const void *a, const void *b) {
@@ -151,9 +152,24 @@ static int compare_payload_entries(const void *a, const void *b) {
 
 static PayloadList find_autostart_payloads(void) {
   PayloadList list = {0};
-  for (size_t i = 0;
-       i < sizeof(kPayloadDirectories) / sizeof(kPayloadDirectories[0]); ++i) {
-    scan_payload_directory(&list, kPayloadDirectories[i]);
+  enum { kDirCount = sizeof(kPayloadDirectories) / sizeof(kPayloadDirectories[0]) };
+  struct stat seen[kDirCount];
+  size_t seen_count = 0;
+  for (size_t i = 0; i < kDirCount; ++i) {
+    DIR *dir = opendir(kPayloadDirectories[i]);
+    if (!dir)
+      continue;
+    /* A FAT/exFAT drive answers to onionhen/ and OnionHEN/ alike: one
+       folder under two spellings is scanned once. */
+    struct stat st;
+    bool scanned = fstat(dirfd(dir), &st) != 0;
+    for (size_t j = 0; j < seen_count && !scanned; ++j)
+      scanned = seen[j].st_dev == st.st_dev && seen[j].st_ino == st.st_ino;
+    if (!scanned) {
+      seen[seen_count++] = st;
+      scan_payload_directory(&list, kPayloadDirectories[i], dir);
+    }
+    closedir(dir);
   }
   if (list.count > 1)
     qsort(list.entries, list.count, sizeof(*list.entries), compare_payload_entries);
@@ -175,8 +191,31 @@ void bootstrap_payload_autostart(bool enabled) {
   int loaded = 0;
   for (size_t i = 0; i < list.count; ++i) {
     const PayloadEntry *entry = &list.entries[i];
-    if (strstr(entry->filename, "elfldr") != NULL)
+    if (strcasestr(entry->filename, "elfldr") != NULL)
       continue;
+    /* The same file on internal storage and a drive starts once, the copy
+       first in the order. */
+    bool started_name = false;
+    for (size_t j = 0; j < i && !started_name; ++j)
+      started_name = strcasecmp(list.entries[j].filename, entry->filename) == 0;
+    if (started_name) {
+      LOG_WARN("Auto-start skips %s: a payload with that name already ran",
+               entry->path);
+      continue;
+    }
+    /* Kernel patches twice panic the console; two ShadowMountPlus fight over
+       the same mounts. */
+    if (strncasecmp(entry->filename, "kstuff", 6) == 0 &&
+        kstuff_already_running()) {
+      LOG_WARN("Auto-start skips %s: kstuff is already running", entry->path);
+      continue;
+    }
+    if (strncasecmp(entry->filename, "shadowmount", 11) == 0 &&
+        onion_find_pid_substr("shadowmount") > 0) {
+      LOG_WARN("Auto-start skips %s: ShadowMountPlus is already running",
+               entry->path);
+      continue;
+    }
 
     char identity[ONION_PAYLOAD_IDENTITY_SIZE];
     const char *key = onion_payload_identity_from_path(

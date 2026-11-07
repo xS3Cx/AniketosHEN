@@ -37,6 +37,7 @@ uint32_t s_icon_handle = 0; /* our ImageAsset, kept alive */
 std::string s_icon_for;     /* the picture it was made of */
 /* what the button showed right after our last set of each image */
 uint32_t s_icon_shown_handle = 0;
+std::atomic<bool> s_visible{false};
 uint32_t s_inverted_icon_shown_handle = 0;
 
 uint32_t s_button_handle = 0;
@@ -305,6 +306,7 @@ void Tick() {
   bool found_now = false;
   if (!button) {
     s_button_focused.store(false, std::memory_order_relaxed);
+    s_visible.store(false, std::memory_order_relaxed);
     button = search_button();
     if (!button)
       return;
@@ -322,6 +324,7 @@ void Tick() {
                               : 0.0f;
   s_button_focused.store(opacity > 0.5f && button_has_focus(button),
                          std::memory_order_relaxed);
+  s_visible.store(opacity > 0.05f, std::memory_order_relaxed);
   /* Out of sight (the Control Center closed, most of the time) the icon and
      caption are seen to four times a second rather than on every frame. */
   if (opacity <= 0.0f && !found_now && ++s_hidden_frames % 15 != 0)
@@ -340,5 +343,7 @@ void Tick() {
 
   show_label();
 }
+
+bool Visible() { return s_visible.load(std::memory_order_relaxed); }
 
 } // namespace ControlCenterEntry

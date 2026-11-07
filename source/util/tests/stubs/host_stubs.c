@@ -259,3 +259,6 @@ int32_t sceNetCtlGetInfo(int32_t code, SceNetCtlInfo *info) {
   memcpy(info->ip_address, g_netctl_ip, sizeof(info->ip_address));
   return 0;
 }
+
+/* --- bootstrapper kstuff probe (mprotect on the console) --- */
+bool kstuff_already_running(void) { return false; }

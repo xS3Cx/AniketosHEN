@@ -1521,6 +1521,7 @@
     "notify.payload_center.autostart_added": "Added %s to autostart",
     "notify.shadowmount.next_boot_on": "ShadowMount will load on the next start",
     "notify.shadowmount.next_boot_off": "ShadowMount will not load on the next start",
+    "notify.shadowmount.needs_kstuff": "ShadowMountPlus needs kstuff, which is not running",
     "notify.update.available": "AniketosHEN %s is available",
     "notify.update.downloaded": "AniketosHEN %s downloaded; reboot to apply",
     "notify.update.failed": "The update task failed",

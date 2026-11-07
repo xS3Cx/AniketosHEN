@@ -9,4 +9,6 @@
 namespace ControlCenterEntry {
 void Install(MonoImage *react_pui);
 void Tick();
+/* The Control Center is on screen (its Game Base button is drawn). */
+bool Visible();
 }

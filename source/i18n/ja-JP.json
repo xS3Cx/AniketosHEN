@@ -1521,6 +1521,7 @@
     "notify.payload_center.autostart_added": "%s を自動起動に追加しました",
     "notify.shadowmount.next_boot_on": "次回起動時に ShadowMount を読み込みます",
     "notify.shadowmount.next_boot_off": "次回起動時に ShadowMount を読み込みません",
+    "notify.shadowmount.needs_kstuff": "ShadowMountPlus には kstuff が必要ですが、実行されていません",
     "notify.update.available": "AniketosHEN %s が利用可能です",
     "notify.update.downloaded": "AniketosHEN %s をダウンロードしました。再起動して適用してください",
     "notify.update.failed": "アップデートの処理に失敗しました",

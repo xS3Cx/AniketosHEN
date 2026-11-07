@@ -55,6 +55,21 @@ void save_order(const std::vector<PayloadEntry *> &ordered) {
   }
 }
 
+/* Swaps two payloads' places by trading their priorities: two files written
+   instead of every autostart payload's. */
+void swap_priorities(PayloadEntry &first, PayloadEntry &second) {
+  OnionPayloadConfig a{}, b{};
+  onion_payload_config_load(first.shellui_path.c_str(), &a);
+  onion_payload_config_load(second.shellui_path.c_str(), &b);
+  std::swap(a.priority, b.priority);
+  if (!onion_payload_config_save(first.shellui_path.c_str(), &a))
+    notify("notify.payload.config_save_failed", first.name.c_str());
+  if (!onion_payload_config_save(second.shellui_path.c_str(), &b))
+    notify("notify.payload.config_save_failed", second.name.c_str());
+  first.config = a;
+  second.config = b;
+}
+
 OnPressResult master_toggle(OnPressContext &ctx) {
   const bool on = enabled(ctx.value);
   if (on == g_settings.payload_autostart_enabled)
@@ -312,8 +327,14 @@ bool filter_autostart_pad(GamePadData &data) {
       const auto to = (down & Up) ? at - (at != ordered.begin())
                                   : at + (at + 1 != ordered.end());
       if (to != at) {
-        std::iter_swap(at, to);
-        save_order(ordered);
+        /* Equal priorities (a tie, or a drive that was away during a
+           renumbering) can't be traded: number the list afresh. */
+        if ((*at)->config.priority != (*to)->config.priority) {
+          swap_priorities(**at, **to);
+        } else {
+          std::iter_swap(at, to);
+          save_order(ordered);
+        }
       }
     }
   } else if (down & (Cross | Circle | Enter | Back | Option)) {

@@ -96,9 +96,10 @@ int main(void) {
     return launch_result;
   }
 
-  if (level == ONION_BOOT_NORMAL)
+  if (level == ONION_BOOT_NORMAL) {
     bootstrap_payload_autostart(config.payload_autostart_enabled);
-  else
+    bootstrap_launch_shadowmount_late(config.firmware_version);
+  } else
     LOG_WARN("%s start: payload autostart skipped",
              onion_boot_level_name(level));
   LOG_DEBUG("============== Spawner (Bootstrapper) Finished =================");
