@@ -315,6 +315,7 @@
     "sprx.status.inactive": "Passt nicht zum aktuellen Spiel",
     "sprx.enabled": "Aktiviert",
     "sprx.enabled.sub": "Wirkt nur auf zukünftige Starts passender Spiele",
+    "sprx.imported_fmt": "Eingetragen in %s. Ändere es in dieser Datei.",
     "sprx.delete": "Plugin entfernen",
     "sprx.delete.sub": "Löscht seine Datei aus dem Plugin-Ordner",
     "sprx.delete.confirm": "Dieses Plugin entfernen und seine Datei löschen? Ein im laufenden Spiel geladenes Plugin kann erst nach dem Schließen des Spiels entfernt werden.",

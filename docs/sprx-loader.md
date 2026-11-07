@@ -80,8 +80,8 @@ Format is GoldHEN's own:
 
 File order is load order. A path listed under several sections becomes one
 plugin that matches all of them. `[default]` maps to the `CUSA` prefix (PS4
-titles). Imported entries are `auto_start`, their ids are `goldhen-<name>` /
-`ini-<name>`, and they are managed only by editing the file — the Toolbox
+titles). Imported entries are `auto_start`, their ids are `goldhen-<name>` (from `/data/GoldHEN/plugins.ini`) /
+`aniketoshen-<name>` (from `/data/AniketosHEN/plugins.ini`), and they are managed only by editing the file — the Toolbox
 shows them read-only. A path already in `catalog.ini` is left to the catalog.
 Bad lines are skipped with a `LOG_WARN`; the rest of the file still loads.
 

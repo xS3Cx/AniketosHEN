@@ -234,6 +234,11 @@ bool PopupMenuSwitchValue(int index, bool *value) {
          property_value(entry_config(index), "get_Value", value);
 }
 
+void SetPopupMenuSwitch(int index, bool value) {
+  if (MonoObject *config = entry_config(index))
+    set_property(config, "set_Value", &value);
+}
+
 void SetPopupMenuEntryIcon(int index, const std::string &icon) {
   if (MonoObject *config = entry_config(index))
     set_property(config, "set_IconUri", managed_string(icon));

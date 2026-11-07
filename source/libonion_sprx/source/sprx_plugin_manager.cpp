@@ -103,7 +103,9 @@ SprxStartupReport SprxPluginManager::start_locked() {
       request.pid = target.pid;
       request.title_id = target.title_id;
       request.path = entry->path;
-      request.options.call_plugin_load = !entry->source.empty();
+      /* GoldHEN-style plugins do their work in plugin_load wherever they are
+         listed; a module without that export just loads. */
+      request.options.call_plugin_load = true;
       item.load = loader.load(request);
       if (!item.load.succeeded())
         failed.insert(entry->id);

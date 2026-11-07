@@ -54,6 +54,8 @@ bool PollPopupSubmenu(std::string *id);
 /* The current position of the switch at `index` of the menu shown last.
  * False when that entry is not a switch or the menu is gone. */
 bool PopupMenuSwitchValue(int index, bool *value);
+/* Sets the switch at `index` of the menu shown last. */
+void SetPopupMenuSwitch(int index, bool value);
 /* Changes the icon of an entry of the menu shown last. */
 void SetPopupMenuEntryIcon(int index, const std::string &icon);
 

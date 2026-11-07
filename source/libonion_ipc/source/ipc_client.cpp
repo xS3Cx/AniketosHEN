@@ -639,6 +639,7 @@ bool IPC_Client::ListSprx(std::vector<SprxInventoryItem> &sprx) {
         if (cJSON_IsString(title)) entry.titles.emplace_back(title->valuestring);
       entry.all_games = onion_cjson::bool_item(item, "all");
       entry.error = onion_cjson::string_item(item, "error", "");
+      entry.source = onion_cjson::string_item(item, "source", "");
       sprx.push_back(std::move(entry));
     }
     const int next = onion_cjson::int_item(root.get(), "next", -1);

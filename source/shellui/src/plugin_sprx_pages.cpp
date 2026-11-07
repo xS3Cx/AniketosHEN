@@ -104,6 +104,14 @@ void fill_sprx_config(ps5ui::Page &page, const SprxInventoryItem &entry,
                       const std::vector<SprxGame> &games) {
   page.label("id_external_sprx_status_" + entry.id, sprx_list_status(entry))
       .label("id_external_sprx_path_" + entry.id, entry.path);
+  /* Imported from a plugins.ini: that file decides, the page only shows it. */
+  if (!entry.source.empty()) {
+    page.label("id_external_sprx_source_" + entry.id,
+               toolbox_i18n::format("sprx.imported_fmt", entry.source.c_str()));
+    for (const std::string &title : entry.titles)
+      page.label("id_external_sprx_title_" + title + "_" + entry.id, title);
+    return;
+  }
   if (sprx_set_up(entry))
     page.toggle(std::string(kSprxEnabledPrefix) + entry.id,
                 toolbox_i18n::tr("sprx.enabled"), entry.enabled,

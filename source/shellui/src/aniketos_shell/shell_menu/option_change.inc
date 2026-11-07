@@ -236,6 +236,7 @@ void change_int_slider(const Option &option, int direction) {
 
 void change_list_option(const Option &option, int direction) {
   int &target = int_target(option.id);
+  const int before = target;
   target = std::clamp(target + direction, 0, option.string_count - 1);
   switch (option.id) {
   case OptionId::PlayerLeds:
@@ -257,8 +258,10 @@ void change_list_option(const Option &option, int direction) {
     shellui_request_presence_reload(1500, true);
     break;
   case OptionId::HenButtonIcon:
-    /* Home takes its top bar as it loads (homeui_top_nav_patch) */
-    shellui_request_home_reload_after(1500);
+    /* Home takes its top bar as it loads (homeui_top_nav_patch); pressing
+       past either end of the list changes nothing. */
+    if (target != before)
+      shellui_request_home_reload_after(1500);
     break;
   default:
     break;

@@ -315,6 +315,7 @@
     "sprx.status.inactive": "不符合目前遊戲",
     "sprx.enabled": "啟用",
     "sprx.enabled.sub": "僅影響之後符合的遊戲啟動",
+    "sprx.imported_fmt": "已列於 %s 中。如需變更，請編輯該檔案。",
     "sprx.delete": "移除外掛",
     "sprx.delete.sub": "從外掛資料夾刪除其檔案",
     "sprx.delete.confirm": "要移除此外掛並刪除其檔案嗎？已載入執行中遊戲的外掛須關閉遊戲後才能移除。",

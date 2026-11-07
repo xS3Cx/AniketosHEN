@@ -315,6 +315,7 @@
     "sprx.status.inactive": "Não corresponde ao jogo atual",
     "sprx.enabled": "Ativado",
     "sprx.enabled.sub": "Afeta apenas futuras inicializações de jogos correspondentes",
+    "sprx.imported_fmt": "Listado em %s. Edite esse arquivo para alterá-lo.",
     "sprx.delete": "Remover plugin",
     "sprx.delete.sub": "Apaga o arquivo dele da pasta de plugins",
     "sprx.delete.confirm": "Remover este plugin e apagar o arquivo dele? Um plugin carregado no jogo em execução só pode ser removido depois que o jogo for fechado.",

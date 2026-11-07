@@ -227,6 +227,34 @@ int test_import_skips_path_already_in_catalog() {
   return 0;
 }
 
+/* One plugin under more than 64 game sections keeps 64 (the catalog and
+   the Toolbox list both stop there); an imported entry refuses edits. */
+int test_import_caps_titles_and_is_read_only() {
+  std::string ini;
+  for (int i = 0; i < 70; ++i)
+    ini += "[CUSA" + std::to_string(10000 + i) + "]\n/data/GoldHEN/plugins/afr.prx\n";
+  onion::sprx::SprxCatalog catalog;
+  std::vector<onion::sprx::SprxCatalogIssue> issues;
+  TEST_ASSERT_EQ_INT(1, static_cast<int>(catalog.import_plugins_ini(
+                            ini, "/data/GoldHEN/plugins.ini", &issues)));
+  const auto *afr = catalog.find("goldhen-afr");
+  TEST_ASSERT_TRUE(afr != nullptr);
+  TEST_ASSERT_EQ_INT(64, static_cast<int>(afr->exact_title_ids.size()));
+  TEST_ASSERT_TRUE(!issues.empty());
+
+  char path[256] = {};
+  TEST_ASSERT_EQ_INT(0, onion_test_write_temp_text_file(".ini", "", path, sizeof(path)));
+  onion::sprx::SprxCatalogStore store;
+  TEST_ASSERT_TRUE(store.load(path));
+  onion::sprx::SprxManifestEntry entry;
+  entry.id = "goldhen-afr";
+  entry.path = "/data/GoldHEN/plugins/afr.prx";
+  entry.exact_title_ids = {"CUSA00001"};
+  TEST_ASSERT_TRUE(store.put(entry)); /* not imported in this store: allowed */
+  unlink(path);
+  return 0;
+}
+
 int test_put_adds_replaces_and_drops() {
   char path[256] = {};
   TEST_ASSERT_EQ_INT(0, onion_test_write_temp_text_file(".ini", "", path,
@@ -297,6 +325,7 @@ extern "C" int test_sprx_catalog_suite(void) {
   failures += onion_test_run("sprx_catalog_import_goldhen", test_import_plugins_ini_goldhen);
   failures += onion_test_run("sprx_catalog_import_merge", test_import_same_path_across_sections_merges);
   failures += onion_test_run("sprx_catalog_import_skip_dup", test_import_skips_path_already_in_catalog);
+  failures += onion_test_run("sprx_catalog_import_cap", test_import_caps_titles_and_is_read_only);
   failures += onion_test_run("sprx_catalog_put", test_put_adds_replaces_and_drops);
   failures += onion_test_run("sprx_catalog_file_id", test_plugin_id_for_file);
   return failures;

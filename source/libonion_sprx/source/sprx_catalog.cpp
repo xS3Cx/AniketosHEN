@@ -478,8 +478,15 @@ size_t SprxCatalog::import_plugins_ini(std::string_view text,
     std::vector<std::string> &targets =
         section == Section::Default ? entry->title_id_prefixes : entry->exact_title_ids;
     const std::string target = section == Section::Default ? "CUSA" : title_id;
-    if (std::find(targets.begin(), targets.end(), target) == targets.end())
-      targets.push_back(target);
+    if (std::find(targets.begin(), targets.end(), target) != targets.end())
+      continue;
+    /* catalog.ini reads at most 64 games an entry; past that the Toolbox
+       list would not fit an IPC frame either. */
+    if (targets.size() >= 64) {
+      warn(line_number, "more than 64 games for one plugin; the rest are ignored");
+      continue;
+    }
+    targets.push_back(target);
   }
   return imported;
 }
@@ -817,6 +824,9 @@ SprxOperationResult SprxCatalogStore::put(SprxManifestEntry entry) {
   std::lock_guard<std::mutex> lock(mutex_);
   if (!loaded_)
     return {false, "catalog is not loaded"};
+  if (const SprxManifestEntry *existing = catalog_.find(entry.id);
+      existing && !existing->source.empty())
+    return {false, "listed in " + existing->source + "; edit that file"};
   SprxCatalog previous = catalog_;
   if (entry.exact_title_ids.empty() && entry.title_id_prefixes.empty()) {
     if (!catalog_.remove(entry.id))

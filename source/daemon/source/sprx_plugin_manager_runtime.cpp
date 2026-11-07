@@ -233,6 +233,8 @@ set_targets(std::string_view id, const std::vector<std::string> &title_ids,
   const onion::sprx::SprxCatalog catalog = current.manager.catalog();
   onion::sprx::SprxManifestEntry entry;
   if (const auto *existing = catalog.find(id)) {
+    if (!existing->source.empty())
+      return {false, "listed in " + existing->source + "; edit that file"};
     entry = *existing;
   } else {
     const auto files = folder_files();
@@ -244,11 +246,23 @@ set_targets(std::string_view id, const std::vector<std::string> &title_ids,
     entry.path = file->path;
     entry.enabled = true;
   }
-  entry.exact_title_ids = title_ids;
-  if (!all_games)
-    entry.title_id_prefixes.clear();
-  else if (entry.title_id_prefixes.empty()) /* keep hand-written prefixes */
-    entry.title_id_prefixes = kAllGamePrefixes;
+  /* A hand-written entry outside the plugins folder keeps its games, path,
+     priority and dependencies when its last game is switched off: it is
+     disabled, not dropped from catalog.ini. */
+  const std::string folder = std::string(kFolder) + "/";
+  const bool in_folder = entry.path.compare(0, folder.size(), folder) == 0;
+  if (!in_folder && title_ids.empty() && !all_games &&
+      catalog.find(id) != nullptr) {
+    entry.enabled = false;
+  } else {
+    entry.exact_title_ids = title_ids;
+    if (!all_games)
+      entry.title_id_prefixes.clear();
+    else if (entry.title_id_prefixes.empty()) /* keep hand-written prefixes */
+      entry.title_id_prefixes = kAllGamePrefixes;
+    if (!title_ids.empty() || all_games)
+      entry.enabled = true;
+  }
   entry.auto_start = true; /* chosen games are where it should load */
   const auto result = current.manager.put(std::move(entry));
   LOG_INFO("[sprx-manager] targets %.*s titles=%zu all=%d -> %s",
@@ -276,8 +290,10 @@ onion::sprx::SprxOperationResult remove(std::string_view id) {
       return result;
   } else {
     for (const FolderFile &file : folder_files())
-      if (file.id == id)
-        path = file.path;
+      if (file.id == id) {
+        path = file.path; /* the file shown under this id: the first one */
+        break;
+      }
     if (path.empty())
       return {false, "SPRX plugin is not declared"};
   }

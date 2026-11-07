@@ -1,6 +1,7 @@
 #include "aniketos_shell/games/sprx_game_menu.hpp"
 
 #include "aniketos_shell/home/title_info.hpp"
+#include "aniketos_shell/system_ui/pin_lock.hpp"
 #include "aniketos_shell/system_ui/popup_menu.hpp"
 #include "hooked_funcs.hpp"
 #include "plugin_sprx_pages.hpp"
@@ -42,7 +43,10 @@ void open(const std::string &title) {
     SystemDialogs::MenuEntry row{item.id, ""};
     row.is_switch = true;
     row.value = sprx_loads_into(item, title);
-    if (item.all_games) {
+    if (!item.source.empty()) { /* its plugins.ini decides */
+      row.title += "  ·  plugins.ini";
+      row.enabled = false;
+    } else if (item.all_games) {
       row.title += std::string("  ·  ") + tr("sprx.menu.all_games");
       row.enabled = false;
     } else if (!item.error.empty()) {
@@ -87,15 +91,17 @@ void apply(size_t row, bool on) {
   /* An off plugin switched on for a game is meant to load there. */
   const bool ok = client.SetSprxTargets(item.id, titles, item.all_games) &&
                   (!on || item.enabled || client.SetSprxEnabled(item.id, true));
-  s_values[row] = on;
   LOG_INFO("[SPRXMENU] %s %s for %s -> %d", item.id.c_str(), on ? "on" : "off",
            s_title.c_str(), ok ? 1 : 0);
   if (!ok) {
+    /* refused: the switch goes back to what is really set */
+    SystemDialogs::SetPopupMenuSwitch(static_cast<int>(row), s_values[row]);
     notify("%s", toolbox_i18n::format("sprx.operation_failed_fmt",
                                       item.id.c_str())
                      .c_str());
     return;
   }
+  s_values[row] = on;
   item.titles = std::move(titles);
   item.enabled = item.enabled || on;
   s_changed = true;
@@ -124,6 +130,8 @@ void menu_tick() {
 
 } // namespace
 
+std::string s_locked_title; /* waiting for the PIN, UI thread */
+
 void Request(const std::string &title_id) {
   if (!AniketosShell::TitleInfo::Valid(title_id)) {
     LOG_WARN("[SPRXMENU] no title ('%s')", title_id.c_str());
@@ -141,8 +149,11 @@ void Tick() {
     std::lock_guard<std::mutex> lock(s_request_mutex);
     title.swap(s_request);
   }
-  if (!title.empty())
-    open(title);
+  if (!title.empty()) {
+    /* the same lock as the Toolbox's Game plugins page */
+    s_locked_title = std::move(title);
+    PinLock::Require([] { open(s_locked_title); });
+  }
 }
 
 } // namespace SprxGameMenu

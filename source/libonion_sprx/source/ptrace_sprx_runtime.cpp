@@ -204,10 +204,14 @@ LoadResult PtraceSprxRuntime::load(pid_t pid, std::string_view path,
 
   const intptr_t load_fn = pt_resolve(pid, kLoadStartModuleNid);
   const intptr_t pthread_create_fn = pt_resolve(pid, kPthreadCreateNid);
+  /* Without sceKernelDlsym the module still loads, plain (no plugin_load). */
   const intptr_t dlsym_fn =
       options.call_plugin_load ? pt_resolve(pid, kDlsymNid) : 0;
-  if (load_fn == 0 || pthread_create_fn == 0 ||
-      (options.call_plugin_load && dlsym_fn == 0)) {
+  const bool call_plugin_load = options.call_plugin_load && dlsym_fn != 0;
+  if (options.call_plugin_load && dlsym_fn == 0)
+    LOG_WARN("sprx: sceKernelDlsym not found pid=%d; loading without plugin_load",
+             static_cast<int>(pid));
+  if (load_fn == 0 || pthread_create_fn == 0) {
     LOG_ERROR("sprx: required NID resolution failed pid=%d load=%p pthread=%p dlsym=%p",
               static_cast<int>(pid), reinterpret_cast<void *>(load_fn),
               reinterpret_cast<void *>(pthread_create_fn),
@@ -243,6 +247,16 @@ LoadResult PtraceSprxRuntime::load(pid_t pid, std::string_view path,
     bool ok = true;
     ok = pt_munmap(pid, context_page, kPageSize) == 0 && ok;
     ok = pt_munmap(pid, code_page, kPageSize) == 0 && ok;
+    ok = pt_munmap(pid, thread_page, kPageSize) == 0 && ok;
+    return ok;
+  };
+  /* After a load the loader thread may still be between publishing its
+     result and returning out of the code page: that page stays mapped.
+     shortcut: 4 KiB left in the game per plugin load; join the thread first
+     if loads ever become frequent. */
+  const auto cleanup_after_load = [&]() noexcept {
+    bool ok = true;
+    ok = pt_munmap(pid, context_page, kPageSize) == 0 && ok;
     ok = pt_munmap(pid, thread_page, kPageSize) == 0 && ok;
     return ok;
   };
@@ -320,7 +334,7 @@ LoadResult PtraceSprxRuntime::load(pid_t pid, std::string_view path,
       loaded = true;
       /* plugin_load runs after the module shows up: wait for the result. */
       int64_t published = kPendingResult;
-      if (!options.call_plugin_load ||
+      if (!call_plugin_load ||
           (mdbg_copyout(pid, context_page + offsetof(RemoteContext, result),
                         &published, sizeof(published)) == 0 &&
            published != kPendingResult))
@@ -353,7 +367,7 @@ LoadResult PtraceSprxRuntime::load(pid_t pid, std::string_view path,
       result.plugin_load_result = static_cast<int32_t>(finished.plugin_result);
     }
     if (read_ok && finished.result != kPendingResult)
-      result.cleanup_ok = cleanup();
+      result.cleanup_ok = cleanup_after_load();
     else
       result.cleanup_ok = false; // never unmap code while the thread runs
     if (!session.detach())

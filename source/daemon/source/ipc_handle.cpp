@@ -60,37 +60,54 @@ std::string plugin_inventory_page(size_t offset) {
   return onion_cjson::print_owned(root);
 }
 
+cJSON *sprx_inventory_item(const onion::sprx::SprxInventoryEntry &entry) {
+  cJSON *item = cJSON_CreateObject();
+  cJSON_AddStringToObject(item, "id", entry.id.c_str());
+  cJSON_AddStringToObject(item, "path", entry.path.c_str());
+  cJSON_AddBoolToObject(item, "enabled", entry.enabled);
+  cJSON_AddBoolToObject(item, "auto_start", entry.auto_start);
+  cJSON_AddNumberToObject(item, "priority", entry.priority);
+  cJSON_AddBoolToObject(item, "matches_current_target",
+                        entry.matches_current_target);
+  cJSON_AddBoolToObject(item, "loaded_for_current_target",
+                        entry.loaded_for_current_target);
+  cJSON_AddStringToObject(item, "source", entry.source.c_str());
+  cJSON *titles = cJSON_AddArrayToObject(item, "titles");
+  for (const std::string &title : entry.exact_title_ids)
+    cJSON_AddItemToArray(titles, cJSON_CreateString(title.c_str()));
+  /* "All games" is every PS5 and PS4 title; a narrower prefix is not. */
+  const auto &prefixes = entry.title_id_prefixes;
+  const bool all = std::find(prefixes.begin(), prefixes.end(), "PPSA") != prefixes.end() &&
+                   std::find(prefixes.begin(), prefixes.end(), "CUSA") != prefixes.end();
+  cJSON_AddBoolToObject(item, "all", all);
+  if (!entry.last_error.empty())
+    cJSON_AddStringToObject(item, "error", entry.last_error.c_str());
+  return item;
+}
+
+/* As many entries as fit one IPC frame once the reply escapes the page into
+   a JSON string (each title id costs about twice its size there). */
 std::string sprx_inventory_page(size_t offset) {
-  /* An entry can name 64 games: three of those fill most of a frame. */
-  constexpr size_t kPageSize = 3;
+  constexpr size_t kFrameMargin = 256;
   const std::vector<onion::sprx::SprxInventoryEntry> inventory =
       onion::daemon::sprx_plugins::inventory();
   const size_t begin = std::min(offset, inventory.size());
-  const size_t end = std::min(begin + kPageSize, inventory.size());
   cJSON *root = cJSON_CreateObject();
   cJSON *items = cJSON_CreateArray();
   cJSON_AddItemToObject(root, "sprx", items);
-  for (size_t index = begin; index < end; ++index) {
-    const onion::sprx::SprxInventoryEntry &entry = inventory[index];
-    cJSON *item = cJSON_CreateObject();
-    cJSON_AddStringToObject(item, "id", entry.id.c_str());
-    cJSON_AddStringToObject(item, "path", entry.path.c_str());
-    cJSON_AddBoolToObject(item, "enabled", entry.enabled);
-    cJSON_AddBoolToObject(item, "auto_start", entry.auto_start);
-    cJSON_AddNumberToObject(item, "priority", entry.priority);
-    cJSON_AddBoolToObject(item, "matches_current_target",
-                          entry.matches_current_target);
-    cJSON_AddBoolToObject(item, "loaded_for_current_target",
-                          entry.loaded_for_current_target);
-    cJSON_AddStringToObject(item, "source", entry.source.c_str());
-    cJSON *titles = cJSON_AddArrayToObject(item, "titles");
-    for (const std::string &title : entry.exact_title_ids)
-      cJSON_AddItemToArray(titles, cJSON_CreateString(title.c_str()));
-    cJSON_AddBoolToObject(item, "all", !entry.title_id_prefixes.empty());
-    if (!entry.last_error.empty())
-      cJSON_AddStringToObject(item, "error", entry.last_error.c_str());
-    cJSON_AddItemToArray(items, item);
+  size_t end = begin;
+  for (; end < inventory.size(); ++end) {
+    cJSON_AddItemToArray(items, sprx_inventory_item(inventory[end]));
+    const std::string page = onion_cjson::print_owned(cJSON_Duplicate(root, 1));
+    if (onion::ipc_json_escape(page).size() + kFrameMargin < DAEMON_BUFF_MAX)
+      continue;
+    if (end == begin)
+      break; /* one entry alone: sent as it is, the frame check reports it */
+    cJSON_DeleteItemFromArray(items, cJSON_GetArraySize(items) - 1);
+    break;
   }
+  if (end == begin && end < inventory.size())
+    ++end;
   cJSON_AddNumberToObject(root, "next",
                           end < inventory.size() ? static_cast<double>(end)
                                                  : -1.0);
@@ -166,7 +183,7 @@ void handleIPC(clientArgs *client, std::string &inputStr,
       break;
     }
     const std::string page = sprx_inventory_page(static_cast<size_t>(offset));
-    if (page.size() >= DAEMON_BUFF_MAX) {
+    if (onion::ipc_json_escape(page).size() >= DAEMON_BUFF_MAX) {
       reply(sender_app, true, "SPRX inventory page exceeds IPC frame");
       break;
     }

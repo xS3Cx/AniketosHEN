@@ -315,6 +315,7 @@
     "sprx.status.inactive": "不匹配当前游戏",
     "sprx.enabled": "启用",
     "sprx.enabled.sub": "只影响后续匹配游戏的启动",
+    "sprx.imported_fmt": "已在 %s 中列出。如需更改，请编辑该文件。",
     "sprx.delete": "移除插件",
     "sprx.delete.sub": "从插件文件夹中删除其文件",
     "sprx.delete.confirm": "移除此插件并删除其文件？已加载到正在运行的游戏中的插件需关闭游戏后才能移除。",

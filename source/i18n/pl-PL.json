@@ -315,6 +315,7 @@
     "sprx.status.inactive": "Nie pasuje do bieżącej gry",
     "sprx.enabled": "Włączono",
     "sprx.enabled.sub": "Wpływa tylko na przyszłe uruchomienia pasujących gier",
+    "sprx.imported_fmt": "Zapisany w %s. Zmień go w tym pliku.",
     "sprx.delete": "Usuń wtyczkę",
     "sprx.delete.sub": "Usuwa jej plik z folderu wtyczek",
     "sprx.delete.confirm": "Usunąć tę wtyczkę i jej plik? Wtyczki wczytanej do uruchomionej gry nie można usunąć, dopóki gra nie zostanie zamknięta.",

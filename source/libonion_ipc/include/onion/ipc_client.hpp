@@ -63,6 +63,8 @@ struct SprxInventoryItem {
   std::vector<std::string> titles;
   bool all_games = false;
   std::string error; /* last load failure, empty when none */
+  /* The plugins.ini it was imported from: read-only here, edit that file. */
+  std::string source;
 };
 
 class IPC_Client {
