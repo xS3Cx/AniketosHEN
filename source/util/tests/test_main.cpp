@@ -50,6 +50,7 @@ extern "C" int test_overlay_layout_suite(void);
 extern "C" int test_clock_text_suite(void);
 extern "C" int test_avatar_image_suite(void);
 extern "C" int test_game_icon_uri_suite(void);
+extern "C" int test_game_title_suite(void);
 extern "C" int test_particle_sim_suite(void);
 extern "C" int test_logo_tint_suite(void);
 extern "C" int test_web_icon_suite(void);
@@ -122,6 +123,7 @@ int main() {
   failures += test_clock_text_suite();
   failures += test_avatar_image_suite();
   failures += test_game_icon_uri_suite();
+  failures += test_game_title_suite();
   failures += test_particle_sim_suite();
   failures += test_logo_tint_suite();
   failures += test_web_icon_suite();

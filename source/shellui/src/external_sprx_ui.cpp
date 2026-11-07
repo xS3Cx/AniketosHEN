@@ -47,8 +47,6 @@ bool append_inventory(ps5ui::Page &page) {
   plugin_pages::append_sprx_folder_help(page);
   kbm_toolbox::scan_games();
   refresh_legacy();
-  if (kbm_toolbox::s_games.empty())
-    page.label("id_external_sprx_empty", toolbox_i18n::tr("kbm.games.none"));
   std::vector<plugin_pages::SprxGame> games;
   for (const kbm_toolbox::Game &game : kbm_toolbox::s_games) {
     plugin_pages::SprxGame row{game.id, game.name, game_icon(game.id)};
@@ -58,8 +56,13 @@ bool append_inventory(ps5ui::Page &page) {
                   static_cast<size_t>(std::ranges::count_if(g_ui.external_sprx, [&](const auto &e) {
                     return plugin_pages::legacy_loads_into(e, game.id);
                   }));
+    /* apps and homebrew only while plugins are set up for them */
+    if (row.plugins == 0 && !kbm_toolbox::is_game(game.id))
+      continue;
     games.push_back(std::move(row));
   }
+  if (games.empty())
+    page.label("id_external_sprx_empty", toolbox_i18n::tr("kbm.games.none"));
   plugin_pages::append_sprx_game_links(page, games);
   return true;
 }

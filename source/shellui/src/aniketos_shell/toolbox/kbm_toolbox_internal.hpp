@@ -173,6 +173,8 @@ struct Game {
 };
 extern std::vector<Game> s_games;
 void scan_games();
+/* A PS5 or PS4 game, not an app, a system app or homebrew. */
+bool is_game(const std::string &id);
 std::string game_name(const std::string &title);
 
 } // namespace kbm_toolbox

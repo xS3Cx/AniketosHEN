@@ -4,6 +4,8 @@
  */
 #include "kbm_toolbox_internal.hpp"
 
+#include "aniketos_shell/games/game_title.hpp"
+
 #include "aniketos_ui/small_file.hpp"
 #include "onion_cjson.hpp"
 
@@ -11,13 +13,14 @@
 
 #include <algorithm>
 #include <cctype>
-#include <cstring>
 
 namespace kbm_toolbox {
 
 std::vector<Game> s_games;
 
 namespace {
+
+namespace GameTitle = AniketosShell::GameTitle;
 
 std::string read_param_file(const std::string &path) {
   std::string text;
@@ -35,29 +38,11 @@ std::string name_from_json(const std::string &text) {
   return onion_cjson::string_item(onion_cjson::item(loc, lang), "titleName", "");
 }
 
-/* PS4 titles: the TITLE entry of param.sfo. */
-std::string name_from_sfo(const std::string &d) {
-  auto u32 = [&](size_t at) -> uint32_t {
-    if (at + 4 > d.size())
-      return 0;
-    const auto *b = reinterpret_cast<const uint8_t *>(d.data()) + at;
-    return b[0] | b[1] << 8 | b[2] << 16 | static_cast<uint32_t>(b[3]) << 24;
-  };
-  if (d.size() < 20 || d.compare(0, 4, std::string("\0PSF", 4)) != 0)
-    return {};
-  const uint32_t keys = u32(8), data = u32(12), count = u32(16);
-  for (uint32_t i = 0; i < count && 20 + i * 16 + 16 <= d.size(); ++i) {
-    const size_t e = 20 + i * 16;
-    const size_t k = keys + (u32(e) & 0xffff);
-    const size_t v = data + u32(e + 12);
-    if (k >= d.size() || d.compare(k, 6, std::string("TITLE\0", 6)) != 0)
-      continue;
-    const uint32_t len = u32(e + 4);
-    if (v + len > d.size())
-      return {};
-    return std::string(d.c_str() + v, strnlen(d.c_str() + v, len));
-  }
-  return {};
+/* PS4 titles keep param.sfo in the system's appmeta. */
+std::string ps4_sfo(const std::string &id) {
+  std::string sfo = read_param_file("/user/appmeta/" + id + "/param.sfo");
+  return sfo.empty() ? read_param_file("/system_data/priv/appmeta/" + id + "/param.sfo")
+                     : sfo;
 }
 
 /* Valid UTF-8 without control characters: a homebrew title's bytes end up
@@ -87,7 +72,7 @@ std::string title_name(const std::string &id) {
   if (name.empty())
     name = name_from_json(read_param_file("/user/app/" + id + "/sce_sys/param.json"));
   if (name.empty())
-    name = name_from_sfo(read_param_file("/user/appmeta/" + id + "/param.sfo"));
+    name = GameTitle::SfoString(ps4_sfo(id), "TITLE");
   name = clean_text(name);
   return name.empty() ? id : name;
 }
@@ -99,6 +84,13 @@ std::string lower(std::string s) {
 }
 
 } // namespace
+
+bool is_game(const std::string &id) {
+  std::string json = read_param_file("/user/appmeta/" + id + "/param.json");
+  if (json.empty())
+    json = read_param_file("/user/app/" + id + "/sce_sys/param.json");
+  return GameTitle::IsGame(id, json, ps4_sfo(id));
+}
 
 void scan_games() {
   s_games.clear();

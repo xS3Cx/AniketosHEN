@@ -252,8 +252,9 @@ starts, its `.sprx` / `.prx` plugins (mod menus and the like) are loaded into
 it, and each `.elf` is started as its own process (once; not again while it is
 still running).
 
-**Toolbox → Game Tools → Game plugins** lists the installed games with their
-icons and how many plugins each one has. A game's page has **Load on startup**
+**Toolbox → Game Tools → Game plugins** lists the installed PS5 and PS4 games
+with their icons and how many plugins each one has; other apps show up only
+once they have plugins. A game's page has **Load on startup**
 (all of that game's plugins on or off) and a switch per plugin of its folder
 and of `all/`, with its type (SPRX, PRX, ELF) and what happened at the last
 start (loaded, started, or why it failed). A game's **Options** menu on Home has

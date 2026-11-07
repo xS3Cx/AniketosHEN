@@ -219,7 +219,7 @@ MonoString * CxmlUri_Hook(MonoObject * Instance, MonoString * uri) {
                            ? AniketosIconPath()
                            : "/system_ex/vsh_asset/onionhen.png");
   }
-  if (uri_string.rfind("//usb") != std::string::npos || uri_string.rfind("//data") != std::string::npos || uri_string.rfind("//user//data") != std::string::npos){
+  if (uri_string.rfind("//usb") != std::string::npos || uri_string.rfind("//data") != std::string::npos || uri_string.rfind("//user//") != std::string::npos){ /* //user//appmeta: game icons */
     //replace // with//
     std::string new_uri = uri_string;
     size_t pos = 0;
