@@ -290,6 +290,23 @@ R"JS((function () {
     }
     row.items = rows.concat(row.items);
   }
+  /* The user's own icons (ShellUI/icons/TITLEID.gif ...): the tile row is
+     pointed at the file, so Home loads it like any icon and the native side
+     makes it play. Home caches icons by path, so this is how a reload of
+     Home picks them up at all. */
+  var GI = cfg.gameIcons || { on: false, icons: {} };
+  function useIcons(results) {
+    if (!GI.on || !Array.isArray(results)) return;
+    for (var r = 0; r < results.length; r++) {
+      var items = results[r] && results[r].items;
+      if (!Array.isArray(items)) continue;
+      for (var i = 0; i < items.length; i++) {
+        var item = items[i];
+        var path = item && GI.icons[item.titleId];
+        if (path) item.icon0PathWithTs = path;
+      }
+    }
+  }
   function askTiles() {
     var nm = F.nm;
     if (W.asking || !nm || typeof nm.Get !== 'function') return;
@@ -331,6 +348,8 @@ R"JS((function () {
       return Promise.resolve(query.apply(this, arguments)).then(function (rows) {
         try { addTiles(rows, o.spaceIds); }
         catch (e) { log('tiles: ' + e); }
+        try { useIcons(rows); }
+        catch (e) { log('icons: ' + e); }
         return rows;
       });
     };

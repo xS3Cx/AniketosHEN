@@ -8,6 +8,7 @@
 #include "aniketos_shell/home/home_rows.hpp"
 #include "aniketos_shell/home/home_tabs.hpp"
 #include "aniketos_shell/home/web_tiles.hpp"
+#include "aniketos_shell/system_ui/game_icons.hpp"
 #include "aniketos_shell/rn_scripts/js_string.hpp"
 #include "aniketos_shell/rn_scripts/rn_reload.hpp"
 #include "aniketos_theme/clock/shell_clock.hpp"
@@ -243,7 +244,8 @@ std::string home_script_config(bool home) {
          ", stockCaptions: {game: [" + JsString(games_name) + ", " +
          JsString(games_icon) + "], media: [" + JsString(media_name) + ", " +
          JsString(media_icon) + "]}" +
-         ", webTiles: " + WebTiles::HomeState() + "};";
+         ", webTiles: " + WebTiles::HomeState() +
+         ", gameIcons: " + GameIcons::ScriptConfig() + "};";
 }
 
 bool scripts_allowed() { return !s_disabled && !if_exists(kOff); }

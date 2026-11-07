@@ -19,6 +19,11 @@ int test_icon_paths_name_their_title() {
 }
 
 int test_other_pictures_name_none() {
+  /* Home's rows pointed at the user's own files */
+  TEST_ASSERT_TRUE(TitleId("/user/data/AniketosHEN/ShellUI/icons/PPSA17221.gif") == "PPSA17221");
+  TEST_ASSERT_TRUE(TitleId("/user/data/AniketosHEN/ShellUI/icons/ppsa17221.webp") == "PPSA17221");
+  TEST_ASSERT_TRUE(TitleId("/user/data/AniketosHEN/ShellUI/icons/cache/PPSA17221_fit.gif") == "PPSA17221");
+  TEST_ASSERT_TRUE(TitleId("/user/data/AniketosHEN/ShellUI/avatars/PPSA17221.gif").empty());
   TEST_ASSERT_TRUE(TitleId("").empty());
   TEST_ASSERT_TRUE(TitleId("icon0.png").empty());
   TEST_ASSERT_TRUE(TitleId("/icon0.png").empty());

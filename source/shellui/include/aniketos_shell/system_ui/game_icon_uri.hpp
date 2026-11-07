@@ -43,6 +43,17 @@ inline std::string TitleId(const std::string &uri) {
                     slash - (start == std::string::npos ? 0 : start + 1));
     return IsTitleId(parent) ? parent : std::string();
   }
+  /* Home's tile rows point at the user's own file (home_inject_js):
+     ".../icons/PPSA01234.gif", or its fitted copy ".../PPSA01234_fit.gif". */
+  if (name.size() > 10 && (name[9] == '.' || name.compare(9, 5, "_fit.") == 0)) {
+    std::string stem = path.substr(slash + 1, 9);
+    for (char &ch : stem)
+      ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+    const size_t start = path.rfind('/', slash - 1);
+    const std::string parent = path.substr(start + 1, slash - start - 1);
+    if ((parent == "icons" || parent == "cache") && IsTitleId(stem))
+      return stem;
+  }
   const std::string own = path.substr(slash + 1, 9);
   return name.size() >= 15 && name.compare(9, 6, "_icon0") == 0 &&
                  IsTitleId(own)

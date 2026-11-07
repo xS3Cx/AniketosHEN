@@ -4,6 +4,7 @@
 #include "aniketos_shell/system_ui/account_avatar.hpp"
 #include "aniketos_shell/system_ui/avatar_codec.h"
 #include "aniketos_shell/system_ui/game_icon_uri.hpp"
+#include "aniketos_shell/rn_scripts/js_string.hpp"
 #include "aniketos_ui/home_scene.hpp"
 #include "aniketos_ui/mono_reflect.hpp"
 #include "aniketos_ui/small_file.hpp"
@@ -46,7 +47,9 @@ constexpr size_t kMaxLogged = 128;
 constexpr int kVerifyFrames = 30;
 constexpr int kPlaybackFrames = 15;
 /* ImageAnimationState */
+constexpr int32_t kNone = -1;
 constexpr int32_t kPlaying = 0;
+constexpr int32_t kStopped = 1;
 constexpr int32_t kPaused = 2;
 
 /* What a box was last asked to load: when that has not shown after
@@ -61,6 +64,7 @@ struct Box {
   std::string path;   /* what was loaded: the file or its fitted copy */
   bool set_image = false;
   bool animated = false;
+  bool replayed = false;
   Stage stage = kTryAnimated;
   int frames = 0;
 };
@@ -318,6 +322,7 @@ void load(Box &entry, MonoObject *box, MonoObject *action, MonoObject *option) {
   entry.animated = may_animate(entry, entry.source, entry.path);
   entry.stage = entry.animated ? kTryAnimated : kTryStill;
   entry.frames = kVerifyFrames;
+  entry.replayed = false;
   if (first_time(entry.uri + "|" + entry.path))
     LOG_INFO("[ICONS] %s -> %s animated=%d", entry.uri.c_str(),
              entry.path.c_str(), entry.animated ? 1 : 0);
@@ -411,14 +416,34 @@ void update_playback() {
     }
     const bool want = home && HomeScene::Contains(box) &&
                       on_screen(box, width, height);
+    /* React loads the picture without setting it on the box, so it shows
+       as a still (state None): the box gets it again itself, once a load. */
+    if (state == kNone && entry.stage == kLoaded && !entry.replayed) {
+      entry.replayed = true;
+      AccountAvatar::LoadImage(box, entry.path, nullptr, nullptr, true, true);
+      return;
+    }
     if (state == kPlaying && !want)
       (void)Reflect::Call(box, "Pause", 0);
-    else if (state == kPaused && want)
+    else if ((state == kPaused || state == kStopped) && want)
       (void)Reflect::Call(box, "Play", 0);
   });
 }
 
 } // namespace
+
+std::string ScriptConfig() {
+  std::string icons;
+  if (g_settings.game_icons_enabled) {
+    scan();
+    for (const Icon &icon : s_icons)
+      icons += (icons.empty() ? "" : ",") + JsString(icon.id) + ":" +
+               JsString(icon.path);
+  }
+  return std::string("{\"on\":") +
+         (g_settings.game_icons_enabled ? "true" : "false") + ",\"icons\":{" +
+         icons + "}}";
+}
 
 bool Load(MonoObject *box, MonoString *uri, MonoObject *action,
           MonoObject *option, bool set_image) {
