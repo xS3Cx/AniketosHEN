@@ -63,6 +63,15 @@ static OnPressResult id_debug_jb(OnPressContext &ctx) {
   return OnPressResult::Handled;
 }
 
+static OnPressResult id_debug_plugins(OnPressContext &ctx) {
+  const bool enabled = value_as_int(ctx);
+  if (enabled == g_settings.pluginloader_notify)
+    return OnPressResult::EarlyReturn;
+  g_settings.pluginloader_notify = enabled;
+  ctx.reload_main = true;
+  return OnPressResult::Handled;
+}
+
 static OnPressResult id_app_jailbreak_enabled(OnPressContext &ctx) {
   const bool enabled = value_as_int(ctx);
   if (enabled == g_settings.app_jailbreak_enabled) {
@@ -219,6 +228,7 @@ static const OnPressExactEntry kExact[] = {
     {"id_log_level", id_log_level},
     {"id_app_jailbreak_enabled", id_app_jailbreak_enabled},
     {"id_debug_jb", id_debug_jb},
+    {"id_debug_plugins", id_debug_plugins},
     {"id_custom_game_opts", id_custom_game_opts},
     {"id_ui_lang", id_ui_lang},
     {"id_rest_1", id_rest_1},

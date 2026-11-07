@@ -1115,6 +1115,9 @@ void append_toolbox_debug_group(ps5ui::Group& g) {
               toolbox_i18n::tr("app_jailbreak.enabled.sub"))
       .toggle("id_debug_jb", toolbox_i18n::tr("debug.jb"),
               toolbox_on("id_debug_jb"), toolbox_i18n::tr("debug.jb.sub"))
+      .toggle("id_debug_plugins", toolbox_i18n::tr("debug.plugins"),
+              toolbox_on("id_debug_plugins"),
+              toolbox_i18n::tr("debug.plugins.sub"))
       .text_field("id_np_env", toolbox_i18n::tr("debug.np_env"),
                   toolbox_i18n::tr("debug.np_env.sub"), "basic_latin", "1",
                   "16", "/NP/env", toolbox_i18n::tr("debug.np_env.confirm"),

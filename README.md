@@ -260,7 +260,9 @@ and of `all/`, with its type (SPRX, PRX, ELF) and what happened at the last
 start (loaded, started, or why it failed). A game's **Options** menu on Home has
 **★ Plugins** with the same switches. The choices are kept in
 `/data/AniketosHEN/pluginloader/<TITLEID>/config.ini`, the last start in
-`status.ini` beside it. Plugins listed in `sprx/catalog.ini` or a `plugins.ini`
+`status.ini` beside it. When the game starts, a **PluginLoader** notification
+lists what loaded with its type, for example `GTA-V.elf [ELF] started` (switch it
+off in Toolbox > Debug). Plugins listed in `sprx/catalog.ini` or a `plugins.ini`
 still load and are shown read-only on the game's page
 ([docs/sprx-loader.md](docs/sprx-loader.md)).
 

@@ -122,6 +122,7 @@ static int test_full_schema_roundtrip(void) {
   in.cheats_visual_render = 1;
   in.app_jailbreak_enabled = false;
   in.debug_app_jb_msg = true;
+  in.pluginloader_notify = false;
   in.display_tids = true;
   in.onionhen_game_opts = false;
   in.rest_mode_delay_seconds = 15;
@@ -164,6 +165,7 @@ static int test_full_schema_roundtrip(void) {
   TEST_ASSERT_EQ_INT(in.startup_open_after_load, out.startup_open_after_load);
   TEST_ASSERT_TRUE(out.app_jailbreak_enabled == in.app_jailbreak_enabled);
   TEST_ASSERT_TRUE(out.debug_app_jb_msg == in.debug_app_jb_msg);
+  TEST_ASSERT_TRUE(out.pluginloader_notify == in.pluginloader_notify);
   TEST_ASSERT_TRUE(out.display_tids == in.display_tids);
   TEST_ASSERT_TRUE(out.onionhen_game_opts == in.onionhen_game_opts);
   TEST_ASSERT_EQ_U64(in.rest_mode_delay_seconds, out.rest_mode_delay_seconds);

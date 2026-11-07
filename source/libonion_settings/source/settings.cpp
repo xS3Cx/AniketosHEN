@@ -648,6 +648,9 @@ bool apply_parser(IniParser *parser, Settings *out) {
   out->debug_app_jb_msg =
       parse_bool(ini_get(parser, "app_jailbreak.debug_notifications"),
                  out->debug_app_jb_msg);
+  out->pluginloader_notify =
+      parse_bool(ini_get(parser, "pluginloader.notifications"),
+                 out->pluginloader_notify);
   if (const char *exact = ini_get(parser, "app_jailbreak.exact_title_ids")) {
     (void)parse_allowlist_csv(
         exact, valid_exact_title_id,
@@ -838,6 +841,11 @@ std::string settings_serialize(const Settings &in) {
            in.app_jailbreak_allowlist.title_id_prefixes,
            in.app_jailbreak_allowlist.title_id_prefix_count) +
        "\n";
+  b += "\n";
+  b += "[pluginloader]\n";
+  b += "# notifications names the plugins a game's plugin folder loaded, with their type.\n";
+  b += "# Available values: true, false\n";
+  b += "notifications=" + bool_text(in.pluginloader_notify) + "\n";
   b += "\n";
   b += "[cooling]\n";
   b += "# fan_control chooses between stock fan behavior and a manual threshold.\n";

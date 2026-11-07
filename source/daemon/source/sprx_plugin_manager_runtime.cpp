@@ -1,8 +1,11 @@
 #include "sprx_plugin_manager_runtime.hpp"
 
 #include "daemon_ops.hpp"
+#include "globalconf.hpp"
 
 #include <onion/log.h>
+#include <onion/notify.h>
+#include <onion/notify_i18n.h>
 #include <onion/payload.h>
 #include <onion/plugin_folder.hpp>
 #include <onion/proc_query.h>
@@ -194,6 +197,38 @@ bool is_current_target(Runtime &current, pid_t pid, uint32_t app_id,
   return true;
 }
 
+/* "PluginLoader" and one line per plugin: name [TYPE] and how it went, so
+   the player sees what the folder loaded. */
+void notify_loaded(const std::vector<onion::pluginloader::Plugin> &plugins,
+                   const onion::pluginloader::Status &status) {
+  if (!g_settings.snapshot().pluginloader_notify)
+    return;
+  constexpr size_t kMaxLines = 8;
+  std::string lines;
+  size_t shown = 0;
+  for (const auto &plugin : plugins) {
+    const auto found = status.find(plugin.name);
+    if (found == status.end())
+      continue;
+    if (++shown > kMaxLines) {
+      lines += "\n...";
+      break;
+    }
+    const std::string &state = found->second;
+    const char *key = state == "loaded"    ? "notify.pluginloader.loaded"
+                      : state == "started" ? "notify.pluginloader.started"
+                      : state == "running" ? "notify.pluginloader.running"
+                                           : "notify.pluginloader.failed";
+    char line[256];
+    std::snprintf(line, sizeof(line), "%s%s [%s] %s", lines.empty() ? "" : "\n",
+                  plugin.name.c_str(), onion::pluginloader::kind_name(plugin.kind),
+                  onion_notify_tr(key));
+    lines += line;
+  }
+  if (!lines.empty())
+    onion_notify(true, "notify.pluginloader.summary", lines.c_str());
+}
+
 /* The title's folder plugins: modules through the SPRX loader (lock held),
    then each ELF as its own process. Leaves the status for the Toolbox. */
 void load_folder_plugins(Runtime &current, std::unique_lock<std::mutex> &lock,
@@ -246,6 +281,7 @@ void load_folder_plugins(Runtime &current, std::unique_lock<std::mutex> &lock,
     LOG_INFO("[pluginloader] %.*s: %s %s", static_cast<int>(title_id.size()),
              title_id.data(), plugin.name.c_str(), status[plugin.name].c_str());
   }
+  notify_loaded(plugins, status);
   if (!pl::save_status(kPluginLoaderRoot, title_id, status))
     LOG_WARN("[pluginloader] cannot write the status of %.*s",
              static_cast<int>(title_id.size()), title_id.data());

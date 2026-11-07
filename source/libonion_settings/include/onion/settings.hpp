@@ -259,6 +259,8 @@ struct Settings {
   int cheats_visual_render = 0;
   bool app_jailbreak_enabled = true;
   bool debug_app_jb_msg = false;
+  // [pluginloader] a notification naming what a game's plugin folder loaded
+  bool pluginloader_notify = true;
   AppJailbreakAllowlist app_jailbreak_allowlist{};
 
   // [home_screen], [game_menu]
