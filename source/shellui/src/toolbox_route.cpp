@@ -37,6 +37,7 @@ RouteResult resolve_resource(const RouteInput &in) {
       parse_payload_center_resource(in.resource);
   out.flags.is_payload_center = pldc == PayloadCenterPage::Center;
   out.flags.is_payload_autostart = pldc == PayloadCenterPage::Autostart;
+  out.flags.is_payload_add = pldc == PayloadCenterPage::AddPayload;
   out.flags.is_payload_order = pldc == PayloadCenterPage::Order;
   out.flags.is_payload_browse = pldc == PayloadCenterPage::Browse;
   out.flags.is_payload_detail = pldc == PayloadCenterPage::Detail;
@@ -47,6 +48,7 @@ RouteResult resolve_resource(const RouteInput &in) {
   out.flags.is_payload_progress = pldc == PayloadCenterPage::Progress;
   const UpdatePage update = parse_update_resource(in.resource);
   out.flags.is_hen_update = update == UpdatePage::Hub;
+  out.flags.is_hen_update_options = update == UpdatePage::Options;
   out.flags.is_hen_update_releases = update == UpdatePage::Releases;
   out.flags.is_hen_update_progress = update == UpdatePage::Progress;
 
@@ -95,6 +97,8 @@ RouteResult resolve_resource(const RouteInput &in) {
     out.page = Page::PayloadCenter;
   } else if (out.flags.is_payload_autostart) {
     out.page = Page::PayloadAutostart;
+  } else if (out.flags.is_payload_add) {
+    out.page = Page::PayloadAdd;
   } else if (out.flags.is_payload_order) {
     out.page = Page::PayloadOrder;
   } else if (out.flags.is_payload_browse) {
@@ -111,6 +115,8 @@ RouteResult resolve_resource(const RouteInput &in) {
     out.page = Page::PayloadProgress;
   } else if (out.flags.is_hen_update) {
     out.page = Page::HenUpdate;
+  } else if (out.flags.is_hen_update_options) {
+    out.page = Page::HenUpdateOptions;
   } else if (out.flags.is_hen_update_releases) {
     out.page = Page::HenUpdateReleases;
   } else if (out.flags.is_hen_update_progress) {

@@ -17,7 +17,6 @@ void *load_payload_thread(void *args);
 namespace {
 
 constexpr const char *kRunPrefix = "id_payload_run_";
-constexpr const char *kEnabledPrefix = "id_payload_enabled_";
 constexpr const char *kDelayPrefix = "id_payload_delay_";
 
 PayloadEntry *payload_for_control(const std::string &control_id,
@@ -122,17 +121,6 @@ bool shellui_payload_set_autostart(PayloadEntry &entry, bool enabled) {
   return saved;
 }
 
-static OnPressResult prefix_id_enabled(OnPressContext &ctx) {
-  if (ctx.id.rfind(kEnabledPrefix, 0) != 0)
-    return OnPressResult::NotMine;
-  PayloadEntry *entry = payload_for_control(ctx.id, kEnabledPrefix);
-  if (!entry)
-    return OnPressResult::Consumed;
-
-  (void)shellui_payload_set_autostart(*entry, control_enabled(ctx.value));
-  return OnPressResult::Consumed;
-}
-
 static OnPressResult set_payload_delay(OnPressContext &ctx) {
   ctx.dirty = false;
   PayloadEntry *entry = payload_for_control(ctx.id, kDelayPrefix);
@@ -208,7 +196,6 @@ static const OnPressPrefixEntry kPrefix[] = {
     {"id_payload_update_", update_payload},
     {"id_payload_remove_", remove_payload},
     {kDelayPrefix, set_payload_delay},
-    {kEnabledPrefix, prefix_id_enabled},
     {kRunPrefix, prefix_id_payload_run},
 };
 

@@ -172,16 +172,11 @@ bool try_exact_value(const std::string &id, std::string &out) {
 
 bool try_payload_control_value(const std::string &id, std::string &out) {
   constexpr std::string_view kRunPrefix = "id_payload_run_";
-  constexpr std::string_view kEnabledPrefix = "id_payload_enabled_";
   constexpr std::string_view kDelayPrefix = "id_payload_delay_";
   std::string_view payload_id;
-  bool is_run = false;
   bool is_delay = false;
   if (id.starts_with(kRunPrefix)) {
     payload_id = std::string_view(id).substr(kRunPrefix.size());
-    is_run = true;
-  } else if (id.starts_with(kEnabledPrefix)) {
-    payload_id = std::string_view(id).substr(kEnabledPrefix.size());
   } else if (id.starts_with(kDelayPrefix)) {
     payload_id = std::string_view(id).substr(kDelayPrefix.size());
     is_delay = true;
@@ -197,10 +192,8 @@ bool try_payload_control_value(const std::string &id, std::string &out) {
       out = int_str(config.delay_seconds);
       return true;
     }
-    out = bool_str(is_run
-                       ? shellui_payload_resolve_recorded_pid(entry.tid.c_str(),
-                                                              nullptr, 0) > 1
-                       : if_exists((entry.shellui_path + ".auto_start").c_str()));
+    out = bool_str(shellui_payload_resolve_recorded_pid(entry.tid.c_str(),
+                                                        nullptr, 0) > 1);
     return true;
   }
   return false;

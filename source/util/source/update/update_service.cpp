@@ -71,6 +71,12 @@ std::string channel_from_setting(int value) {
   return value == 1 ? std::string(kBetaChannel) : std::string(kStableChannel);
 }
 
+bool valid_update_elf(const std::uint8_t *header, std::size_t size) {
+  if (!onion::payload_catalog::has_elf_header(header, size) || size < 20)
+    return false;
+  return header[18] == 0x3e && header[19] == 0x00;
+}
+
 struct WorkerArg {
   Service *service = nullptr;
   bool download = false;
@@ -405,7 +411,7 @@ void Service::worker_download(std::string channel, std::uint32_t task_id) {
 
   SHA256_CTX sha{};
   sha256_init(&sha);
-  std::array<std::uint8_t, 16> header{};
+  std::array<std::uint8_t, 20> header{};
   std::size_t header_size = 0;
   std::uint64_t received = 0;
   bool write_failed = false;
@@ -494,7 +500,7 @@ void Service::worker_download(std::string channel, std::uint32_t task_id) {
     return;
   }
   if (header_size < header.size() ||
-      !onion::payload_catalog::has_elf_header(header.data(), header_size)) {
+      !valid_update_elf(header.data(), header_size)) {
     unlink(temp_path.c_str());
     finish(Status::State::Error, "elf");
     return;

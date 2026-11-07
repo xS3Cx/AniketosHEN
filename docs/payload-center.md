@@ -1,23 +1,22 @@
-# Payload Center
+# Payload Manager
 
-Payload Center is the Toolbox page for managing user payloads. It downloads a
-catalog over HTTPS, browses and installs entries, enables payloads for
-autostart, and removes payloads it installed. The default catalog is the one
-published by this repository.
+Payload Manager is the Toolbox page for managing user payloads. It downloads a
+catalog over HTTPS, browses and installs entries, adds payloads to autostart,
+and removes payloads it installed. The default catalog is the one published by
+this repository.
 
 Open it from **Toolbox → Payload Manager**.
 
 ## Pages
 
-Opening **Payload Center** goes straight to **Installed**. That page shows
-every installed payload with its version, Enabled/Disabled state,
-Running/Stopped state and autostart position, plus links to **Browse Catalog**
-and **Autostart**:
+Opening **Payload Manager** goes straight to **Installed**. That page shows
+every installed payload with its version, Running/Stopped state and autostart
+position, plus links to **Browse Catalog** and **Autostart**:
 
 - **Installed** — selecting a payload opens its per-payload page. The header
   shows the FTP drop path and the USB drop path; **Refresh list** rescans both.
-- **Autostart** — the master switch plus an ordered list of the enabled
-  payloads. The top row loads first.
+- **Autostart** — the master switch, **Add payload** and an ordered list of the
+  payloads that start with AniketosHEN. The top row loads first.
 - **Browse Catalog** — the online catalog with icons, category/version/status
   subtitles and search. **Catalog settings** at the bottom controls sources,
   cache and the last refresh date.
@@ -29,26 +28,30 @@ entry only.
 
 Selecting an installed payload opens `payload_<id>.xml`. That page has:
 
-- **Enabled** — adds or removes the adjacent `.auto_start` marker.
 - **Current session** — starts or stops the payload now.
-- **Update** only when the catalog has a newer version.
 - **Remove** only for payloads under `/data/AniketosHEN/payloads`.
+- Metadata: version, source, updated date, category, filename, installed date,
+  size and SHA-256.
+- **Update** only when the catalog has a newer version.
 
-Enabling a payload appends it to the end of the boot order. Disabling removes
-the marker only: a payload that is already running keeps running until it is
-stopped from **Current session**. The old priority text field, Move up/Move
-down buttons and separate "Auto-start next time" toggle are gone.
+Autostart membership is managed only from **Autostart**. Adding a payload there
+appends it to the end of the boot order; disabling or deleting it from its
+Autostart row removes the marker only, so a payload that is already running
+keeps running until it is stopped from **Current session**. The old priority
+text field, Move up/Move down buttons, Enabled toggle and separate "Auto-start
+next time" toggle are gone.
 
-The Installed status line is a combination of Enabled/Disabled,
-Running/Stopped, the 1-based autostart position and, when available, an update
-marker.
+The Installed status line is a combination of Running/Stopped, the 1-based
+autostart position and, when available, an update marker.
 
 ### Autostart
 
-Autostart only lists enabled payloads, ordered by the payloads' persisted
-`priority` (`999 - index * 10`, so the first row has the highest priority).
-The master switch is `[payload_center] autostart_enabled` in `config.ini`; when
-it is off the bootstrapper returns before scanning.
+Autostart lists only payloads with an `.auto_start` marker, ordered by their
+persisted `priority` (`999 - index * 10`, so the first row has the highest
+priority). **Add payload** lists installed payloads that are not yet in
+autostart; selecting one appends it to the end of the order. The master switch
+is `[payload_center] autostart_enabled` in `config.ini`; when it is off the
+bootstrapper returns before scanning.
 
 Pressing an Autostart row opens a small **Position** page with a **1..N**
 position list and a **Delay (s)** field. Selecting a position moves that
@@ -151,7 +154,7 @@ requires an explicit confirmation in the UI; the util daemon refuses it unless
 the install request sets `replace`.
 
 Newly installed payloads do not get an `.auto_start` marker, so autostart is
-off by default. Enable them from **Manage**.
+off by default. Add them from **Autostart → Add payload**.
 
 ## Catalog schema
 
@@ -291,5 +294,5 @@ autoload=false
 ```
 
 `kstuff` remains embedded as a fallback. Both kstuff and ShadowMount have
-Toolbox toggles; ShadowMount's toggle lives on the Plugins page. Their behavior
-is unchanged by the Payload Center rework.
+toggles on **Payload Manager → Included Payloads**. Their behavior is unchanged
+by the Payload Center rework.

@@ -448,8 +448,6 @@ static bool payload_config_model(ps5ui::Node& model,
     return true;
   }
   const bool running = shellui_payload_is_running(found->tid.c_str());
-  const std::string auto_path = found->shellui_path + ".auto_start";
-  const bool auto_start = if_exists(auto_path.c_str());
   onion_payload_config_load(found->shellui_path.c_str(), &found->config);
   const PayloadMetaView meta = payload_meta_view(found->shellui_path);
   const int position = payload_enabled_position(g_ui.payloads_list, *found);
@@ -457,9 +455,6 @@ static bool payload_config_model(ps5ui::Node& model,
   page.label("id_payload_path", found->path)
       .label("id_payload_status", payload_list_status(*found, position),
              ps5ui::Style::Center)
-      .toggle("id_payload_enabled_" + found->id,
-              toolbox_i18n::tr("payload_center.enabled"), auto_start,
-              toolbox_i18n::tr("payload_center.enabled.sub"))
       .toggle("id_payload_run_" + found->id,
               toolbox_i18n::tr("payload.current_session"), running,
               toolbox_i18n::tr("payload.current_session.sub"));
@@ -484,9 +479,6 @@ static bool payload_config_model(ps5ui::Node& model,
       stat(found->shellui_path.c_str(), &payload_stat) == 0
           ? static_cast<long long>(payload_stat.st_size)
           : 0;
-  page.label("id_payload_meta_size",
-             toolbox_i18n::format("payload_center.meta.size_fmt",
-                                  format_size(payload_size).c_str()));
   if (meta.present) {
     page.label("id_payload_meta_version",
                toolbox_i18n::format("payload_center.meta.version_fmt",
@@ -512,8 +504,13 @@ static bool payload_config_model(ps5ui::Node& model,
                                                           : meta.filename.c_str()))
         .label("id_payload_meta_installed",
                toolbox_i18n::format("payload_center.meta.installed_fmt",
-                                    format_installed(meta.installed_at).c_str()))
-        .label("id_payload_meta_checksum",
+                                    format_installed(meta.installed_at).c_str()));
+  }
+  page.label("id_payload_meta_size",
+             toolbox_i18n::format("payload_center.meta.size_fmt",
+                                  format_size(payload_size).c_str()));
+  if (meta.present) {
+    page.label("id_payload_meta_checksum",
                toolbox_i18n::format("payload_center.meta.checksum_fmt",
                                     meta.checksum.empty()
                                         ? "-"

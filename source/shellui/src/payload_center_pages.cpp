@@ -304,6 +304,10 @@ bool autostart_model(ps5ui::Node &model) {
   page.toggle("id_pldc_master", toolbox_i18n::tr("payload_center.master"),
               g_settings.payload_autostart_enabled,
               toolbox_i18n::tr("payload_center.master.sub"))
+      .link("id_pldc_add_payload",
+            toolbox_i18n::tr("payload_center.add_payload"),
+            "pldc_add_payload.xml",
+            toolbox_i18n::tr("payload_center.add_payload.sub"))
       .label("id_pldc_autostart_hint",
              toolbox_i18n::tr("payload_center.autostart.order_hint"),
              ps5ui::Style::Center);
@@ -319,6 +323,25 @@ bool autostart_model(ps5ui::Node &model) {
   if (position == 0)
     page.label("id_pldc_autostart_empty",
                toolbox_i18n::tr("payload_center.autostart.empty"),
+               ps5ui::Style::Center);
+  model = page.root();
+  return true;
+}
+
+bool add_payload_model(ps5ui::Node &model) {
+  g_ui.payloads_list = shellui_scan_payloads();
+  ps5ui::Page page("id_pldc_add_payload",
+                   toolbox_i18n::tr("payload_center.add_payload"));
+  int available = 0;
+  for (const auto &entry : g_ui.payloads_list) {
+    if (marker_present(entry))
+      continue;
+    ++available;
+    page.button("id_pldc_add_pick_" + entry.id, display_name(entry));
+  }
+  if (available == 0)
+    page.label("id_pldc_add_empty",
+               toolbox_i18n::tr("payload_center.add_payload.empty"),
                ps5ui::Style::Center);
   model = page.root();
   return true;
@@ -574,6 +597,12 @@ void generate_autostart_xml(std::string &xml) {
   ps5ui::Node model;
   autostart_model(model);
   xml = onion::shellui::settings::publish(model, autostart_model);
+}
+
+void generate_add_payload_xml(std::string &xml) {
+  ps5ui::Node model;
+  add_payload_model(model);
+  xml = onion::shellui::settings::publish(model, add_payload_model);
 }
 
 void generate_order_xml(std::string &xml) {

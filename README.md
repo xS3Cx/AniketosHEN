@@ -73,7 +73,7 @@ existing OnionHEN installation, and adds a large set of features of its own.
 - **System preparation** — raise privileges, remount filesystems, and block the update partition
 - **fSELF / fPKG** - bundled kstuff for homebrew SELF / PKG; embedded as a fallback and off by default, can be enabled in the Toolbox or `[kstuff] autoload=true`
 - **Plugin runtime** — discovers, validates, starts, stops, and removes descriptor-bearing plugin ELFs
-- **Payload Center** - manage installed payloads, autostart order, a curated online catalog, per-entry icons, categories, search, updates and removal over HTTPS; see [docs/payload-center.md](docs/payload-center.md)
+- **Payload Manager** - manage installed payloads, autostart order, a curated online catalog, per-entry icons, categories, search, updates and removal over HTTPS; see [docs/payload-center.md](docs/payload-center.md)
 - **HEN Update Manager** - check GitHub Releases for a newer AniketosHEN build,
   download it with a mandatory SHA-256 check and reboot to apply it; see
   [docs/update.md](docs/update.md)
@@ -86,7 +86,7 @@ existing OnionHEN installation, and adds a large set of features of its own.
 - **Resilient runtime** — the critical daemon and utility daemon run apart; the main daemon can restart the utility
 - **Shared configuration** — the Toolbox and daemons use one versioned `config.ini`
 - **Toolbox in 14 languages**
-- **External plugins** - FTP server, ShadowMount+ and DPI v2 as optional OnionHEN plugins (see [Run](#run)); ShadowMount's built-in autoload is off by default and can be enabled from the Plugins page
+- **External plugins** - FTP server, ShadowMount+ and DPI v2 as optional OnionHEN plugins (see [Run](#run)); ShadowMount's built-in autoload is off by default and can be enabled from Payload Manager → Included Payloads
 
 ### Added by AniketosHEN
 

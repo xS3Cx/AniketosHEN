@@ -199,6 +199,9 @@ uint64_t GetManifestResourceStream_Hook(uint64_t inst, MonoString *FileName) {
   case toolbox::Page::PayloadAutostart:
     onion::shellui::payload_center::generate_autostart_xml(new_xml_string);
     break;
+  case toolbox::Page::PayloadAdd:
+    onion::shellui::payload_center::generate_add_payload_xml(new_xml_string);
+    break;
   case toolbox::Page::PayloadOrder:
     onion::shellui::payload_center::generate_order_xml(new_xml_string);
     break;
@@ -222,6 +225,9 @@ uint64_t GetManifestResourceStream_Hook(uint64_t inst, MonoString *FileName) {
     break;
   case toolbox::Page::HenUpdate:
     generate_hen_update_xml(new_xml_string);
+    break;
+  case toolbox::Page::HenUpdateOptions:
+    generate_hen_update_options_xml(new_xml_string);
     break;
   case toolbox::Page::HenUpdateReleases:
     generate_hen_update_releases_xml(new_xml_string);

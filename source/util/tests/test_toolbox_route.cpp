@@ -459,6 +459,7 @@ static int test_payload_center_pages(void) {
   const std::pair<const char *, Page> pages[] = {
       {"pldc_center.xml", Page::PayloadCenter},
       {"pldc_autostart.xml", Page::PayloadAutostart},
+      {"pldc_add_payload.xml", Page::PayloadAdd},
       {"pldc_order.xml", Page::PayloadOrder},
       {"pldc_browse.xml", Page::PayloadBrowse},
       {"pldc_detail.xml", Page::PayloadDetail},
@@ -476,6 +477,7 @@ static int test_payload_center_pages(void) {
   TEST_ASSERT_TRUE(
       resolve_resource(make_in(cfg_res("pldc_list.xml"))).page == Page::None);
   TEST_ASSERT_TRUE(restores_parent_on_pop(Page::PayloadDetail));
+  TEST_ASSERT_TRUE(restores_parent_on_pop(Page::PayloadAdd));
   TEST_ASSERT_TRUE(restores_parent_on_pop(Page::PayloadOrder));
   TEST_ASSERT_TRUE(restores_parent_on_pop(Page::PayloadPostInstall));
   TEST_ASSERT_TRUE(restores_parent_on_pop(Page::PayloadProgress));
@@ -502,6 +504,7 @@ static int test_payload_order_restores_parent(void) {
 static int test_update_pages(void) {
   const std::pair<const char *, Page> pages[] = {
       {"hen_update.xml", Page::HenUpdate},
+      {"hen_update_options.xml", Page::HenUpdateOptions},
       {"hen_update_releases.xml", Page::HenUpdateReleases},
       {"hen_update_progress.xml", Page::HenUpdateProgress},
   };
@@ -515,6 +518,7 @@ static int test_update_pages(void) {
       resolve_resource(make_in(cfg_res("hen_update_unknown.xml"))).page ==
       Page::None);
   TEST_ASSERT_TRUE(!restores_parent_on_pop(Page::HenUpdate));
+  TEST_ASSERT_TRUE(restores_parent_on_pop(Page::HenUpdateOptions));
   TEST_ASSERT_TRUE(restores_parent_on_pop(Page::HenUpdateReleases));
   TEST_ASSERT_TRUE(restores_parent_on_pop(Page::HenUpdateProgress));
   return 0;

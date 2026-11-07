@@ -65,6 +65,7 @@ constexpr OnPressDomain onpress_domain_for_page(Page page) {
   case Page::DynamicPlugin:
     return OnPressDomain::DynamicPlugin;
   case Page::PayloadAutostart:
+  case Page::PayloadAdd:
   case Page::PayloadOrder:
   case Page::PayloadBrowse:
   case Page::PayloadDetail:
@@ -75,6 +76,7 @@ constexpr OnPressDomain onpress_domain_for_page(Page page) {
   case Page::PayloadProgress:
     return OnPressDomain::Progress;
   case Page::HenUpdate:
+  case Page::HenUpdateOptions:
   case Page::HenUpdateReleases:
   case Page::HenUpdateProgress:
     return OnPressDomain::Update;

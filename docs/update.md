@@ -64,11 +64,14 @@ automatically.
 
 ## Manual flow
 
-**Toolbox > HEN Update Manager** shows the installed version, the cached latest
-version, the selected channel, the last check time and two switches
-(`auto_check` and the beta channel). **Check for updates now** starts a util
-worker and opens the progress page. **Update options** opens the release page,
-which renders the cached manifest and a **Download update** button.
+**Toolbox > HEN Update Manager** shows only the installed version and the last
+check time. When a newer build exists it adds **Update available: version** and
+the single action button changes from **Check for updates now** to
+**Download version** and then to **Reboot to apply**.
+
+**Update options** is a separate page with the `auto_check` and beta-channel
+switches. **Download from GitHub** opens the latest-release page, which renders
+the cached manifest and a **Download** button.
 
 The progress page polls the util service and shows the `check`, `download`,
 `verify` and `save` phases. Back cancels the running task. Successful checks and

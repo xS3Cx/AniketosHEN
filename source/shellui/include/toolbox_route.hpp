@@ -34,6 +34,7 @@ enum class Page : unsigned char {
   RedirectOgDebug,    /**< og_debug.xml → debug_settings resource */
   Kbm,                /**< Keyboard and Mouse pages (kbm.xml, kbm-*.xml) */
   PayloadAutostart,
+  PayloadAdd,
   PayloadOrder,
   PayloadBrowse,
   PayloadDetail,
@@ -42,6 +43,7 @@ enum class Page : unsigned char {
   PayloadPostInstall,
   PayloadProgress,
   HenUpdate,
+  HenUpdateOptions,
   HenUpdateReleases,
   HenUpdateProgress,
 };
@@ -79,6 +81,7 @@ struct RouteFlags {
   bool is_remote_play = false;
   bool is_plugin_progress = false;
   bool is_payload_autostart = false;
+  bool is_payload_add = false;
   bool is_payload_order = false;
   bool is_payload_browse = false;
   bool is_payload_detail = false;
@@ -87,6 +90,7 @@ struct RouteFlags {
   bool is_payload_post_install = false;
   bool is_payload_progress = false;
   bool is_hen_update = false;
+  bool is_hen_update_options = false;
   bool is_hen_update_releases = false;
   bool is_hen_update_progress = false;
 };
@@ -108,16 +112,18 @@ constexpr bool restores_parent_on_pop(Page page) {
          page == Page::SprxConfig ||
          page == Page::DynamicPlugin ||
          page == Page::PluginProgress ||
-         page == Page::PayloadDetail || page == Page::PayloadOrder ||
+         page == Page::PayloadDetail || page == Page::PayloadAdd ||
+         page == Page::PayloadOrder ||
          page == Page::PayloadPostInstall ||
-         page == Page::PayloadProgress || page == Page::HenUpdateReleases ||
-         page == Page::HenUpdateProgress;
+         page == Page::PayloadProgress || page == Page::HenUpdateOptions ||
+         page == Page::HenUpdateReleases || page == Page::HenUpdateProgress;
 }
 
 enum class PayloadCenterPage : unsigned char {
   None = 0,
   Center,
   Autostart,
+  AddPayload,
   Order,
   Browse,
   Detail,
@@ -173,6 +179,7 @@ inline bool settings_plugins_relative(std::string_view resource,
 enum class UpdatePage : unsigned char {
   None = 0,
   Hub,
+  Options,
   Releases,
   Progress,
 };
@@ -183,6 +190,8 @@ inline UpdatePage parse_update_resource(std::string_view resource) {
     return UpdatePage::None;
   if (relative == "hen_update.xml")
     return UpdatePage::Hub;
+  if (relative == "hen_update_options.xml")
+    return UpdatePage::Options;
   if (relative == "hen_update_releases.xml")
     return UpdatePage::Releases;
   if (relative == "hen_update_progress.xml")
@@ -198,6 +207,8 @@ inline PayloadCenterPage parse_payload_center_resource(std::string_view resource
     return PayloadCenterPage::Center;
   if (relative == "pldc_autostart.xml")
     return PayloadCenterPage::Autostart;
+  if (relative == "pldc_add_payload.xml")
+    return PayloadCenterPage::AddPayload;
   if (relative == "pldc_order.xml")
     return PayloadCenterPage::Order;
   if (relative == "pldc_browse.xml")

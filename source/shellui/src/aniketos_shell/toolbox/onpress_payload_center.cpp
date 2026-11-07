@@ -138,6 +138,23 @@ OnPressResult remove_source(OnPressContext &ctx) {
   return OnPressResult::Consumed;
 }
 
+OnPressResult add_pick(OnPressContext &ctx) {
+  ctx.dirty = false;
+  constexpr const char *kPrefix = "id_pldc_add_pick_";
+  if (ctx.id.rfind(kPrefix, 0) != 0)
+    return OnPressResult::NotMine;
+  const std::string identity = ctx.id.substr(std::string(kPrefix).size());
+  if (g_ui.payloads_list.empty())
+    g_ui.payloads_list = shellui_scan_payloads();
+  PayloadEntry *entry = entry_by_identity(identity);
+  if (!entry)
+    return OnPressResult::Consumed;
+  (void)shellui_payload_set_autostart(*entry, true);
+  notify("notify.payload_center.autostart_added", entry->name.c_str());
+  toolbox_pop_page();
+  return OnPressResult::Consumed;
+}
+
 OnPressResult pick_order(OnPressContext &ctx) {
   ctx.dirty = false;
   constexpr const char *kPrefix = "id_pldc_pick_order_";
@@ -270,6 +287,7 @@ const OnPressExactEntry kExact[] = {
 };
 
 const OnPressPrefixEntry kPrefix[] = {
+    {"id_pldc_add_pick_", add_pick},
     {"id_pldc_pick_order_", pick_order},
     {"id_pldc_pick_", pick},
     {"id_pldc_remove_source_", remove_source},

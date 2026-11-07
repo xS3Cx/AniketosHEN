@@ -137,48 +137,26 @@ bool hen_update_model(ps5ui::Node &model) {
   const bool have_check = read_check_info_alias(&check);
   const std::string checked_at =
       have_check ? format_time(check.fetched_at) : std::string{};
+  onion::update::ReadyInfo ready;
+  const bool have_ready = read_ready(&ready);
 
   page.label("id_update_installed",
              toolbox_i18n::format("hen_update.installed_fmt",
                                   installed_text.c_str()),
-             ps5ui::Style::Center)
-      .label("id_update_latest",
-             have_manifest
-                 ? toolbox_i18n::format("hen_update.latest_fmt",
-                                        manifest.version.c_str())
-                 : toolbox_i18n::tr("hen_update.latest_none"),
-             ps5ui::Style::Center)
-      .label("id_update_state",
-             newer ? toolbox_i18n::tr("hen_update.update_available")
-                   : (have_manifest ? toolbox_i18n::tr("hen_update.up_to_date")
-                                    : toolbox_i18n::tr("hen_update.not_checked")),
-             ps5ui::Style::Center)
-      .label("id_update_channel",
-             toolbox_i18n::format("hen_update.channel_fmt",
-                                  channel_title(channel).c_str()),
              ps5ui::Style::Center)
       .label("id_update_last_check",
              checked_at.empty()
                  ? toolbox_i18n::tr("hen_update.last_check_never")
                  : toolbox_i18n::format("hen_update.last_check_fmt",
                                         checked_at.c_str()),
-             ps5ui::Style::Center)
-      .toggle("id_update_auto_check",
-              toolbox_i18n::tr("hen_update.auto_check"),
-              g_settings.update_auto_check,
-              toolbox_i18n::tr("hen_update.auto_check.sub"))
-      .toggle("id_update_beta", toolbox_i18n::tr("hen_update.beta"),
-              g_settings.update_channel == onion::kUpdateChannelBeta,
-              toolbox_i18n::tr("hen_update.beta.sub"))
-      .button("id_update_check", toolbox_i18n::tr("hen_update.check"),
-              toolbox_i18n::tr("hen_update.check.sub"))
-      .link("id_update_download_page",
-            toolbox_i18n::tr("hen_update.download"),
-            "hen_update_releases.xml",
-            toolbox_i18n::tr("hen_update.download.sub"));
-
-  onion::update::ReadyInfo ready;
-  if (read_ready(&ready)) {
+             ps5ui::Style::Center);
+  if (newer && !have_ready) {
+    page.label("id_update_state",
+               toolbox_i18n::format("hen_update.update_available_fmt",
+                                    manifest.version.c_str()),
+               ps5ui::Style::Center);
+  }
+  if (have_ready) {
     page.label("id_update_ready",
                toolbox_i18n::format("hen_update.ready_fmt",
                                     ready.version.c_str()),
@@ -202,7 +180,36 @@ bool hen_update_model(ps5ui::Node &model) {
                 std::nullopt, ps5ui::Style::None,
                 toolbox_i18n::tr("hen_update.delete.confirm"),
                 toolbox_i18n::confirm_phrase());
+  } else if (newer) {
+    page.button("id_update_download",
+                toolbox_i18n::format("hen_update.download_fmt",
+                                     manifest.version.c_str()),
+                toolbox_i18n::tr("hen_update.download_action.sub"));
+  } else {
+    page.button("id_update_check", toolbox_i18n::tr("hen_update.check"),
+                toolbox_i18n::tr("hen_update.check.sub"));
   }
+  page.link("id_update_download_page",
+            toolbox_i18n::tr("hen_update.download"),
+            "hen_update_releases.xml",
+            toolbox_i18n::tr("hen_update.download.sub"))
+      .link("id_update_options", toolbox_i18n::tr("hen_update.options"),
+            "hen_update_options.xml",
+            toolbox_i18n::tr("hen_update.options.sub"));
+  model = page.root();
+  return true;
+}
+
+bool hen_update_options_model(ps5ui::Node &model) {
+  ps5ui::Page page("id_hen_update_options",
+                   toolbox_i18n::tr("hen_update.options"));
+  page.toggle("id_update_auto_check",
+              toolbox_i18n::tr("hen_update.auto_check"),
+              g_settings.update_auto_check,
+              toolbox_i18n::tr("hen_update.auto_check.sub"))
+      .toggle("id_update_beta", toolbox_i18n::tr("hen_update.beta"),
+              g_settings.update_channel == onion::kUpdateChannelBeta,
+              toolbox_i18n::tr("hen_update.beta.sub"));
   model = page.root();
   return true;
 }
@@ -233,8 +240,8 @@ bool hen_update_releases_model(ps5ui::Node &model) {
         .label("id_update_release_summary", manifest.summary,
                ps5ui::Style::Center)
         .button("id_update_download",
-                toolbox_i18n::tr("hen_update.download"),
-                toolbox_i18n::tr("hen_update.download.sub"))
+                toolbox_i18n::tr("hen_update.releases.download"),
+                toolbox_i18n::tr("hen_update.download_action.sub"))
         .button("id_update_check", toolbox_i18n::tr("hen_update.check"),
                 toolbox_i18n::tr("hen_update.check.sub"));
   } else {
@@ -254,6 +261,13 @@ void generate_hen_update_xml(std::string &xml_buffer) {
   ps5ui::Node model;
   hen_update_model(model);
   xml_buffer = onion::shellui::settings::publish(model, hen_update_model);
+}
+
+void generate_hen_update_options_xml(std::string &xml_buffer) {
+  ps5ui::Node model;
+  hen_update_options_model(model);
+  xml_buffer =
+      onion::shellui::settings::publish(model, hen_update_options_model);
 }
 
 void generate_hen_update_releases_xml(std::string &xml_buffer) {
