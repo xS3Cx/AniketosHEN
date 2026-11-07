@@ -2,6 +2,7 @@
 
 #include "aniketos_shell/system_ui/avatar_codec.h"
 #include "aniketos_shell/system_ui/avatar_image.hpp"
+#include "aniketos_shell/system_ui/game_icons.hpp"
 #include "aniketos_ui/home_scene.hpp"
 #include "aniketos_ui/mono_reflect.hpp"
 #include "aniketos_ui/small_file.hpp"
@@ -501,6 +502,9 @@ void verify_box(TrackedBox &entry, MonoObject *box) {
 
 void box_hook(MonoObject *box, MonoString *uri, MonoObject *action,
               MonoObject *option, bool set_image) {
+  /* custom game icons share the hook (game_icons.cpp) */
+  if (GameIcons::Load(box, uri, action, option, set_image))
+    return;
   /* every picture ShellUI loads comes here: off, none is looked at */
   if (!g_settings.account_avatar_enabled) {
     s_box_original(box, uri, action, option, set_image);
@@ -671,6 +675,26 @@ void Refresh() {
   LOG_INFO("[AVATAR] refreshed %d avatar(s) path='%s' enabled=%d", reloaded,
            path.c_str(), g_settings.account_avatar_enabled ? 1 : 0);
   refresh_cache();
+}
+
+void LoadImage(MonoObject *box, const std::string &uri, MonoObject *action,
+               MonoObject *option, bool set_image, bool animated) {
+  if (!s_options_class)
+    return;
+  if (option)
+    configure_options(option, animated);
+  else
+    option = make_options(animated);
+  /* ImageAnimationDecodeMode.ProgressiveDecode: frames as they play, not
+     every frame held at once */
+  if (animated)
+    Set_Property(s_options_class, option, "AnimationDecodeMode", 2);
+  call_original(box, uri, action, option, set_image, animated);
+}
+
+void LoadSystemImage(MonoObject *box, const std::string &uri,
+                     MonoObject *action, bool set_image) {
+  call_original(box, uri, action, nullptr, set_image, false);
 }
 
 } // namespace AccountAvatar

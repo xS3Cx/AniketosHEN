@@ -24,4 +24,14 @@ void Tick();
 std::string SignedInUser();
 /* The setting changed: load every avatar on screen again. UI thread. */
 void Refresh();
+
+/* For other pictures swapped in the same ImageBox.LoadAsync hook
+   (game_icons.cpp): loads past the hook, with `option` (or new options) set
+   for a still picture or an animated one, decoded progressively and
+   looping. */
+void LoadImage(MonoObject *box, const std::string &uri, MonoObject *action,
+               MonoObject *option, bool set_image, bool animated);
+/* The system's own picture, with the system's options. */
+void LoadSystemImage(MonoObject *box, const std::string &uri,
+                     MonoObject *action, bool set_image);
 }

@@ -89,7 +89,7 @@ existing OnionHEN installation, and adds a large set of features of its own.
 
 - **Aniketos Shell Menu** — an overlay menu on the home screen (**L1 + R3**) with four menu styles; see [Shell Menu](#shell-menu)
 - **System look customization** — global colour theme, system background, focus outlines, interface panels, toggle-switch styles and a custom system font
-- **Home screen customization** — video or picture background with effects and PlayStation particles, clock and date, circular or rounded game tiles, custom (also animated GIF/WebP) account avatar, avatar status dot
+- **Home screen customization** — video or picture background with effects and PlayStation particles, clock and date, circular or rounded game tiles, custom (also animated GIF/WebP) game icons, custom (also animated GIF/WebP) account avatar, avatar status dot
 - **Payload Manager** - installed payloads, a curated online catalog with icons, categories, search, installs and updates over HTTPS, included payloads (kstuff, ShadowMountPlus) and an Autostart list you rearrange in place; see [docs/payload-center.md](docs/payload-center.md)
 - **HEN Update Manager** - checks GitHub Releases for a newer AniketosHEN build at boot (on by default, once per version), downloads it with a mandatory SHA-256 check and reboots to apply it; see [docs/update.md](docs/update.md)
 - **HEN button menu** — the top-bar button now opens a menu: HEN Toolbox, package install from `/data` and USB, payloads, cheats, Internet connection switch, unload; the button also appears on firmware the byte patch has no profile for
@@ -132,7 +132,7 @@ The first page has one row per area:
 |---|---|
 | **Console** | *Console information* (name, model, masked serial / IDPS / PSID shown only after a confirmation, firmware, kernel, processor and clocks, disc drive, swap, RAM, disk, uptime, IP), *Hidden apps* (bring back apps hidden with *Hide App*; *Filter hidden apps* switches the Home filter off without emptying the list), *Power* (Rest Mode, reboot, power off), *Fan* (manual temperature threshold, with CPU/SoC temperature and fan duty), *Power light* (white, blue, orange), *Buzzer* |
 | **Controller** | Light bar colour and a second colour for pulses, brightness, animations (breathing, pulse, rainbow, fast spectrum, neon wave), player lights, vibration test and strength, console sound mirrored to the DualSense speaker with volume, restore |
-| **Home screen** | *Background*: looping video (with optional sound), still picture, effects (dim, haze, vignette, edges), PlayStation-symbol particles and their count, optionally behind Settings and system screens too · *Clock and date* · *Tabs* (Games and Media names and icons, up to two custom tabs that can be created, renamed, shown or hidden, reordered and deleted) · *Game tiles* (circular, corner rounding) · *Profile* (custom avatar, status dot) |
+| **Home screen** | *Background*: looping video (with optional sound), still picture, effects (dim, haze, vignette, edges), PlayStation-symbol particles and their count, optionally behind Settings and system screens too · *Clock and date* · *Tabs* (Games and Media names and icons, up to two custom tabs that can be created, renamed, shown or hidden, reordered and deleted) · *Game tiles* (circular, corner rounding, custom game icons) · *Profile* (custom avatar, status dot) |
 | **System look** | Global theme (one colour and animation for every themed surface), system background, focus outlines, interface panels, system icon colour (Home screen; Settings screen icons are not covered yet — TODO), toggle-switch style (Indicator, Classic, Metal, Skull, Indicator Light or the system's own), HEN button icon in Home's top bar (the AniketosHEN logo, or a toolbox icon in the system's own style like Search and Settings beside it), custom font |
 | **Overlays** | *Home Screen OSD* (frame rate, viewport, CPU/SoC temperature, fan, RAM used and free, disk, system software, uptime, IP; refresh rate, FPS precision, size, units, corner) and the in-game *Performance OSD* (FPS, CPU per core, GPU, memory, fan, IP; background, position) |
 | **Keyboard** | Mouse control of the system UI, glyph key and emoji on the system keyboard |
@@ -151,8 +151,21 @@ Media go in these folders (videos also in `AniketosHEN/videos` on a USB drive):
 /data/AniketosHEN/ShellUI/background/  pictures
 /data/AniketosHEN/ShellUI/particles/   particle pictures
 /data/AniketosHEN/ShellUI/avatars/     avatar pictures, GIF or WebP
+/data/AniketosHEN/ShellUI/icons/       game icons, <TITLEID>.gif / .webp / .png / .jpg
 /data/AniketosHEN/fonts/               .otf / .ttf system fonts
 ```
+
+**Custom game icons** (Shell Menu > Home screen > Game tiles): put a picture
+named after the game's title id in `/data/AniketosHEN/ShellUI/icons/`, for
+example `PPSA01234.gif` or `CUSA00001.png` (GIF, WebP, PNG or JPG; with
+several for one game, GIF wins, then WebP, PNG, JPG). The game's tile shows it
+in place of its own icon; an animated GIF or WebP plays only while Home is on
+screen and the tile is visible, and holds still elsewhere. Square pictures of
+256x256 or less work best; a larger GIF is shrunk once into `icons/cache/`,
+and an animation over 300x300, 150 frames or 16 MB decoded shows still. At
+most six icons play at once. A file that cannot be shown leaves the game's own
+icon. The icons are only shown while AniketosHEN runs; the system's icons are
+never changed.
 
 Implementation notes, kill-switch files, the profiler and the performance
 measurements are in [docs/shell-menu.md](docs/shell-menu.md).
@@ -484,7 +497,7 @@ and are best changed from the menu itself.
 | `/data/AniketosHEN/cheats/` | Cheat files (`cheats_tmp/` holds temporary sync files) |
 | `/data/AniketosHEN/sprx/catalog.ini` | Modules the SPRX loader injects into games |
 | `/data/AniketosHEN/kbm/` | Keyboard and mouse settings, default template and per-game profiles |
-| `/data/AniketosHEN/ShellUI/` | Shell Menu media: `videos/`, `background/`, `particles/`, `avatars/` |
+| `/data/AniketosHEN/ShellUI/` | Shell Menu media: `videos/`, `background/`, `particles/`, `avatars/`, `icons/` |
 | `/data/AniketosHEN/fonts/` | Custom system fonts |
 | `/data/AniketosHEN/home_tabs.json` | Home's custom tabs, their names, icons and titles (v2) |
 | `/data/AniketosHEN/reports/` | Scrubbed error reports |

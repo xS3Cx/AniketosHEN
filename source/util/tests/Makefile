@@ -173,6 +173,7 @@ TEST_CXX_SRCS := \
   test_overlay_layout.cpp \
   test_clock_text.cpp \
   test_avatar_image.cpp \
+  test_game_icon_uri.cpp \
   test_particle_sim.cpp \
   test_logo_tint.cpp \
   test_web_icon.cpp \

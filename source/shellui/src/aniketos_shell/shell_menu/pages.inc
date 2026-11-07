@@ -498,6 +498,12 @@ void home_pages(Page page, std::vector<Option> &options) {
         /* percent of a full circle; 30 is about Sony's corner */
         slider_int(tr("vsh.tiles.rounding"), OptionId::ShellTilesCornerRadius,
                    g_settings.shell_tiles_corner_radius, 0, 100, 5),
+        /* the user's own icons, by title id (game_icons.cpp) */
+        toggle(tr("vsh.game_icons.enable"), OptionId::GameIconsEnabled,
+               g_settings.game_icons_enabled),
+        value(tr("vsh.game_icons.folder"), ONION_DIST_DATA_ROOT "/ShellUI/icons"),
+        value(tr("vsh.game_icons.naming"),
+              "PPSA01234.gif / .webp / .png / .jpg"),
     };
     break;
   case Page::HomeProfile: {

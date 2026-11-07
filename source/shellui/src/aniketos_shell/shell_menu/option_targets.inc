@@ -33,6 +33,7 @@ bool &toggle_target(OptionId id) {
   case OptionId::ShellBackgroundPs3Waves:
     return g_settings.shell_background_ps3_waves;
   case OptionId::ShellTilesCircular: return g_settings.shell_tiles_circular;
+  case OptionId::GameIconsEnabled: return g_settings.game_icons_enabled;
   case OptionId::HomeTabIcons: return g_settings.home_tab_icons;
   case OptionId::HomeHideApps: return g_settings.home_hide_apps;
   case OptionId::OskGlyphKey: return g_settings.osk_glyph_key;

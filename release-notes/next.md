@@ -1,6 +1,7 @@
 ## Added
 - System look: "HEN button icon" can show a toolbox icon in the system's own style, like Search and Settings beside it, instead of the AniketosHEN logo in Home's top bar; Home reloads to show it.
 - Preferences > PIN lock: an optional PIN (off by default) that the Toolbox, the Shell Menu and the HEN button menu ask for before they open, so children cannot change HEN settings; forgot it? Delete /data/AniketosHEN/pin_lock over FTP or put a file named no_pin_lock on the first USB drive.
+- Shell Menu > Home screen > Game tiles: custom game icons. A picture named after a game's title id in /data/AniketosHEN/ShellUI/icons (for example PPSA01234.gif) replaces its tile icon on Home; animated GIF and WebP play while Home is on screen.
 
 ## Changed
 - Start-up: the "Loading Kstuff / Loading ShadowMountPlus" notification is gone; "AniketosHEN is starting..." and the welcome remain.

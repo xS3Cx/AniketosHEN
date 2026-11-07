@@ -164,6 +164,10 @@ ONION_SHELL_SETTING_STRING(account_avatar_path, "")
 /* whose picture it replaces: the user id (hex) of who chose it; empty:
    whoever is signed in. Text, as user ids are past the INT range here. */
 ONION_SHELL_SETTING_STRING(account_avatar_user, "")
+/* Home's game and app tiles show the user's own icon (GIF, WebP, PNG, JPG
+   named by title id in ShellUI/icons) in place of the system's, animated
+   while Home is in sight (aniketos_shell/system_ui/game_icons) */
+ONION_SHELL_SETTING_BOOL(game_icons_enabled, false)
 /* the DevKit/TestKit overlays on Home, drawn by the system's own widget
    (shellui: aniketos_shell/system_ui/devkit_overlay): the System Info panel and the
    red "DevKit/TestKit is Expired" banner */

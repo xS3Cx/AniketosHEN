@@ -229,6 +229,7 @@ enum class OptionId {
   HenButtonIcon,
   ShellBackgroundParticles,
   ShellTilesCircular,
+  GameIconsEnabled,
   ShellTilesCornerRadius,
   ShellTilesOutlineEnabled,
   ShellTilesOutlineSyncBackground,

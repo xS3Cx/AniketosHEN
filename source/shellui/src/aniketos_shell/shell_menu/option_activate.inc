@@ -75,6 +75,11 @@ void after_home_toggle(OptionId id, bool on) {
     shellui_request_home_reload();
     notify(on ? "notify.vsh.tiles.circular" : "notify.vsh.tiles.stock");
     break;
+  case OptionId::GameIconsEnabled:
+    /* the tiles load their icons again, through GameIcons::Load */
+    shellui_request_home_reload();
+    LOG_INFO("[ICONS] enabled=%d", on ? 1 : 0);
+    break;
   case OptionId::HomeHideApps:
     shellui_request_home_reload();
     LOG_INFO("[HIDDEN] filter enabled=%d", on ? 1 : 0);
