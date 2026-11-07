@@ -145,14 +145,14 @@ auto_check=true
 
 ```shell
 GITHUB_TOKEN=... ./scripts/release_hen.sh 0.05a "Short summary"
-GITHUB_TOKEN=... NOTES_FILE=notes.md ./scripts/release_hen.sh 0.05a summary.txt
 ```
 
 The second argument is a summary string (at most 300 characters, shown in the
-Update Manager), or an existing file whose contents are used. `NOTES_FILE` is
-the Markdown release notes; its `## Added` and `## Fixed` sections with `- `
-items are what the Discord bot posts to #releases. Without it the notes are the
-summary. The script builds Release with `ANIKETOSHEN_VERSION=<version>` and,
+Update Manager), or an existing file whose contents are used. The release notes are
+[`release-notes/next.md`](../release-notes/next.md), where every player-facing
+change is added as it is made (see [AGENTS.md](../AGENTS.md)); `NOTES_FILE` names
+another file. Its `## Fixed` section becomes Fixes on the Discord card and the
+other sections Added. After the release, empty it for the next one. The script builds Release with `ANIKETOSHEN_VERSION=<version>` and,
 unless the caller sets `ANIKETOSHEN_REPORT_URL`, the project's crash-report
 relay; copies `build/bin/AniketosHEN.elf`, writes `AniketosHEN.elf.sha256`,
 generates `update.json` and publishes through the GitHub REST API with `curl`.

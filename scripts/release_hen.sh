@@ -12,8 +12,8 @@ Usage: scripts/release_hen.sh <version> [summary|summary-file]
 
 Builds AniketosHEN Release, generates update.json and publishes the GitHub
 release (tag v<version>, marked latest) through the REST API.
-GITHUB_TOKEN is required. NOTES_FILE (optional) is a Markdown file used as
-the release notes; "## Added" / "## Fixed" sections with "- " items are what
+GITHUB_TOKEN is required. NOTES_FILE (default release-notes/next.md) is the
+Markdown release notes; "## Added" / "## Fixed" sections with "- " items are what
 the Discord bot announces. Without it the notes are the summary.
 EOF
 }
@@ -52,6 +52,10 @@ TAG="v${VERSION}"
 RELEASE_TAG="$TAG"
 PRERELEASE="false"
 NOTES=""
+# The notes gathered since the last release, unless the caller names a file.
+if [[ -z "${NOTES_FILE:-}" && -s "${ROOT}/release-notes/next.md" ]]; then
+  NOTES_FILE="${ROOT}/release-notes/next.md"
+fi
 if [[ -n "${NOTES_FILE:-}" ]]; then
   [[ -f "$NOTES_FILE" ]] || die "NOTES_FILE not found: $NOTES_FILE"
   NOTES="$(cat "$NOTES_FILE")"

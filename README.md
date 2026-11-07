@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <b>AniketosHEN</b> · <code>0.04q</code><br/>
+  <b>AniketosHEN</b><br/>
   An all-in-one HEN and Toolbox for PlayStation 5<br/>
   <sub>A fork of <a href="https://github.com/aydencharles/onionHEN">OnionHEN</a>
   by 麒麟/0xp0co and contributors. Everything added on top of OnionHEN is by
@@ -13,6 +13,8 @@
 
 
 <p align="center">
+  <b><a href="https://github.com/xS3Cx/AniketosHEN/releases/latest">Download</a></b>
+  ·
   <b><a href="#features">Features</a></b>
   ·
   <b><a href="#shell-menu">Shell Menu</a></b>
@@ -34,7 +36,6 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="license"/></a>
-  <img src="https://img.shields.io/badge/Version-0.04q-8a2be2" alt="version 0.04q"/>
   <img src="https://img.shields.io/badge/Platform-PlayStation%205-003791?style=flat&logo=playstation" alt="PlayStation 5"/>
   <img src="https://img.shields.io/badge/C-00599C?style=flat&logo=c&logoColor=white" alt="C"/>
   <img src="https://img.shields.io/badge/C++-00599C?style=flat&logo=cplusplus&logoColor=white" alt="C++"/>
@@ -370,13 +371,15 @@ Nothing is written back into `source/`.
 `AniketosHEN.elf`, `AniketosHEN.elf.sha256` and `update.json`:
 
 ```shell
-GITHUB_TOKEN=... NOTES_FILE=notes.md ./scripts/release_hen.sh 0.05a "Short summary"
+GITHUB_TOKEN=... ./scripts/release_hen.sh 0.05a "Short summary"
 ```
 
 It uses the GitHub REST API with `curl`; `gh` is not required. Releases use tag
 `v<version>` and become the latest release, which the Update Manager and the
 Discord bot follow. See [docs/update.md](docs/update.md) for the manifest
-format and the notes file.
+format. The release notes are the changes gathered in
+[`release-notes/next.md`](release-notes/next.md) since the last release; see
+[AGENTS.md](AGENTS.md).
 
 ### Tests
 
