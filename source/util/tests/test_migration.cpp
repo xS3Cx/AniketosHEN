@@ -158,7 +158,7 @@ int test_fresh_install_has_nothing_to_migrate(void) {
   onion::Settings loaded{};
   TEST_ASSERT_TRUE(!onion::settings_load_from(paths, &loaded));
   TEST_ASSERT_EQ_INT(onion::kUiLanguageSystem, loaded.ui_lang);
-  TEST_ASSERT_TRUE(loaded.kstuff_autoload);
+  TEST_ASSERT_TRUE(!loaded.kstuff_autoload); /* kstuff is off until chosen */
 
   /* The default config a fresh install generates loads cleanly and uses the
    * distribution's own key and name. */
