@@ -9,6 +9,10 @@ const char *AniketosIconPath();
 /* The logo colour was stepped: the icon keeps its last picture until the
  * colour has rested, instead of a new one at every step. */
 void HoldAniketosIcon();
+/* The system icon id Home's HEN button shows instead of the logo (the
+ * toolbox, like Search and Settings beside it), or empty: the logo is
+ * chosen, or this firmware's icon set has no toolbox. */
+const char *HenButtonGlyph();
 /* The globe shown beside the Internet switch: white while the connection is
  * enabled, red and struck through while it is off. */
 const char *InternetIconPath(bool enabled);

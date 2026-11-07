@@ -1,5 +1,6 @@
 #include "aniketos_shell/core/embedded_assets.hpp"
 
+#include "aniketos_shell/core/rco_names.hpp"
 #include "aniketos_theme/logo_tint.hpp"
 #include "aniketos_ui/monotonic_clock.hpp"
 #include "png_encode.hpp"
@@ -175,6 +176,39 @@ const char *AniketosIconPath() {
         static_cast<size_t>(aniketos_icon_png_end - aniketos_icon_png_start));
   }
   return written_path(stock);
+}
+
+/* The firmware's own icon set, looked up by name: an id it lacks would leave
+   the button blank, so then the logo stays. */
+const char *HenButtonGlyph() {
+  static constexpr const char *kIconSet =
+      "/system_ex/vsh_asset/Sce.PlayStation.PUI_UI3.rco";
+  static constexpr const char *kGlyph = "troubleshoot"; /* a toolbox */
+  if (g_settings.hen_button_icon != 1)
+    return "";
+  static const bool present = [] {
+    bool found = false;
+    const int fd = open(kIconSet, O_RDONLY);
+    unsigned char head[RcoNames::kHeaderSize];
+    if (fd >= 0 && read(fd, head, sizeof(head)) == (ssize_t)sizeof(head)) {
+      const size_t end = RcoNames::TableEnd(head, sizeof(head));
+      if (end && end <= (8u << 20)) {
+        std::vector<unsigned char> names(end);
+        found = pread(fd, names.data(), end, 0) == (ssize_t)end &&
+                RcoNames::Has(names.data(), end,
+                              (std::string("iconid_") + kGlyph).c_str());
+      }
+    }
+    if (fd >= 0)
+      close(fd);
+    if (found)
+      LOG_INFO("HEN button: system icon iconid_%s", kGlyph);
+    else
+      LOG_WARN("HEN button: no iconid_%s in %s; the logo stays", kGlyph,
+               kIconSet);
+    return found;
+  }();
+  return present ? kGlyph : "";
 }
 
 const char *ColorTrackPath(ColorTrack track) {

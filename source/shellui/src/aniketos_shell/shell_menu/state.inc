@@ -226,6 +226,7 @@ enum class OptionId {
   OskEmoji,
   MouseControl,
   ShellToggleStyle,
+  HenButtonIcon,
   ShellBackgroundParticles,
   ShellTilesCircular,
   ShellTilesCornerRadius,

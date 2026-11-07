@@ -1207,8 +1207,13 @@ void patch_homeui_top_nav(unsigned char *buffer, int *size_ptr,
     SourceBundleView source_bundle = {};
     if (locate_source_bundle(buffer, visible_size, capacity, format,
                              &source_bundle)) {
-      if (patch_source_homeui_top_nav(source_bundle, format.kind))
+      if (patch_source_homeui_top_nav(source_bundle, format.kind)) {
         homeui_note_top_nav_patched(true);
+        /* as with the logo colour: this older Home keeps the fixed picture */
+        if (*HenButtonGlyph())
+          LOG_WARN("homeui_top_nav_patch: older Home bundle, the HEN button "
+                   "keeps the logo");
+      }
       return;
     }
   }
@@ -1292,9 +1297,10 @@ void patch_homeui_top_nav(unsigned char *buffer, int *size_ptr,
   /* The top-bar icon, on a profiled HomeUI whose patch sites all hold a
      known shape; otherwise script_injector adds it. */
   bool top_nav_change = false;
-  /* the patch names a fixed picture; a coloured logo is script_injector's */
+  /* the patch names a fixed picture; a coloured logo or the system's
+     toolbox icon is script_injector's */
   const bool top_nav_ready =
-      profile && !g_settings.logo_color_enabled &&
+      profile && !g_settings.logo_color_enabled && !*HenButtonGlyph() &&
       top_nav_byte_patches(hbc, *profile, false, &top_nav_change);
   if (!top_nav_ready)
     homeui_note_top_nav_patched(false);

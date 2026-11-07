@@ -176,6 +176,7 @@ TEST_CXX_SRCS := \
   test_particle_sim.cpp \
   test_logo_tint.cpp \
   test_web_icon.cpp \
+  test_rco_names.cpp \
 	test_fps_formula.cpp \
 	test_kbm_engine.cpp \
 	test_kbm_model.cpp \

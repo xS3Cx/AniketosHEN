@@ -256,6 +256,10 @@ void change_list_option(const Option &option, int direction) {
   case OptionId::HomePresenceDot:
     shellui_request_presence_reload(1500, true);
     break;
+  case OptionId::HenButtonIcon:
+    /* Home takes its top bar as it loads (homeui_top_nav_patch) */
+    shellui_request_home_reload_after(1500);
+    break;
   default:
     break;
   }

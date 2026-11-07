@@ -1,7 +1,7 @@
 /* JavaScript evaluated in Home's runtime right before its bundle (see
  * script_injector.cpp). `__aniketosConfig` is defined by the native side just
- * ahead of it: {app, tabs, tabsWatch, icon, presence, clock, stockCaptions,
- * webTiles}; app is 'home' or 'control-center', and tabs holds one
+ * ahead of it: {app, tabs, tabsWatch, icon, glyph, presence, clock,
+ * stockCaptions, webTiles}; app is 'home' or 'control-center', and tabs holds one
  * {id, caption, label, limit} entry for every visible custom tab, after Games
  * and Media. In the Control Center only the presence dot, the clock and the
  * size limit of action cards are touched.
@@ -140,7 +140,9 @@ R"JS((function () {
      component Search uses, taken from the element Search renders, with our
      picture and press handler; the press is passed to the native side, which
      opens the menu. Drawn only while cfg.icon is set: the native side clears
-     it once the bundle is in, if its byte patch added the icon already. */
+     it once the bundle is in, if its byte patch added the icon already.
+     cfg.glyph, when set, is a system icon id shown instead of our picture:
+     the button then draws it as it draws Search's, in every state. */
   function findReact(o) {
     if (!A.React && o && typeof o.createElement === 'function' &&
         typeof o.memo === 'function' && o.Fragment) A.React = o;
@@ -158,7 +160,7 @@ R"JS((function () {
       if (!cfg.icon || !React || !search || !search.type) return search;
       var own = {};
       for (var key in search.props) own[key] = search.props[key];
-      own.iconId = { uri: cfg.icon };
+      own.iconId = cfg.glyph || { uri: cfg.icon };
       own.onPress = press;
       own.title = '';
       own.key = 'aniketos';

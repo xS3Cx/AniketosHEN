@@ -237,6 +237,7 @@ std::string home_script_config(bool home) {
          tabs_config(home) + ", tabsWatch: " +
          (home ? "true" : "false") +
          ", icon: " + JsString(home ? AniketosIconPath() : "") +
+         ", glyph: " + JsString(home ? HenButtonGlyph() : "") +
          ", presence: " + JsString(presence_name()) +
          ", clock: " + ShellClock::ScriptConfig() +
          ", stockCaptions: {game: [" + JsString(games_name) + ", " +

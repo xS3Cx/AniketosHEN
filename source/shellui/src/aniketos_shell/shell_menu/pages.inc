@@ -538,11 +538,15 @@ void system_look_pages(Page page, std::vector<Option> &options) {
     const int count = AniketosTheme::ToggleStyles::Count();
     const int style = std::clamp(g_settings.shell_toggle_style, 0, count - 1);
     const char *name = AniketosTheme::ToggleStyles::Name(style);
+    const char *hen_icons[] = {tr("vsh.hen_icon.logo"),
+                               tr("vsh.hen_icon.toolbox")};
     options = {submenu(Page::GlobalCustomization),
                submenu(Page::ShellBackground),
                submenu(Page::ShellOutline),
                submenu(Page::ShellUIPanels),
                submenu(Page::IconColor),
+               choice(tr("vsh.hen_icon.title"), OptionId::HenButtonIcon,
+                      hen_icons, g_settings.hen_button_icon),
                strings(tr("vsh.toggles.style"), OptionId::ShellToggleStyle,
                        name ? name : tr("vsh.toggles.system"), count),
                toggle(tr("vsh.font.enable"), OptionId::CustomFontEnabled,

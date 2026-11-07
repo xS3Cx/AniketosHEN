@@ -1,3 +1,6 @@
+## Added
+- System look: "HEN button icon" can show a toolbox icon in the system's own style, like Search and Settings beside it, instead of the AniketosHEN logo in Home's top bar; Home reloads to show it.
+
 ## Changed
 - Start-up: the "Loading Kstuff / Loading ShadowMountPlus" notification is gone; "AniketosHEN is starting..." and the welcome remain.
 - About > Credits and the welcome notification name both makers of AniketosHEN, AlexZero and Andriushka.exe.

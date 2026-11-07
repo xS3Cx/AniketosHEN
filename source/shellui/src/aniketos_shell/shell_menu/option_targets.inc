@@ -134,6 +134,7 @@ int &int_target(OptionId id) {
   case OptionId::HomeBackgroundEdges: return g_settings.home_bg_edges;
   case OptionId::HomePresenceDot: return g_settings.home_presence_dot;
   case OptionId::ShellToggleStyle: return g_settings.shell_toggle_style;
+  case OptionId::HenButtonIcon: return g_settings.hen_button_icon;
   case OptionId::ShellClockHourFormat:
     return g_settings.shell_clock_hour_format;
   case OptionId::ShellClockDateOrder:

@@ -211,6 +211,10 @@ ONION_SHELL_SETTING_BOOL(mouse_control_enabled, true)
 /* The look of the system's on/off switches: 0 the system's own, 1 and up
  * the styles of shellui's aniketos_theme/toggle_styles. */
 ONION_SHELL_SETTING_INT(shell_toggle_style, 0)
+/* The picture on the HEN button in Home's top bar: 0 the AniketosHEN logo,
+ * 1 the system's toolbox icon, drawn like Search and Settings beside it
+ * (shellui: aniketos_shell/core/embedded_assets HenButtonGlyph). */
+ONION_SHELL_SETTING_INT(hen_button_icon, 0)
 
 /* Master switch for every change to the interface's look the menu makes
  * (shellui: aniketos_theme/customization.hpp). The HEN button and the Home
