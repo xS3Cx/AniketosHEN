@@ -3,11 +3,11 @@
 </p>
 
 <p align="center">
-  <b>AniketosHEN</b> · <code>0.04n</code><br/>
+  <b>AniketosHEN</b> · <code>0.04q</code><br/>
   An all-in-one HEN and Toolbox for PlayStation 5<br/>
   <sub>A fork of <a href="https://github.com/aydencharles/onionHEN">OnionHEN</a>
   by 麒麟/0xp0co and contributors. Everything added on top of OnionHEN is by
-  AlexZero and the original authors credited below — see <a href="#credits">Credits</a>,
+  AlexZero, Andriushka.exe and the original authors credited below — see <a href="#credits">Credits</a>,
   <a href="NOTICE.md">NOTICE</a> and <a href="#name-and-redistribution">Name and redistribution</a></sub>
 </p>
 
@@ -34,7 +34,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="license"/></a>
-  <img src="https://img.shields.io/badge/Version-0.04n-8a2be2" alt="version 0.04n"/>
+  <img src="https://img.shields.io/badge/Version-0.04q-8a2be2" alt="version 0.04q"/>
   <img src="https://img.shields.io/badge/Platform-PlayStation%205-003791?style=flat&logo=playstation" alt="PlayStation 5"/>
   <img src="https://img.shields.io/badge/C-00599C?style=flat&logo=c&logoColor=white" alt="C"/>
   <img src="https://img.shields.io/badge/C++-00599C?style=flat&logo=cplusplus&logoColor=white" alt="C++"/>
@@ -73,10 +73,6 @@ existing OnionHEN installation, and adds a large set of features of its own.
 - **System preparation** — raise privileges, remount filesystems, and block the update partition
 - **fSELF / fPKG** - bundled kstuff for homebrew SELF / PKG; embedded as a fallback and off by default, can be enabled in the Toolbox or `[kstuff] autoload=true`
 - **Plugin runtime** — discovers, validates, starts, stops, and removes descriptor-bearing plugin ELFs
-- **Payload Manager** - manage installed payloads, autostart order, a curated online catalog, per-entry icons, categories, search, updates and removal over HTTPS; see [docs/payload-center.md](docs/payload-center.md)
-- **HEN Update Manager** - check GitHub Releases for a newer AniketosHEN build,
-  download it with a mandatory SHA-256 check and reboot to apply it; see
-  [docs/update.md](docs/update.md)
 - **Game overlay** — an in-game bar for FPS, CPU, GPU, RAM, fan, temperatures, and network info
 - **Cheat engine** — local JSON, SHN (also named `.xml.shn`), MC4 and ShnExt files that can be toggled at runtime, plus an online cheat catalog sync
 - **Remote Play pairing** — enable the native PS5 Remote Play service, generate a pairing PIN, register a client, save the details to USB
@@ -93,6 +89,8 @@ existing OnionHEN installation, and adds a large set of features of its own.
 - **Aniketos Shell Menu** — an overlay menu on the home screen (**L1 + R3**) with four menu styles; see [Shell Menu](#shell-menu)
 - **System look customization** — global colour theme, system background, focus outlines, interface panels, toggle-switch styles and a custom system font
 - **Home screen customization** — video or picture background with effects and PlayStation particles, clock and date, circular or rounded game tiles, custom (also animated GIF/WebP) account avatar, avatar status dot
+- **Payload Manager** - installed payloads, a curated online catalog with icons, categories, search, installs and updates over HTTPS, included payloads (kstuff, ShadowMountPlus) and an Autostart list you rearrange in place; see [docs/payload-center.md](docs/payload-center.md)
+- **HEN Update Manager** - checks GitHub Releases for a newer AniketosHEN build at boot (on by default, once per version), downloads it with a mandatory SHA-256 check and reboots to apply it; see [docs/update.md](docs/update.md)
 - **HEN button menu** — the top-bar button now opens a menu: HEN Toolbox, package install from `/data` and USB, payloads, cheats, Internet connection switch, unload; the button also appears on firmware the byte patch has no profile for
 - **Home tabs** - Games, Media and up to two custom tabs, all renameable and each with a system glyph icon; show, hide, reorder and delete custom tabs, and copy or move titles between tabs from a game's Options menu
 - **Game Options menu** — Cheats, trophy unlock, **Copy / Move** and **Hide App** on a game's or app's Options menu, with a Hidden apps page that brings hidden tiles back
@@ -104,7 +102,7 @@ existing OnionHEN installation, and adds a large set of features of its own.
 - **Console tools** — power LED colour, buzzer, live hardware information, fan threshold from the Shell Menu
 - **Error reports** — failed starts, crashes and failed imports are kept, scrubbed of IDs, and can be sent to the publisher's relay
 - **Debug toggles** — the system's DevKit/TestKit info overlay and the "expired" banner
-- **Translations** — the Shell Menu, keyboard & mouse and the new pages in all 14 language catalogs (Thai partly in English)
+- **Translations** — the Shell Menu, keyboard & mouse, Payload Manager, HEN Update Manager and the other new pages in all 14 language catalogs
 
 AniketosHEN does not include a kernel exploit. The first hop still needs an
 external `elfldr` on **9021**. After that, AniketosHEN starts its own private
@@ -170,7 +168,7 @@ measurements are in [docs/shell-menu.md](docs/shell-menu.md).
 
 1. Run the kernel exploit and start the external `elfldr` service.
 2. Send `AniketosHEN.elf` through the loader your exploit host provides.
-3. Wait for the utility daemon and the main daemon. When their autoload is enabled, `kstuff` and ShadowMountPlus start between them in that order (with a 2-second pause after `kstuff`); both are off by default and can be enabled in the Toolbox or with `[kstuff] autoload=true` / `[shadowmount] autoload=true`.
+3. Wait for the utility daemon and the main daemon. When their autoload is enabled, `kstuff` and ShadowMountPlus start between them in that order (with a 2-second pause after `kstuff`). On a new install both are off and can be enabled in **Payload Manager → Included payloads** or with `[kstuff] autoload=true` / `[shadowmount] autoload=true`; a `config.ini` from before they became optional keeps them on. A `kstuff` that is already running (from the exploit chain or a kstuff payload) counts as loaded, and ShadowMountPlus waits for a `kstuff` payload from your autostart when the built-in one is off. Neither starts twice.
 4. Use the **HEN** button on Home, or open PS5 Settings and enter the AniketosHEN Toolbox.
 
 Startup is sequential. After the first hop, AniketosHEN uses its own
@@ -215,11 +213,14 @@ guide is in [docs/kbm.md](docs/kbm.md).
 Place standalone payloads in `/data/AniketosHEN/payloads/` (or
 `AniketosHEN/payloads/` on a USB drive). Only plain `.elf` files are
 supported. **Toolbox → Payload Manager → Installed Payloads** lists
-every installed payload. Enabling a payload creates the matching `.auto_start`
-file and appends it to the end of the boot order; disabling removes the marker
-without stopping a running payload. The **Autostart** page shows only enabled
-payloads and lets you move one to a new position. A recorded running instance
-is left running by later launch and auto-start requests. Plugins are a separate
+every installed payload. **Autostart** lists the payloads that start with
+AniketosHEN, top first, each with its load delay. **Add payload** appends one to
+the end of the list. Press **X** on a payload to pick it up, move it with
+**up/down** and press **X** again to put it down; **OPTIONS** opens a menu with
+the load delay (0-10 s or 15 s) and **Remove**. Autostart never starts the same
+file name twice (internal storage and USB), a second `kstuff` while one runs, or
+a second ShadowMountPlus. A recorded running instance is left running by later
+launch and auto-start requests. Plugins are a separate
 category and belong in `/data/AniketosHEN/plugins/`.
 
 The default catalog is
@@ -599,11 +600,14 @@ Everything that OnionHEN does not have is credited to its original authors:
 
 - **AlexZero** — author and maintainer of AniketosHEN: the Aniketos Shell Menu
   and its PS5/PUI implementations of every menu style, System look and Home
-  screen customization, the HEN button menu, Home tabs and their icons, custom font
+  screen customization, the HEN button menu, Home tabs, custom font
   and avatars (with automatic fitting of large animated avatars), Hide App, controller tools, keyboard and mouse for games, mouse control,
   the Visual Cheats Menu, game Information and trophy tools, error reports,
   the OnionHEN import and the AniketosHEN artwork.
-- ★ **andriushka.exe**
+- **Andriushka.exe** (negus_fire) — co-author and maintainer of AniketosHEN: the
+  Payload Manager (catalog, installs and updates, included payloads, Add
+  payload), the HEN Update Manager and the GitHub release flow, configurable
+  Home tabs with system icons, and the Toolbox reorganisation.
 - Designs the Shell Menu styles are recreated from (no code or assets of
   these projects are included):
   - **Akari** — [kernaltrap8/Akari](https://github.com/kernaltrap8/Akari), by kernaltrap8, original author **jordywastaken**; the order of the menu motion easings also follows Akari
@@ -660,8 +664,9 @@ others. As an additional term under section 7(e) of the GPLv3, no rights are
 granted to use these names or this artwork:
 
 - **Do not distribute this HEN, modified or not, under the AniketosHEN or
-  Aniketos name or branding** without written permission from the maintainer,
-  AlexZero. Builds published under these names come only from the maintainer.
+  Aniketos name or branding** without written permission from the maintainers,
+  AlexZero and Andriushka.exe. Builds published under these names come only
+  from the maintainers.
 - A fork, rebuild or redistribution must use its own name and its own logo.
   The project identity is defined in one place,
   [`source/include/onion/distribution.h`](source/include/onion/distribution.h),

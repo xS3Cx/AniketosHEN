@@ -99,9 +99,9 @@ projects or Sony Interactive Entertainment.
 
 ## Maintainer
 
-AniketosHEN is maintained by AlexZero. The welcome notification's "made by"
-line and the Toolbox *About → Find me on* page name the maintainer of this
-fork; they are not a claim of authorship over the OnionHEN and etaHEN code,
+AniketosHEN is made and maintained by AlexZero and Andriushka.exe. The
+welcome notification's "made by" line names both, and the Toolbox *About →
+Find me on* page links AlexZero's channels; they are not a claim of authorship over the OnionHEN and etaHEN code,
 whose authors are credited under *About → Credits → Lineage*, in the README
 and above. OnionHEN's donation page, donor list, contributor list and tester
 list were removed from the Toolbox and the README because they describe

@@ -65,7 +65,7 @@ string(CONCAT _contents
     "#pragma once\n\n"
     "/* Generated at build time. Do not edit. */\n"
     "#define ONIONHEN_VERSION \"${_version}\"\n"
-    "#define ONIONHEN_AUTHOR \"AlexZero\"\n")
+    "#define ONIONHEN_AUTHOR \"AlexZero & Andriushka.exe\"\n")
 
 get_filename_component(_output_dir "${OUTPUT_FILE}" DIRECTORY)
 file(MAKE_DIRECTORY "${_output_dir}")

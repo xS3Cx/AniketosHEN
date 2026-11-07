@@ -9,5 +9,5 @@
 /* Maintainer of this distribution, shown as "made by" in the welcome toast.
  * The authors of the code it is built from are credited on the About page
  * (Lineage) and in NOTICE.md. */
-#define ONIONHEN_AUTHOR "AlexZero"
+#define ONIONHEN_AUTHOR "AlexZero & Andriushka.exe"
 #endif

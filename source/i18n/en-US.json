@@ -1308,8 +1308,6 @@
     "notify.payload.config_invalid": "Enter a whole number from 0 to %d.",
     "notify.payload.config_save_failed": "Failed to save Payload settings: %s",
     "notify.boot.starting": "AniketosHEN is starting...",
-    "notify.boot.welcome_star": "★ Welcome to AniketosHEN",
-    "notify.boot.loading": "Loading Kstuff...\nLoading ShadowMountPlus...",
     "notify.boot.welcome": "Welcome to AniketosHEN",
     "notify.boot.goto_toolbox": "Go to the AniketosHEN Toolbox",
     "notify.boot.made_by": " made by ",

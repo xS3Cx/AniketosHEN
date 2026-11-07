@@ -1144,7 +1144,7 @@ void append_toolbox_about_group(ps5ui::Group& g) {
                        toolbox_i18n::tr("about.lineage.goldhen"),
                        ps5ui::Style::Center)
                 .label("id_credit_andriushka",
-                       "\xE2\x98\x85 andriushka.exe",
+                       "\xE2\x98\x85 " ONION_DIST_NAME ": AlexZero & Andriushka.exe",
                        ps5ui::Style::Center)
                 .label("id_about_contributor", toolbox_i18n::tr("about.contributor"),
                        ps5ui::Style::Center)
