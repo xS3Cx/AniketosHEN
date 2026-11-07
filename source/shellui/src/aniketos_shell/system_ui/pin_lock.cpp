@@ -28,8 +28,6 @@ constexpr const char *kIcon =
     ONION_DIST_USER_DATA_ROOT "/assets/icon_xml_account.png";
 /* Frames between a prompt closing and the next one of the same question. */
 constexpr int kChainFrames = 20;
-/* Frames after the locked page is served before its prompt opens. */
-constexpr int kAutoAskFrames = 30;
 
 enum class Goal { None, Unlock, Set, Remove };
 enum class Step { Current, New, Repeat };
@@ -41,7 +39,6 @@ void (*s_then)() = nullptr;
 uint64_t s_token = 0;
 std::string s_new_pin;
 int s_chain_frames = 0;
-int s_auto_ask_frames = 0;
 std::string s_locked_resource;
 int64_t s_last_frame = 0;
 int s_user_check = 0;
@@ -236,9 +233,12 @@ bool Blocks(toolbox::Page page, bool dynamic_page) {
 
 std::string LockedPageXml(const std::string &resource) {
   s_locked_resource = resource;
-  s_auto_ask_frames = kAutoAskFrames;
+  /* The prompt opens from the page's own row: opened by itself while
+     Settings was still building the page, ShellUI went down. */
   LOG_INFO("[PINLOCK] locked page instead of %s", resource.c_str());
-  ps5ui::Page page("id_pin_locked", tr("root.title"));
+  /* Settings builds the Toolbox root from its root list id: keep it. */
+  const bool root = resource.find("debug_settings.xml") != std::string::npos;
+  ps5ui::Page page(root ? "id_debug_settings" : "id_pin_locked", tr("root.title"));
   page.root_focus("id_pin_unlock");
   page.label("id_pin_locked_info", tr("pin.locked"), ps5ui::Style::Center)
       .button("id_pin_unlock", tr("pin.unlock"), std::nullopt, std::nullopt,
@@ -290,13 +290,6 @@ void Tick() {
     s_user_check = 0;
     if (foreground_user() != s_session.user)
       lock("user switch");
-  }
-
-  if (s_auto_ask_frames > 0 && --s_auto_ask_frames == 0) {
-    if (toolbox_is_stack_under_transition())
-      s_auto_ask_frames = 1;
-    else if (locked())
-      start(Goal::Unlock, open_locked_resource);
   }
 
   if (s_goal == Goal::None)
