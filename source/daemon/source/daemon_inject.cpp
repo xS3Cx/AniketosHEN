@@ -197,9 +197,22 @@ bool toolbox_inject_immediate(pid_t expected_pid = 0) {
         toolbox_wait_started(pid);
         LOG_DEBUG("Injecting toolbox into SceShellUI pid=%d",
                   static_cast<int>(pid));
-        /* libNineS keeps global ptrace state: one injection at a time */
-        std::lock_guard<std::mutex> lock(onion::daemon::inject_mutex());
-        return Inject_Toolbox(static_cast<int>(pid), shellui_elf_start);
+        /* Right after a cold boot the first try can fail (kernel mprotect
+           refused): try again a couple of times before giving up. */
+        constexpr int kAttempts = 3;
+        for (int attempt = 1; attempt <= kAttempts; ++attempt) {
+          {
+            /* libNineS keeps global ptrace state: one injection at a time */
+            std::lock_guard<std::mutex> lock(onion::daemon::inject_mutex());
+            if (Inject_Toolbox(static_cast<int>(pid), shellui_elf_start))
+              return true;
+          }
+          if (attempt == kAttempts || !isProcessAlive(pid))
+            break;
+          LOG_WARN("toolbox injection attempt %d failed, retrying", attempt);
+          sleep(2);
+        }
+        return false;
       },
       /*timeout_ms=*/45 * 1000, /*poll_ms=*/250, expected_pid);
 

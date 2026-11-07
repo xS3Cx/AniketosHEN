@@ -20,3 +20,5 @@
 - Payload Manager: updating a payload the catalog renamed no longer leaves the old copy behind, still starting with AniketosHEN.
 - A missing file on the server now says "not on the server" / "no release found on GitHub" instead of a network error.
 - A payload that crashes the console during Autostart now counts as an unfinished start, so the next start is a safe one.
+- Start-up: if the Toolbox cannot get into the system UI on the first try (it can happen right after the console starts), it tries again, instead of staying off until the HEN is reloaded.
+- Games: a stray "ELF failed to inject!" notification no longer appears when keyboard & mouse support cannot attach to a game.

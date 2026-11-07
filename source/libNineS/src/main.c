@@ -24,13 +24,12 @@ bool Inject_Toolbox(int pid, uint8_t * elf)
     struct proc* target_proc = get_proc_by_pid(pid);//find_proc_by_name("SceShellUI");
     if (target_proc)
     {
-        if (!(success = inject_elf(target_proc, elf)))
-            notify_send("ELF failed to inject!");
-        
+        /* the caller reports a failure: KB+M only logs it, Toolbox notifies */
+        success = inject_elf(target_proc, elf);
+
         free(target_proc);
     }
     else{
-        notify_send("unable to find shellui");
         return false;
     }
 
