@@ -43,6 +43,7 @@
 #include "overlay_metrics.hpp"
 #include "toolbox_route.hpp"
 #include "aniketos_shell/system_ui/pin_lock.hpp"
+#include "x5guard/guard.hpp"
 
 #include <onion/payload_identity.h>
 
@@ -822,6 +823,8 @@ constexpr const char* kIconMonitor =
     ONION_DIST_USER_DATA_ROOT "/assets/icon_xml_monitor.png";
 constexpr const char* kIconAccount =
     ONION_DIST_USER_DATA_ROOT "/assets/icon_xml_account.png";
+constexpr const char* kIconNetwork =
+    ONION_DIST_USER_DATA_ROOT "/assets/icon_xml_network.png";
 constexpr const char* kIconSettings =
     ONION_DIST_USER_DATA_ROOT "/assets/icon_xml_settings.png";
 constexpr const char* kIconShortcuts =
@@ -924,6 +927,27 @@ void append_toolbox_network_group(ps5ui::Group& g) {
     g.link("id_remote_play", toolbox_i18n::tr("remote_play.title"),
            "remote_play.xml", toolbox_i18n::tr("remote_play.sub"));
   }
+}
+
+/* Counters are read when the Toolbox opens (the page is built then). */
+void append_toolbox_x5guard_group(ps5ui::Group& g) {
+  const std::string last = X5Guard::LastBlocked();
+  g.label("id_x5guard_info", toolbox_i18n::tr("x5guard.sub"),
+          ps5ui::Style::Center)
+      .toggle("id_x5guard_psn_blocker", toolbox_i18n::tr("x5guard.psn_blocker"),
+              toolbox_on("id_x5guard_psn_blocker"),
+              toolbox_i18n::tr("x5guard.psn_blocker.sub"), std::nullopt,
+              kIconNetwork)
+      .toggle("id_x5guard_alerts", toolbox_i18n::tr("x5guard.alerts"),
+              toolbox_on("id_x5guard_alerts"),
+              toolbox_i18n::tr("x5guard.alerts.sub"))
+      .label("id_x5guard_blocked_count",
+             std::string(toolbox_i18n::tr("x5guard.blocked_count")) + ": " +
+                 std::to_string(X5Guard::BlockedCount()))
+      .label("id_x5guard_last_blocked",
+             std::string(toolbox_i18n::tr("x5guard.last_blocked")) + ": " +
+                 (last.empty() ? std::string(toolbox_i18n::tr("x5guard.none"))
+                               : last));
 }
 
 void append_toolbox_display_group(ps5ui::Group& g) {
@@ -1232,6 +1256,11 @@ void generate_toolbox_xml(std::string& new_xml) {
           },
           toolbox_i18n::tr("group.network.sub"), kIconAccount,
           "id_remote_play")
+      .group(
+          "id_group_x5guard", toolbox_i18n::tr("x5guard.title"),
+          [](ps5ui::Group& g) { append_toolbox_x5guard_group(g); },
+          toolbox_i18n::tr("x5guard.sub"), kIconNetwork,
+          "id_x5guard_psn_blocker")
       .group(
           "id_group_display", toolbox_i18n::tr("group.display"),
           [](ps5ui::Group& g) { append_toolbox_display_group(g); },

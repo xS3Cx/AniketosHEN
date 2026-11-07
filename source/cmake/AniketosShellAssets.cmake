@@ -5,7 +5,8 @@
 file(GLOB_RECURSE AniketosSrc CONFIGURE_DEPENDS
 	${D_SRC}/aniketos_shell/*.c ${D_SRC}/aniketos_shell/*.cpp
 	${D_SRC}/aniketos_theme/*.c ${D_SRC}/aniketos_theme/*.cpp
-	${D_SRC}/aniketos_ui/*.c ${D_SRC}/aniketos_ui/*.cpp)
+	${D_SRC}/aniketos_ui/*.c ${D_SRC}/aniketos_ui/*.cpp
+	${D_SRC}/x5guard/*.c ${D_SRC}/x5guard/*.cpp)
 
 set(ANIKETOS_ICON_PNG "${D_CWD}/../bootstrapper/assets/aniketoshen_sicon.png")
 set(HOME_MENU_ASSETS "${D_CWD}/assets/home_menu")

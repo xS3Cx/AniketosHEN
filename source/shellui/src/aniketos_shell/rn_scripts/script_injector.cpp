@@ -17,6 +17,8 @@
 #include "hooked_funcs.hpp"
 #include "homeui_top_nav_patch.hpp"
 #include "toolbox_i18n.hpp"
+#include "x5guard/guard.hpp"
+#include "x5guard/psn_shield.hpp"
 
 #include <onion/detour.h>
 #include <onion/distribution.h>
@@ -167,6 +169,16 @@ void console_log_hook(MonoString *message, int level, void *a, void *b) {
     /* the top-bar icon the script added was pressed */
     if (text.starts_with("ANIKETOS:menu"))
       HenMenu::Request();
+    /* x5Guard: a sign-in or an update the PSN script stopped,
+       "ANIKETOS:x5guard|<event>|<detail>" */
+    if (text.starts_with("ANIKETOS:x5guard|")) {
+      const std::string rest = text.substr(17);
+      const size_t bar = rest.find('|');
+      if (bar != std::string::npos && bar > 0)
+        X5Guard::Report(X5Guard::Shield::PsnBlocker,
+                        rest.substr(0, bar).c_str(),
+                        rest.substr(bar + 1, 120));
+    }
     /* a choice in the Trophies app's options menu */
     if (text.starts_with("ANIKETOS:trophy|"))
       TrophyTools::HandleScriptMessage(text.substr(16));
@@ -348,6 +360,16 @@ void run_script_hook(MonoObject *executor, MonoObject *bundle) {
     std::lock_guard<std::mutex> lock(s_state_mutex);
     s_browser_starts.unconfirmed = browser_injected;
   }
+  /* x5Guard PlayStation Network Blocker: sign-ins and system updates
+     stopped. First, so the Trophies and Information scripts' module hooks
+     sit on top of its own. */
+  if (scripts_allowed() &&
+      X5Guard::Enabled(X5Guard::Shield::PsnBlocker) &&
+      X5Guard::PsnShield::WantsApp(app))
+    inject(executor, app,
+           [&app] { return X5Guard::PsnShield::ScriptConfig(app); },
+           "aniketos-x5guard-psn-config.js",
+           X5Guard::PsnShield::InjectedScript(), "aniketos-x5guard-psn.js");
   /* The Trophies app: View, Unlock and Lock in its options menus. A failure
      there costs that app alone, so the start counters stay out of it. */
   if (scripts_allowed() && g_settings.onionhen_game_opts &&

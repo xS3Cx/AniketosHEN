@@ -102,6 +102,7 @@ existing OnionHEN installation, and adds a large set of features of its own.
 - **Controller tools** — light bar colours and animations, player lights, vibration test, console sound mirrored to the DualSense speaker
 - **Console tools** — power LED colour, buzzer, live hardware information, fan threshold from the Shell Menu
 - **Error reports** — failed starts, crashes and failed imports are kept, scrubbed of IDs, and can be sent to the publisher's relay
+- **x5Guard™** — AniketosHEN's guard; its PlayStation Network Blocker (on by default) stops every PSN sign-in, connection and system update attempt and names what it stopped in a top banner; see [x5Guard™](#x5guard)
 - **PIN lock** (off by default) — a PIN before the Toolbox, the Shell Menu and the HEN button menu open, for consoles children use; see [PIN lock](#pin-lock)
 - **Debug toggles** — the system's DevKit/TestKit info overlay and the "expired" banner
 - **Translations** — the Shell Menu, keyboard & mouse, Payload Manager, HEN Update Manager and the other new pages in all 14 language catalogs
@@ -234,6 +235,36 @@ The details can also be saved to a USB drive.
 
 The feature provides pairing and registration only. Video streaming and client
 transport remain handled by Sony's native Remote Play service.
+
+### x5Guard™
+
+x5Guard™ is AniketosHEN's guard: shields that stop actions which would cost
+you the jailbreak. More shields will follow; the first one is the
+**PlayStation Network Blocker**, switched in **Toolbox → x5Guard™** (on by
+default).
+
+The PlayStation Network Blocker stops:
+
+- PSN sign-in from any screen: the Sign In buttons and links (PS Store,
+  Explore, Trophies, profiles, Control Center and others) and the sign-in
+  screen itself
+- account linking and PSN sign-up prompts
+- system update dialogs and "Update now" links, and System Feature Updates
+- the automatic download and install switches for system updates
+- system notifications inviting you to sign in or to update
+
+Each time it stops something, a banner at the top of the screen (like the
+"Remote Play connected" one) shows a yellow warning sign and **x5Guard™**, then what
+was blocked, with the system's warning sound. **Guard alerts** turns the banner off; blocking goes on.
+**Blocked since start** and **Last blocked** on the same page show how many
+attempts it stopped since the HEN started and the last one. Every block is
+also written to `/data/AniketosHEN/x5guard.log`.
+
+[nanoDNS](https://github.com/drakmor/nanoDNS) (in the Payload Manager
+catalog) already keeps the console off PSN's servers; x5Guard™ is about the
+interface, so nobody signs in or starts an update by accident. It works only
+in memory while the HEN runs: nothing on the system is changed, and turning
+the shield off restores the stock behaviour for apps opened afterwards.
 
 ### Keyboard and mouse
 
@@ -528,6 +559,7 @@ and are best changed from the menu itself.
 | `/data/AniketosHEN/home_tabs.json` | Home's custom tabs, their names, icons and titles (v2) |
 | `/data/AniketosHEN/reports/` | Scrubbed error reports |
 | `/data/AniketosHEN/pin_lock` | Salted hash of the PIN lock's PIN (delete it to turn the lock off) |
+| `/data/AniketosHEN/x5guard.log` | What x5Guard™ blocked (size-capped) |
 | `/data/AniketosHEN/kstuff.elf` | Optional runtime override with priority over the embedded `kstuff` |
 | `/data/AniketosHEN/AniketosHEN.log` | Main runtime log |
 | `/data/AniketosHEN/AniketosHEN_crash.log`, `AniketosHEN_util_crash.log` | Preserved signal and backtrace logs |

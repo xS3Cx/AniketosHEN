@@ -181,6 +181,7 @@ TEST_CXX_SRCS := \
   test_web_icon.cpp \
   test_rco_names.cpp \
   test_pin_lock.cpp \
+  test_x5guard_policy.cpp \
 	test_fps_formula.cpp \
 	test_kbm_engine.cpp \
 	test_kbm_model.cpp \

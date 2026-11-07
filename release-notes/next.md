@@ -1,24 +1,23 @@
 ## Added
-- System look: "HEN button icon" can show a toolbox icon in the system's own style, like Search and Settings beside it, instead of the AniketosHEN logo in Home's top bar; Home reloads to show it.
-- Preferences > PIN lock: an optional PIN (off by default) that the Toolbox, the Shell Menu and the HEN button menu ask for before they open, so children cannot change HEN settings; forgot it? Delete /data/AniketosHEN/pin_lock over FTP or put a file named no_pin_lock on the first USB drive.
-- Shell Menu > Home screen > Game tiles: custom game icons. A picture named after a game's title id in /data/AniketosHEN/ShellUI/icons (for example PPSA01234.gif) replaces its tile icon on Home; animated GIF and WebP play while Home is on screen.
-- SPRX loader: GoldHEN-style `plugins.ini` support. List plugins by title ID in `/data/AniketosHEN/plugins.ini` (or keep your existing `/data/GoldHEN/plugins.ini`) and they load into the matching game like GoldHEN does.
-- Game plugins: put .sprx, .prx or .elf plugins in /data/AniketosHEN/pluginloader/<title ID> (or /data/AniketosHEN/pluginloader/all for every game) and they load when that game starts; Toolbox > Game Tools > Game plugins lists your PS5 and PS4 games with their icons (other apps only once they have plugins), and each game has Load on startup and a switch per plugin with its last status; a game's Options menu has ★ Plugins with the same switches; when the game starts, a "PluginLoader" notification lists what loaded, with the type in brackets (for example GTA-V.elf [ELF] started), switchable in Toolbox > Debug.
+- Toolbox > x5Guard™: a new guard. Its PlayStation Network Blocker (on by default) stops every PSN sign-in, connection and system update attempt, keeps automatic system, game and app updates off, and shows an x5Guard™ banner with a warning sound saying what it blocked.
+- Game plugins: .sprx, .prx and .elf plugins in /data/AniketosHEN/pluginloader/<title ID> (or /all) load when the game starts; switch them per game in Toolbox > Game Tools > Game plugins or the game's Options > ★ Plugins; a "PluginLoader" notification lists what loaded.
+- SPRX loader: GoldHEN-style plugins.ini (/data/AniketosHEN/plugins.ini or /data/GoldHEN/plugins.ini).
+- Game tiles: custom game icons, also animated GIF/WebP: /data/AniketosHEN/ShellUI/icons/<title ID>.gif.
+- Preferences > PIN lock: an optional PIN before the Toolbox, Shell Menu and HEN menu open (forgot it? delete /data/AniketosHEN/pin_lock).
+- System look: the HEN button can show a toolbox icon in the system's own style.
 
 ## Changed
-- Start-up: the "Loading Kstuff / Loading ShadowMountPlus" notification is gone; "AniketosHEN is starting..." and the welcome remain.
-- About > Credits and the welcome notification name both makers of AniketosHEN, AlexZero and Andriushka.exe.
+- Start-up: the "Loading Kstuff / Loading ShadowMountPlus" notification is gone.
 
 ## Fixed
-- Home: L1/R1 now move through every visible tab in the order shown, custom tabs included, and back again, with the highlight following.
-- Updating from an older version no longer switches kstuff and ShadowMountPlus off; a config.ini from before they became optional keeps them on.
-- Start-up: kstuff and ShadowMountPlus never start twice (the included one plus a kstuff-lite or ShadowMountPlus payload in Autostart, or after reloading the HEN).
-- ShadowMountPlus starts when kstuff comes from somewhere else (the exploit chain or a kstuff-lite payload in Autostart); if there is no kstuff at all, you get a notification.
-- Autostart: the same payload on internal storage and a USB drive starts only once.
-- Autostart: the controls no longer react while the Control Center is open.
-- HEN menu: a choice made in a payload's OPTIONS menu could be taken by the HEN menu and install a package.
-- Payload Manager: updating a payload the catalog renamed no longer leaves the old copy behind, still starting with AniketosHEN.
-- A missing file on the server now says "not on the server" / "no release found on GitHub" instead of a network error.
-- A payload that crashes the console during Autostart now counts as an unfinished start, so the next start is a safe one.
-- Start-up: if the Toolbox cannot get into the system UI on the first try (it can happen right after the console starts), it tries again, instead of staying off until the HEN is reloaded.
-- Games: a stray "ELF failed to inject!" notification no longer appears when keyboard & mouse support cannot attach to a game.
+- Home: L1/R1 move through every visible tab, custom tabs included.
+- Updating no longer switches kstuff and ShadowMountPlus off.
+- kstuff and ShadowMountPlus never start twice.
+- ShadowMountPlus starts when kstuff comes from elsewhere; with no kstuff at all you get a notification.
+- Autostart: the same payload on internal storage and USB starts only once, and the controls ignore input while the Control Center is open.
+- HEN menu: a choice in a payload's OPTIONS menu no longer installs a package.
+- Payload Manager: updating a renamed payload no longer leaves the old copy behind.
+- A missing file on the server says "not on the server" instead of a network error.
+- A payload that crashes the console during Autostart makes the next start a safe one.
+- Start-up: the Toolbox retries getting into the system UI instead of staying off.
+- Games: no more stray "ELF failed to inject!" notification.

@@ -224,3 +224,7 @@ ONION_SHELL_SETTING_INT(hen_button_icon, 0)
  * (shellui: aniketos_theme/customization.hpp). The HEN button and the Home
  * tabs stay either way. */
 ONION_SHELL_SETTING_BOOL(shell_customization_enabled, true)
+/* x5Guard (shellui: x5guard/): the PlayStation Network Blocker shield, and
+ * the guard's top banner each time it stops something. */
+ONION_SHELL_SETTING_BOOL(x5guard_psn_blocker, true)
+ONION_SHELL_SETTING_BOOL(x5guard_alerts, true)

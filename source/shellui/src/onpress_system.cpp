@@ -72,6 +72,23 @@ static OnPressResult id_debug_plugins(OnPressContext &ctx) {
   return OnPressResult::Handled;
 }
 
+static OnPressResult id_x5guard_psn_blocker(OnPressContext &ctx) {
+  const bool enabled = value_as_int(ctx);
+  if (enabled == g_settings.x5guard_psn_blocker)
+    return OnPressResult::EarlyReturn;
+  g_settings.x5guard_psn_blocker = enabled;
+  LOG_INFO("x5Guard PlayStation Network Blocker: %s", enabled ? "on" : "off");
+  return OnPressResult::Handled;
+}
+
+static OnPressResult id_x5guard_alerts(OnPressContext &ctx) {
+  const bool enabled = value_as_int(ctx);
+  if (enabled == g_settings.x5guard_alerts)
+    return OnPressResult::EarlyReturn;
+  g_settings.x5guard_alerts = enabled;
+  return OnPressResult::Handled;
+}
+
 static OnPressResult id_app_jailbreak_enabled(OnPressContext &ctx) {
   const bool enabled = value_as_int(ctx);
   if (enabled == g_settings.app_jailbreak_enabled) {
@@ -229,6 +246,8 @@ static const OnPressExactEntry kExact[] = {
     {"id_app_jailbreak_enabled", id_app_jailbreak_enabled},
     {"id_debug_jb", id_debug_jb},
     {"id_debug_plugins", id_debug_plugins},
+    {"id_x5guard_psn_blocker", id_x5guard_psn_blocker},
+    {"id_x5guard_alerts", id_x5guard_alerts},
     {"id_custom_game_opts", id_custom_game_opts},
     {"id_ui_lang", id_ui_lang},
     {"id_rest_1", id_rest_1},

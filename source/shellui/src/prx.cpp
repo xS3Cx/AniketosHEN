@@ -32,6 +32,7 @@ along with this program; see the file COPYING. If not, see
 #include "toolbox_i18n.hpp"
 #include "ucred.h"
 #include "webserver.hpp"
+#include "x5guard/native_shields.hpp"
 
 #include <onion/notify.h>
 #include <onion/proc_query.h>
@@ -611,6 +612,7 @@ bool install_hooks(const ShellImages& img) {
   install_homeui_top_nav_hooks(img.react_pui);
 
   ShellFeatures::Install(img.react_pui, img.pui);
+  X5Guard::InstallNativeShields();
 
   (void)install_optional_diag(
       "[DBG-GETMODEL] GetModel", img.rn_shell, "ReactNative.Modules.ShellUI.Settings",

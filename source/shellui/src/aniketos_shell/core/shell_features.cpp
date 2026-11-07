@@ -36,6 +36,7 @@
 #include "aniketos_theme/theme_manager.hpp"
 #include "aniketos_theme/tiles/home_tiles.hpp"
 #include "aniketos_theme/toggle_styles.hpp"
+#include "x5guard/psn_shield.hpp"
 
 #include <onion/log.h>
 
@@ -80,6 +81,7 @@ void BeforeNativeFrame() {
   {
     Profile::Scope scope(Profile::kPolls);
     shellui_poll_presence_reload();
+    X5Guard::PsnShield::Tick();
   }
   {
     Profile::Scope scope(Profile::kSharedUi);

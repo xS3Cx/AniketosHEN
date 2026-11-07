@@ -69,6 +69,7 @@ extern "C" int test_plugin_progress_suite(void);
 extern "C" int test_progress_auto_return_suite(void);
 extern "C" int test_settings_page_update_suite(void);
 extern "C" int test_plugin_manager_suite(void);
+extern "C" int test_x5guard_policy_suite(void);
 
 int main() {
   int failures = 0;
@@ -142,6 +143,7 @@ int main() {
   failures += test_progress_auto_return_suite();
   failures += test_settings_page_update_suite();
   failures += test_plugin_manager_suite();
+  failures += test_x5guard_policy_suite();
 
   if (failures == 0) {
     std::fprintf(stderr, "All util host tests passed.\n");
