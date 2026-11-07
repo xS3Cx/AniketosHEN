@@ -79,7 +79,7 @@ existing OnionHEN installation, and adds a large set of features of its own.
 - **Remote Play pairing** — enable the native PS5 Remote Play service, generate a pairing PIN, register a client, save the details to USB
 - **Console tools** — account activation, Blu-ray license activation, external HDD, Title IDs, fan control, shortcuts, NP environment, Rest Mode delay and game options
 - **App jailbreak** — allowlisted homebrew can ask the daemon for extra privileges through a sandbox FIFO
-- **SPRX loader** — the daemon loads `.sprx` / `.prx` modules into games when they start, as listed in `sprx/catalog.ini`, and also reads GoldHEN-style `plugins.ini` files (`/data/AniketosHEN/plugins.ini`, and `/data/GoldHEN/plugins.ini` if present) that map title IDs to plugin paths ([docs/sprx-loader.md](docs/sprx-loader.md)); see [Game plugins](#game-plugins)
+- **SPRX loader** — the daemon loads `.sprx` / `.prx` modules into games when they start and starts `.elf` plugins beside them, from the per-game folders in `pluginloader/`; it also reads `sprx/catalog.ini` and GoldHEN-style `plugins.ini` files (`/data/AniketosHEN/plugins.ini`, and `/data/GoldHEN/plugins.ini` if present) that map title IDs to plugin paths ([docs/sprx-loader.md](docs/sprx-loader.md)); see [Game plugins](#game-plugins)
 - **Resilient runtime** — the critical daemon and utility daemon run apart; the main daemon can restart the utility
 - **Shared configuration** — the Toolbox and daemons use one versioned `config.ini`
 - **Toolbox in 14 languages**
@@ -244,17 +244,24 @@ guide is in [docs/kbm.md](docs/kbm.md).
 
 ### Game plugins
 
-Put `.sprx` / `.prx` plugins (mod menus and the like) in
-`/data/AniketosHEN/sprx/`, then open **Toolbox → Game Tools → Game plugins**.
-Each file of the folder is listed with its status (loaded in the running game,
-waiting for one of its games, off, not set up, or the reason its last load
-failed). On a plugin's page choose **All games** (every PS5 and PS4 game) or
-switch on the installed games it should load into, turn it off, or remove it
-(which deletes its file). A game's **Options** menu on Home has **★ Plugins**
-with a switch per plugin for that game. Plugins load when the game starts, so a
-change applies the next time the game starts; a plugin already in a game stays
-there until the game closes. The choices are kept in
-`/data/AniketosHEN/sprx/catalog.ini` ([docs/sprx-catalog.md](docs/sprx-catalog.md)).
+Every game or app has its own plugin folder:
+`/data/AniketosHEN/pluginloader/<TITLEID>/` (for example `PPSA01234`,
+`CUSA01234`), and `/data/AniketosHEN/pluginloader/all/` holds plugins for every
+game. Copy files there (FTP or USB) and that is all: the next time the game
+starts, its `.sprx` / `.prx` plugins (mod menus and the like) are loaded into
+it, and each `.elf` is started as its own process (once; not again while it is
+still running).
+
+**Toolbox → Game Tools → Game plugins** lists the installed games with their
+icons and how many plugins each one has. A game's page has **Load on startup**
+(all of that game's plugins on or off) and a switch per plugin of its folder
+and of `all/`, with its type (SPRX, PRX, ELF) and what happened at the last
+start (loaded, started, or why it failed). A game's **Options** menu on Home has
+**★ Plugins** with the same switches. The choices are kept in
+`/data/AniketosHEN/pluginloader/<TITLEID>/config.ini`, the last start in
+`status.ini` beside it. Plugins listed in `sprx/catalog.ini` or a `plugins.ini`
+still load and are shown read-only on the game's page
+([docs/sprx-loader.md](docs/sprx-loader.md)).
 
 ### Payloads
 
@@ -509,7 +516,8 @@ and are best changed from the menu itself.
 | `/data/AniketosHEN/payloads/` | User payload ELFs |
 | `/data/AniketosHEN/plugins/` | Descriptor-bearing plugin ELFs |
 | `/data/AniketosHEN/cheats/` | Cheat files (`cheats_tmp/` holds temporary sync files) |
-| `/data/AniketosHEN/sprx/` | Game plugins (`.sprx` / `.prx`) and `catalog.ini`, the games each one loads into |
+| `/data/AniketosHEN/pluginloader/` | Game plugins: `<TITLEID>/` for one game, `all/` for every game (`.sprx`, `.prx`, `.elf`), each game's `config.ini` and `status.ini` |
+| `/data/AniketosHEN/sprx/` | `catalog.ini`, the older hand-written list of `.sprx` / `.prx` plugins and their games |
 | `/data/AniketosHEN/plugins.ini` | GoldHEN-style plugin list (title ID → `.prx`/`.sprx` paths); `/data/GoldHEN/plugins.ini` is also read if present |
 | `/data/AniketosHEN/kbm/` | Keyboard and mouse settings, default template and per-game profiles |
 | `/data/AniketosHEN/ShellUI/` | Shell Menu media: `videos/`, `background/`, `particles/`, `avatars/`, `icons/` |

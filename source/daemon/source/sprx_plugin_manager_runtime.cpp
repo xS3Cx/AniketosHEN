@@ -3,6 +3,8 @@
 #include "daemon_ops.hpp"
 
 #include <onion/log.h>
+#include <onion/payload.h>
+#include <onion/plugin_folder.hpp>
 #include <onion/proc_query.h>
 #include <onion/sprx_plugin_manager.hpp>
 
@@ -71,9 +73,6 @@ struct Runtime {
   Runtime() : manager(transport, access, target) {}
 };
 
-/* Every game: PS5 titles and PS4 ones. */
-const std::vector<std::string> kAllGamePrefixes = {"PPSA", "CUSA"};
-
 struct FolderFile {
   std::string id;
   std::string path;
@@ -111,6 +110,20 @@ Runtime &runtime() {
   return value;
 }
 
+std::string failure_text(const onion::sprx::SprxPluginResult &item) {
+  char text[96];
+  if (item.skipped_dependency)
+    std::snprintf(text, sizeof(text), "dependency failed");
+  else if (item.load.status == onion::sprx::LoadStatus::RemoteError)
+    std::snprintf(text, sizeof(text), "%s 0x%08x",
+                  onion::sprx::load_status_name(item.load.status),
+                  static_cast<uint32_t>(item.load.remote_result));
+  else
+    std::snprintf(text, sizeof(text), "%s",
+                  onion::sprx::load_status_name(item.load.status));
+  return text;
+}
+
 void log_report(const char *operation,
                 const onion::sprx::SprxStartupReport &report) {
   for (const auto &item : report.results) {
@@ -118,18 +131,9 @@ void log_report(const char *operation,
       runtime().last_error.erase(item.id);
       continue;
     }
-    char text[96];
-    if (item.skipped_dependency)
-      std::snprintf(text, sizeof(text), "dependency failed");
-    else if (item.load.status == onion::sprx::LoadStatus::RemoteError)
-      std::snprintf(text, sizeof(text), "%s 0x%08x",
-                    onion::sprx::load_status_name(item.load.status),
-                    static_cast<uint32_t>(item.load.remote_result));
-    else
-      std::snprintf(text, sizeof(text), "%s",
-                    onion::sprx::load_status_name(item.load.status));
+    const std::string text = failure_text(item);
     runtime().last_error[item.id] = text;
-    LOG_WARN("[sprx-manager] %s: %s", item.id.c_str(), text);
+    LOG_WARN("[sprx-manager] %s: %s", item.id.c_str(), text.c_str());
   }
   for (const auto &issue : report.issues)
     LOG_WARN("[sprx-manager] line=%zu plugin=%s: %s", issue.line,
@@ -190,10 +194,70 @@ bool is_current_target(Runtime &current, pid_t pid, uint32_t app_id,
   return true;
 }
 
+/* The title's folder plugins: modules through the SPRX loader (lock held),
+   then each ELF as its own process. Leaves the status for the Toolbox. */
+void load_folder_plugins(Runtime &current, std::unique_lock<std::mutex> &lock,
+                         std::string_view title_id) {
+  namespace pl = onion::pluginloader;
+  const pl::Config config = pl::load_config(kPluginLoaderRoot, title_id);
+  std::vector<pl::Plugin> plugins = pl::list(kPluginLoaderRoot, title_id, config);
+  std::erase_if(plugins, [](const pl::Plugin &p) { return !p.enabled; });
+  if (plugins.empty())
+    return;
+  if (!config.load_on_startup) {
+    LOG_INFO("[pluginloader] %.*s: load on startup is off",
+             static_cast<int>(title_id.size()), title_id.data());
+    return;
+  }
+  pl::Status status;
+  std::vector<onion::sprx::SprxManifestEntry> modules;
+  for (const pl::Plugin &plugin : plugins) {
+    if (plugin.kind == pl::Kind::Elf)
+      continue;
+    onion::sprx::SprxManifestEntry entry;
+    entry.id = plugin.name;
+    entry.path = plugin.path;
+    modules.push_back(std::move(entry));
+  }
+  const auto report = current.manager.load(title_id, modules);
+  log_report("pluginloader", report);
+  for (const auto &item : report.results)
+    status[item.id] = item.load.succeeded() ? "loaded" : failure_text(item);
+  lock.unlock(); /* an ELF start waits on the loader socket */
+
+  for (const pl::Plugin &plugin : plugins) {
+    if (plugin.kind != pl::Kind::Elf)
+      continue;
+    /* The payload autostart identity: the same file is not started twice
+       while it still runs (an all/ ELF across games too). */
+    char key[ONION_PAYLOAD_IDENTITY_SIZE];
+    if (!onion_payload_identity_from_path(plugin.path.c_str(), key, sizeof(key))) {
+      status[plugin.name] = "invalid path";
+      continue;
+    }
+    const std::string file = plugin.path.substr(plugin.path.rfind('/') + 1);
+    if (onion_payload_running(key))
+      status[plugin.name] = "running";
+    else
+      status[plugin.name] =
+          onion_payload_load_with_key(plugin.path.c_str(), file.c_str(), key)
+              ? "started"
+              : "start failed";
+    LOG_INFO("[pluginloader] %.*s: %s %s", static_cast<int>(title_id.size()),
+             title_id.data(), plugin.name.c_str(), status[plugin.name].c_str());
+  }
+  if (!pl::save_status(kPluginLoaderRoot, title_id, status))
+    LOG_WARN("[pluginloader] cannot write the status of %.*s",
+             static_cast<int>(title_id.size()), title_id.data());
+}
+
 } // namespace
 
 void start() {
   ensure_catalog();
+  (void)mkdir(kPluginLoaderRoot, 0777);
+  (void)mkdir((std::string(kPluginLoaderRoot) + "/" +
+               std::string(onion::pluginloader::kAllFolder)).c_str(), 0777);
   run("startup", true);
 }
 void reconcile() { run("reconcile", false); }
@@ -223,52 +287,6 @@ std::vector<onion::sprx::SprxInventoryEntry> inventory() {
     entries.push_back(std::move(entry));
   }
   return entries;
-}
-
-onion::sprx::SprxOperationResult
-set_targets(std::string_view id, const std::vector<std::string> &title_ids,
-            bool all_games) {
-  Runtime &current = runtime();
-  std::lock_guard<std::mutex> lock(current.mutex);
-  const onion::sprx::SprxCatalog catalog = current.manager.catalog();
-  onion::sprx::SprxManifestEntry entry;
-  if (const auto *existing = catalog.find(id)) {
-    if (!existing->source.empty())
-      return {false, "listed in " + existing->source + "; edit that file"};
-    entry = *existing;
-  } else {
-    const auto files = folder_files();
-    const auto file = std::find_if(files.begin(), files.end(),
-                                   [&](const FolderFile &f) { return f.id == id; });
-    if (file == files.end())
-      return {false, "SPRX plugin is not in " + std::string(kFolder)};
-    entry.id = file->id;
-    entry.path = file->path;
-    entry.enabled = true;
-  }
-  /* A hand-written entry outside the plugins folder keeps its games, path,
-     priority and dependencies when its last game is switched off: it is
-     disabled, not dropped from catalog.ini. */
-  const std::string folder = std::string(kFolder) + "/";
-  const bool in_folder = entry.path.compare(0, folder.size(), folder) == 0;
-  if (!in_folder && title_ids.empty() && !all_games &&
-      catalog.find(id) != nullptr) {
-    entry.enabled = false;
-  } else {
-    entry.exact_title_ids = title_ids;
-    if (!all_games)
-      entry.title_id_prefixes.clear();
-    else if (entry.title_id_prefixes.empty()) /* keep hand-written prefixes */
-      entry.title_id_prefixes = kAllGamePrefixes;
-    if (!title_ids.empty() || all_games)
-      entry.enabled = true;
-  }
-  entry.auto_start = true; /* chosen games are where it should load */
-  const auto result = current.manager.put(std::move(entry));
-  LOG_INFO("[sprx-manager] targets %.*s titles=%zu all=%d -> %s",
-           static_cast<int>(id.size()), id.data(), title_ids.size(),
-           all_games ? 1 : 0, result.success ? "ok" : result.error.c_str());
-  return result;
 }
 
 onion::sprx::SprxOperationResult set_enabled(std::string_view id,
@@ -312,10 +330,11 @@ onion::sprx::SprxOperationResult remove(std::string_view id) {
 void on_big_app_started(pid_t pid, uint32_t app_id,
                         std::string_view title_id) {
   Runtime &current = runtime();
-  std::lock_guard<std::mutex> lock(current.mutex);
+  std::unique_lock<std::mutex> lock(current.mutex);
   if (!is_current_target(current, pid, app_id, title_id))
     return;
   log_report("big-app-start", current.manager.reconcile());
+  load_folder_plugins(current, lock, title_id);
 }
 
 void on_big_app_exited(pid_t pid, uint32_t app_id,

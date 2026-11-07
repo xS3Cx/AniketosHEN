@@ -78,13 +78,37 @@ SprxStartupReport SprxPluginManager::start_locked() {
   std::vector<SprxCatalogIssue> order_issues;
   const auto order = catalog.startup_order(target.title_id, &order_issues);
   append_issues(&report.issues, order_issues);
-  if (order.empty())
-    return report;
+  load_locked(target, order, report);
+  return report;
+}
 
+SprxStartupReport
+SprxPluginManager::load(std::string_view title_id,
+                        const std::vector<SprxManifestEntry> &entries) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  SprxStartupReport report;
+  report.catalog_loaded = true;
+  SprxTarget target;
+  if (entries.empty() || !target_provider_.current(&target) ||
+      target.title_id != title_id)
+    return report;
+  std::vector<const SprxManifestEntry *> order;
+  for (const SprxManifestEntry &entry : entries)
+    order.push_back(&entry);
+  load_locked(target, order, report);
+  return report;
+}
+
+void SprxPluginManager::load_locked(
+    const SprxTarget &target,
+    const std::vector<const SprxManifestEntry *> &order,
+    SprxStartupReport &report) {
+  if (order.empty())
+    return;
   TitleIdAllowlist allowlist;
   if (!allowlist.add_exact(target.title_id)) {
     report.issues.push_back({0, {}, "invalid current target Title ID"});
-    return report;
+    return;
   }
   SprxLoader loader(runtime_, access_policy_, allowlist);
   std::set<std::string> failed;
@@ -112,7 +136,6 @@ SprxStartupReport SprxPluginManager::start_locked() {
     }
     report.results.push_back(std::move(item));
   }
-  return report;
 }
 
 std::vector<SprxInventoryEntry> SprxPluginManager::inventory() const {

@@ -120,7 +120,8 @@ PROD_CXX_SRCS := \
 	$(REPO_ROOT)/source/libonion_lifecycle/source/app_lifecycle.cpp \
 	$(REPO_ROOT)/source/libonion_sprx/source/sprx_loader.cpp \
 	$(REPO_ROOT)/source/libonion_sprx/source/sprx_catalog.cpp \
-	$(REPO_ROOT)/source/libonion_sprx/source/sprx_plugin_manager.cpp
+	$(REPO_ROOT)/source/libonion_sprx/source/sprx_plugin_manager.cpp \
+	$(REPO_ROOT)/source/libonion_sprx/source/plugin_folder.cpp
 
 TEST_C_SRCS := \
 	test_harness.c \
@@ -248,6 +249,7 @@ PROD_CXX_OBJS += $(BUILD_DIR)/prod/libonion_lifecycle/app_lifecycle.o
 PROD_CXX_OBJS += $(BUILD_DIR)/prod/libonion_sprx/sprx_loader.o
 PROD_CXX_OBJS += $(BUILD_DIR)/prod/libonion_sprx/sprx_catalog.o
 PROD_CXX_OBJS += $(BUILD_DIR)/prod/libonion_sprx/sprx_plugin_manager.o
+PROD_CXX_OBJS += $(BUILD_DIR)/prod/libonion_sprx/plugin_folder.o
 PROD_CXX_OBJS += $(BUILD_DIR)/prod/libonion_plugin_ui/plugin_ui.o
 PROD_CXX_OBJS += $(BUILD_DIR)/prod/libonion_plugin_bridge/plugin_ui_bridge.o
 PROD_CXX_OBJS += $(BUILD_DIR)/prod/libonion_plugin_session/plugin_session.o
@@ -425,6 +427,10 @@ $(BUILD_DIR)/prod/libonion_sprx/sprx_catalog.o: $(REPO_ROOT)/source/libonion_spr
 	$(HOST_CXX) $(CXXFLAGS) -c -o $@ $<
 
 $(BUILD_DIR)/prod/libonion_sprx/sprx_plugin_manager.o: $(REPO_ROOT)/source/libonion_sprx/source/sprx_plugin_manager.cpp | $(BUILD_DIR)
+	@mkdir -p $(dir $@)
+	$(HOST_CXX) $(CXXFLAGS) -c -o $@ $<
+
+$(BUILD_DIR)/prod/libonion_sprx/plugin_folder.o: $(REPO_ROOT)/source/libonion_sprx/source/plugin_folder.cpp | $(BUILD_DIR)
 	@mkdir -p $(dir $@)
 	$(HOST_CXX) $(CXXFLAGS) -c -o $@ $<
 

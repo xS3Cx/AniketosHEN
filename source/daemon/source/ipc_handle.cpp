@@ -75,11 +75,9 @@ cJSON *sprx_inventory_item(const onion::sprx::SprxInventoryEntry &entry) {
   cJSON *titles = cJSON_AddArrayToObject(item, "titles");
   for (const std::string &title : entry.exact_title_ids)
     cJSON_AddItemToArray(titles, cJSON_CreateString(title.c_str()));
-  /* "All games" is every PS5 and PS4 title; a narrower prefix is not. */
-  const auto &prefixes = entry.title_id_prefixes;
-  const bool all = std::find(prefixes.begin(), prefixes.end(), "PPSA") != prefixes.end() &&
-                   std::find(prefixes.begin(), prefixes.end(), "CUSA") != prefixes.end();
-  cJSON_AddBoolToObject(item, "all", all);
+  cJSON *prefixes = cJSON_AddArrayToObject(item, "prefixes");
+  for (const std::string &prefix : entry.title_id_prefixes)
+    cJSON_AddItemToArray(prefixes, cJSON_CreateString(prefix.c_str()));
   if (!entry.last_error.empty())
     cJSON_AddStringToObject(item, "error", entry.last_error.c_str());
   return item;
@@ -231,25 +229,6 @@ void handleIPC(clientArgs *client, std::string &inputStr,
             ? onion::daemon::sprx_plugins::set_enabled(
                   id, onion_cjson::bool_item(my_json.get(), "enabled"))
             : onion::daemon::sprx_plugins::remove(id);
-    reply(sender_app, !result.success,
-          result.success ? std::string("ok") : result.error);
-    break;
-  }
-  case BREW_SPRX_SET_TARGETS: {
-    const char *id = onion_cjson::string_item(my_json.get(), "id");
-    if (!id || !*id) {
-      reply(sender_app, true, "missing SPRX id");
-      break;
-    }
-    std::vector<std::string> titles;
-    cJSON *title = nullptr;
-    cJSON_ArrayForEach(title, onion_cjson::item(my_json.get(), "titles"))
-      if (cJSON_IsString(title))
-        titles.emplace_back(title->valuestring);
-    /* The catalog check refuses bad title IDs and more than it can hold. */
-    const onion::sprx::SprxOperationResult result =
-        onion::daemon::sprx_plugins::set_targets(
-            id, titles, onion_cjson::bool_item(my_json.get(), "all"));
     reply(sender_app, !result.success,
           result.success ? std::string("ok") : result.error);
     break;

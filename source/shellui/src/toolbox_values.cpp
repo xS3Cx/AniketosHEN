@@ -11,6 +11,7 @@
 #include "shellui_state.hpp"
 #include "toolbox_i18n.hpp"
 #include "dynamic_ui_runtime.hpp"
+#include "external_sprx_ui.hpp"
 #include "plugin_sprx_pages.hpp"
 #include "aniketos_shell/toolbox/kbm_toolbox.hpp"
 
@@ -224,27 +225,7 @@ bool try_external_plugin_value(const std::string &id, std::string &out) {
 }
 
 bool try_external_sprx_value(const std::string &id, std::string &out) {
-  using namespace onion::shellui::plugin_pages;
-
-  std::string sprx_id, title;
-  enum { Enabled, AllGames, Game } kind;
-  if (split_control_id(id, kSprxEnabledPrefix, sprx_id, 1, 31))
-    kind = Enabled;
-  else if (split_control_id(id, kSprxAllGamesPrefix, sprx_id, 1, 31))
-    kind = AllGames;
-  else if (split_sprx_game_control_id(id, title, sprx_id))
-    kind = Game;
-  else
-    return false;
-  const auto it =
-      std::ranges::find(g_ui.external_sprx, sprx_id, &SprxInventoryItem::id);
-  if (it == g_ui.external_sprx.end())
-    return false;
-  out = bool_str(kind == Enabled    ? it->enabled
-                 : kind == AllGames ? it->all_games
-                                    : std::ranges::find(it->titles, title) !=
-                                          it->titles.end());
-  return true;
+  return onion::shellui::external_sprx::control_value(id, out);
 }
 
 bool try_dynamic_control_value(const std::string &id, std::string &out) {

@@ -40,27 +40,14 @@ The SPRX page can persist it as `enabled=true` or `enabled=false`. Disabling a
 module only removes it from future Big App startup plans; it does not and
 cannot unload a module already injected into a game process.
 
-## Game plugins page
+## Catalog and the plugin folders
 
-Players drop `.sprx`/`.prx` files in `/data/AniketosHEN/sprx/` (the daemon
-creates the folder and an empty `catalog.ini` on start). The daemon's inventory
-lists every catalog entry, then every file of that folder that no entry names
-yet; such a file gets the ID of its name without the suffix (characters outside
-the ID rule become `_`, cut to 31) and has no title IDs, which the UI shows as
-"not set up".
-
-Choosing games (Toolbox > Game Tools > Game plugins, or ★ Plugins in a game's
-Options menu) writes the entry through `SprxCatalogStore::put`:
-`exact_title_ids` are the chosen games, "All games" is
-`title_id_prefixes=PPSA,CUSA` (prefixes written by hand are kept), and
-`auto_start=true`. An entry left with no game at all is dropped from the
-catalog (the file stays and shows as not set up again). `put` re-parses the
-whole serialized catalog before writing it, so a change the parser would
-refuse (65 title IDs, a bad ID) is rejected instead of breaking the catalog.
-
-Remove drops the `[plugin.<id>]` entry and deletes the file when it is directly
-inside the plugins folder; a path written by hand elsewhere is left alone. It
-is rejected while that module is loaded in the current matching game.
+The per-game plugin folders in `/data/AniketosHEN/pluginloader/`
+([sprx-loader.md](sprx-loader.md)) are the main way to add plugins; the Toolbox
+writes their `config.ini`, never this catalog. `catalog.ini` is read as before
+(the daemon creates `/data/AniketosHEN/sprx/` and an empty catalog on start),
+and its entries for a game are shown read-only on that game's page. Edit the
+file by hand to change them.
 
 Startup order is a topological order. Among entries whose dependencies are
 already satisfied, larger `priority` values start first; ties are resolved by

@@ -46,6 +46,10 @@ public:
                     std::vector<std::string> imports = {});
   SprxStartupReport start();
   SprxStartupReport reconcile();
+  /** Loads these modules, in this order, into the current game when it is
+   *  title_id (the plugin folders; no catalog involved). */
+  SprxStartupReport load(std::string_view title_id,
+                         const std::vector<SprxManifestEntry> &entries);
   std::vector<SprxInventoryEntry> inventory() const;
   SprxOperationResult set_enabled(std::string_view id, bool enabled);
   SprxOperationResult remove(std::string_view id);
@@ -56,6 +60,9 @@ public:
 
 private:
   SprxStartupReport start_locked();
+  void load_locked(const SprxTarget &target,
+                   const std::vector<const SprxManifestEntry *> &order,
+                   SprxStartupReport &report);
 
   IRemoteSprxRuntime &runtime_;
   ITargetAccessPolicy &access_policy_;

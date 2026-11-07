@@ -11,21 +11,12 @@ OnPressResult external_sprx_control(OnPressContext &ctx) {
   const onion::shellui::external_sprx::DispatchResult result =
       onion::shellui::external_sprx::dispatch(ctx.id, ctx.value);
   if (!result.owned) return OnPressResult::NotMine;
-
-  using onion::shellui::external_sprx::Action;
-  /* Games picked or dropped change which rows the page has; a refused change
-     puts the switch back. */
-  if (result.action == Action::TargetsChanged)
-    onion::shellui::settings::refresh(ctx.instance);
-  if ((result.action == Action::EnabledChanged ||
-       result.action == Action::TargetsChanged) &&
-      result.success)
-    return OnPressResult::Consumed;
-
-  const char *key = result.success ? "sprx.deleted_fmt"
-                                   : "sprx.operation_failed_fmt";
-  const std::string message = toolbox_i18n::format(key, result.id.c_str());
-  notify("%s", message.c_str());
+  if (result.success) return OnPressResult::Consumed;
+  /* Not written: the page shows the switches as they really are. */
+  onion::shellui::settings::refresh(ctx.instance);
+  notify("%s",
+         toolbox_i18n::format("sprx.operation_failed_fmt", result.id.c_str())
+             .c_str());
   return OnPressResult::Consumed;
 }
 

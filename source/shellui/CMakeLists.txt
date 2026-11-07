@@ -59,13 +59,14 @@ set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -gfull -gdwarf-2 -pedantic -pedantic-error
 set(CMAKE_C_FLAGS_RELEASE "-Os -DNDEBUG")
 set(CMAKE_CXX_FLAGS_RELEASE "-Os -DNDEBUG")
 
-target_sources(${PROJECT_NAME} PRIVATE ${SrcFiles} ${AniketosSrc} "${EMBEDDED_ASSETS_ASSEMBLY}" "${PARTICLE_TEXTURES_ASSEMBLY}" "${D_CWD}/../util/source/update/update_manifest.cpp" "${ONIONHEN_THIRD_PARTY_DIR}/cheat_support/sha256.c")
+target_sources(${PROJECT_NAME} PRIVATE ${SrcFiles} ${AniketosSrc} "${EMBEDDED_ASSETS_ASSEMBLY}" "${PARTICLE_TEXTURES_ASSEMBLY}" "${D_CWD}/../util/source/update/update_manifest.cpp" "${PROJECT_ROOT}/libonion_sprx/source/plugin_folder.cpp" "${ONIONHEN_THIRD_PARTY_DIR}/cheat_support/sha256.c")
 set_source_files_properties("${ONIONHEN_THIRD_PARTY_DIR}/cheat_support/sha256.c"
 	PROPERTIES COMPILE_FLAGS "-Wno-error -Wno-unused-function -Wno-sign-compare")
 add_dependencies(${PROJECT_NAME} shellui_i18n_catalog onion_version onion_ipc onion_settings onion_payload_catalog onion_detour onion_proc onion_platform onion_ready onion_plugin_ui onion_plugin_bridge onion_kbm_profile)
 onion_target_debug_define(${PROJECT_NAME})
 target_include_directories(${PROJECT_NAME} PRIVATE
 	"${PROJECT_ROOT}/libonion_kbm/include"
+	"${PROJECT_ROOT}/libonion_sprx/include"
 	"${D_CWD}/include"
 	"${I18N_GENERATED_DIR}"
 	"${ONIONHEN_THIRD_PARTY_DIR}/cjson"

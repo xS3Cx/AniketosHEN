@@ -1,9 +1,13 @@
 #include "test_harness.h"
 #include "test_support.h"
 
+#include <onion/plugin_folder.hpp>
 #include <onion/sprx_catalog.hpp>
 
+#include <cstdio>
+#include <cstdlib>
 #include <string>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <vector>
 
@@ -312,6 +316,74 @@ int test_plugin_id_for_file() {
   return 0;
 }
 
+void touch(const std::string &path) {
+  FILE *file = std::fopen(path.c_str(), "w");
+  if (file)
+    std::fclose(file);
+}
+
+int test_plugin_folder_config() {
+  namespace pl = onion::pluginloader;
+  pl::Config config = pl::parse_config(
+      "; comment\nload_on_startup = false\ndisabled=a.sprx, all/b.elf,\n");
+  TEST_ASSERT_TRUE(!config.load_on_startup);
+  TEST_ASSERT_EQ_INT(2, static_cast<int>(config.disabled.size()));
+  TEST_ASSERT_TRUE(config.disabled[1] == "all/b.elf");
+  const pl::Config again = pl::parse_config(pl::serialize_config(config));
+  TEST_ASSERT_TRUE(!again.load_on_startup && again.disabled == config.disabled);
+  TEST_ASSERT_TRUE(pl::parse_config("").load_on_startup); /* default on */
+  TEST_ASSERT_TRUE(pl::parse_config("load_on_startup=1").load_on_startup);
+
+  pl::Kind kind;
+  TEST_ASSERT_TRUE(pl::plugin_kind("Menu.SPRX", &kind) && kind == pl::Kind::Sprx);
+  TEST_ASSERT_TRUE(pl::plugin_kind("x.prx", &kind) && kind == pl::Kind::Prx);
+  TEST_ASSERT_TRUE(pl::plugin_kind("x.elf", &kind) && kind == pl::Kind::Elf);
+  TEST_ASSERT_TRUE(!pl::plugin_kind("config.ini", &kind));
+  TEST_ASSERT_TRUE(!pl::plugin_kind(".elf", &kind));
+  TEST_ASSERT_TRUE(!pl::plugin_kind("a=b.sprx", &kind));
+  TEST_ASSERT_TRUE(!pl::plugin_kind("a,b.sprx", &kind));
+  TEST_ASSERT_TRUE(pl::valid_title("PPSA01234") && pl::valid_title("NPXS40087"));
+  TEST_ASSERT_TRUE(!pl::valid_title("all") && !pl::valid_title("../x/yyyy"));
+  return 0;
+}
+
+int test_plugin_folder_scan() {
+  namespace pl = onion::pluginloader;
+  char base[] = "/tmp/onion-pluginloader-XXXXXX";
+  TEST_ASSERT_TRUE(mkdtemp(base) != nullptr);
+  const std::string root = base;
+  /* No folder yet: nothing, and saving the config creates it. */
+  TEST_ASSERT_TRUE(pl::list(root, "PPSA01234", {}).empty());
+  pl::Config config;
+  config.disabled = {"all/b.elf"};
+  TEST_ASSERT_TRUE(pl::save_config(root, "PPSA01234", config));
+  TEST_ASSERT_TRUE(!pl::save_config(root, "../etc", config));
+  TEST_ASSERT_EQ_INT(0, mkdir((root + "/all").c_str(), 0777));
+  touch(root + "/PPSA01234/z.sprx");
+  touch(root + "/PPSA01234/a.PRX");
+  touch(root + "/PPSA01234/readme.txt");
+  TEST_ASSERT_EQ_INT(0, mkdir((root + "/PPSA01234/dir.sprx").c_str(), 0777));
+  touch(root + "/all/b.elf");
+  touch(root + "/CUSA00001.sprx");
+
+  config = pl::load_config(root, "PPSA01234");
+  TEST_ASSERT_TRUE(config.load_on_startup && config.disabled.size() == 1);
+  const auto plugins = pl::list(root, "PPSA01234", config);
+  TEST_ASSERT_EQ_INT(3, static_cast<int>(plugins.size()));
+  TEST_ASSERT_TRUE(plugins[0].name == "a.PRX" && plugins[0].kind == pl::Kind::Prx);
+  TEST_ASSERT_TRUE(plugins[1].name == "z.sprx" && plugins[1].enabled);
+  TEST_ASSERT_TRUE(plugins[2].name == "all/b.elf" && plugins[2].all_games() &&
+                   !plugins[2].enabled && plugins[2].path == root + "/all/b.elf");
+  /* Another game sees only all/. */
+  TEST_ASSERT_EQ_INT(1, static_cast<int>(pl::list(root, "CUSA00001", {}).size()));
+
+  TEST_ASSERT_TRUE(pl::save_status(root, "CUSA00001",
+                                   {{"all/b.elf", "started"}, {"x.sprx", "timeout"}}));
+  const pl::Status status = pl::load_status(root, "CUSA00001");
+  TEST_ASSERT_TRUE(status.size() == 2 && status.at("all/b.elf") == "started");
+  return 0;
+}
+
 } // namespace
 
 extern "C" int test_sprx_catalog_suite(void) {
@@ -328,5 +400,7 @@ extern "C" int test_sprx_catalog_suite(void) {
   failures += onion_test_run("sprx_catalog_import_cap", test_import_caps_titles_and_is_read_only);
   failures += onion_test_run("sprx_catalog_put", test_put_adds_replaces_and_drops);
   failures += onion_test_run("sprx_catalog_file_id", test_plugin_id_for_file);
+  failures += onion_test_run("plugin_folder_config", test_plugin_folder_config);
+  failures += onion_test_run("plugin_folder_scan", test_plugin_folder_scan);
   return failures;
 }
