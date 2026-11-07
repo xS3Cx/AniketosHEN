@@ -20,6 +20,8 @@ struct SprxManifestEntry {
   bool auto_start = false;
   int32_t priority = 0;
   std::vector<std::string> dependencies;
+  /** Empty for catalog.ini; else the GoldHEN-style plugins.ini it came from. */
+  std::string source;
 };
 
 struct SprxCatalogIssue {
@@ -43,6 +45,7 @@ struct SprxInventoryEntry {
   int32_t priority = 0;
   bool matches_current_target = false;
   bool loaded_for_current_target = false;
+  std::string source;
 };
 
 /**
@@ -71,6 +74,22 @@ public:
 
   const SprxManifestEntry *find(std::string_view id) const noexcept;
 
+  /**
+   * Appends the entries of a GoldHEN-style plugins.ini (read-only import):
+   *
+   *   [default]            every PS4 game (CUSA title IDs)
+   *   /data/GoldHEN/plugins/game_patch.prx
+   *   [CUSA00001]          one title (PS4 CUSA or PS5 PPSA)
+   *   /data/GoldHEN/plugins/afr.prx=true
+   *
+   * Lenient like GoldHEN: bad lines are reported and skipped. One entry per
+   * path, file order is load order, paths already in the catalog are skipped.
+   * Imported entries are never serialized; their ids start with the source's
+   * folder name ("goldhen-afr"). Returns the number of entries added.
+   */
+  size_t import_plugins_ini(std::string_view text, std::string_view source,
+                            std::vector<SprxCatalogIssue> *issues = nullptr);
+
   bool set_enabled(std::string_view id, bool enabled) noexcept;
   bool remove(std::string_view id) noexcept;
   std::string serialize() const;
@@ -94,8 +113,10 @@ private:
 /** Serialized catalog persistence. Mutations are atomically written to disk. */
 class SprxCatalogStore final {
 public:
+  /** imports: plugins.ini files read after the catalog (missing ones skipped). */
   bool load(std::string_view path,
-            std::vector<SprxCatalogIssue> *issues = nullptr);
+            std::vector<SprxCatalogIssue> *issues = nullptr,
+            std::vector<std::string> imports = {});
   bool reload(std::vector<SprxCatalogIssue> *issues = nullptr);
 
   std::vector<SprxInventoryEntry> inventory() const;
@@ -109,10 +130,12 @@ public:
 
 private:
   SprxOperationResult persist_locked();
+  bool load_locked(std::vector<SprxCatalogIssue> *issues);
 
   mutable std::mutex mutex_;
   SprxCatalog catalog_;
   std::string path_;
+  std::vector<std::string> imports_;
   bool loaded_ = false;
 };
 

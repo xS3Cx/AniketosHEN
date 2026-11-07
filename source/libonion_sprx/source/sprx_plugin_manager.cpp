@@ -37,12 +37,13 @@ SprxPluginManager::SprxPluginManager(IRemoteSprxRuntime &runtime,
     : runtime_(runtime), access_policy_(access_policy),
       target_provider_(target_provider) {}
 
-bool SprxPluginManager::load_catalog(
-    std::string_view path, std::vector<SprxCatalogIssue> *issues) {
+bool SprxPluginManager::load_catalog(std::string_view path,
+                                     std::vector<SprxCatalogIssue> *issues,
+                                     std::vector<std::string> imports) {
   std::lock_guard<std::mutex> lock(mutex_);
   if (issues)
     issues->clear();
-  return catalog_store_.load(path, issues);
+  return catalog_store_.load(path, issues, std::move(imports));
 }
 
 SprxStartupReport SprxPluginManager::start() {
@@ -102,6 +103,7 @@ SprxStartupReport SprxPluginManager::start_locked() {
       request.pid = target.pid;
       request.title_id = target.title_id;
       request.path = entry->path;
+      request.options.call_plugin_load = !entry->source.empty();
       item.load = loader.load(request);
       if (!item.load.succeeded())
         failed.insert(entry->id);

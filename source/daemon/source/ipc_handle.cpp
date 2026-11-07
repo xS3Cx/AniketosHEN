@@ -81,6 +81,7 @@ std::string sprx_inventory_page(size_t offset) {
                           entry.matches_current_target);
     cJSON_AddBoolToObject(item, "loaded_for_current_target",
                           entry.loaded_for_current_target);
+    cJSON_AddStringToObject(item, "source", entry.source.c_str());
     cJSON_AddItemToArray(items, item);
   }
   cJSON_AddNumberToObject(root, "next",

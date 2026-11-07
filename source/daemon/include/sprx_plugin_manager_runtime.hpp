@@ -12,6 +12,11 @@ namespace onion::daemon::sprx_plugins {
 
 inline constexpr const char *kCatalogPath =
     ONION_DIST_DATA_ROOT "/sprx/catalog.ini";
+/* GoldHEN-style plugins.ini files, merged read-only after the catalog. */
+inline constexpr const char *kPluginsIniPath =
+    ONION_DIST_DATA_ROOT "/plugins.ini";
+inline constexpr const char *kGoldHenPluginsIniPath =
+    "/data/GoldHEN/plugins.ini";
 
 void start();
 void reconcile();

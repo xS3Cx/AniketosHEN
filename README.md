@@ -79,7 +79,7 @@ existing OnionHEN installation, and adds a large set of features of its own.
 - **Remote Play pairing** — enable the native PS5 Remote Play service, generate a pairing PIN, register a client, save the details to USB
 - **Console tools** — account activation, Blu-ray license activation, external HDD, Title IDs, fan control, shortcuts, NP environment, Rest Mode delay and game options
 - **App jailbreak** — allowlisted homebrew can ask the daemon for extra privileges through a sandbox FIFO
-- **SPRX loader** — the daemon loads `.sprx` / `.prx` modules into games when they start, as listed in `sprx/catalog.ini` ([docs/sprx-loader.md](docs/sprx-loader.md))
+- **SPRX loader** — the daemon loads `.sprx` / `.prx` modules into games when they start, as listed in `sprx/catalog.ini`, and also reads GoldHEN-style `plugins.ini` files (`/data/AniketosHEN/plugins.ini`, and `/data/GoldHEN/plugins.ini` if present) that map title IDs to plugin paths ([docs/sprx-loader.md](docs/sprx-loader.md))
 - **Resilient runtime** — the critical daemon and utility daemon run apart; the main daemon can restart the utility
 - **Shared configuration** — the Toolbox and daemons use one versioned `config.ini`
 - **Toolbox in 14 languages**
@@ -496,6 +496,7 @@ and are best changed from the menu itself.
 | `/data/AniketosHEN/plugins/` | Descriptor-bearing plugin ELFs |
 | `/data/AniketosHEN/cheats/` | Cheat files (`cheats_tmp/` holds temporary sync files) |
 | `/data/AniketosHEN/sprx/catalog.ini` | Modules the SPRX loader injects into games |
+| `/data/AniketosHEN/plugins.ini` | GoldHEN-style plugin list (title ID → `.prx`/`.sprx` paths); `/data/GoldHEN/plugins.ini` is also read if present |
 | `/data/AniketosHEN/kbm/` | Keyboard and mouse settings, default template and per-game profiles |
 | `/data/AniketosHEN/ShellUI/` | Shell Menu media: `videos/`, `background/`, `particles/`, `avatars/`, `icons/` |
 | `/data/AniketosHEN/fonts/` | Custom system fonts |

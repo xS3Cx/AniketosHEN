@@ -8,11 +8,13 @@
 #include <onion/ucred.h>
 
 #include <ps5/kernel.h>
+#include <ps5/mdbg.h>
 
 #include <algorithm>
 #include <array>
 #include <cerrno>
 #include <chrono>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <mutex>
@@ -25,45 +27,88 @@ namespace {
 
 constexpr char kLoadStartModuleNid[] = "wzvqT4UqKX8";
 constexpr char kPthreadCreateNid[] = "OxhIB8LB-PQ";
+constexpr char kDlsymNid[] = "LwG8g3niqwA"; // sceKernelDlsym
 constexpr size_t kPageSize = 0x1000;
 constexpr size_t kContextOffsetPath = 0x100;
+constexpr size_t kContextOffsetPluginLoad = 0x80;
+constexpr size_t kContextOffsetPluginUnload = 0xC0;
 constexpr int64_t kPendingResult = INT64_MIN;
 
 /*
- * pthread start routine.  Its single argument is a RemoteContext pointer;
- * the context contains the sceKernelLoadStartModule address and path.  The
- * stub explicitly zeros arguments 2..6, stores the return value, then exits
- * normally.  No target code is injected beyond this short transient thunk.
+ * pthread start routine.  Its single argument is a RemoteContext pointer.
+ *   r = sceKernelLoadStartModule(path, 0, 0, 0, 0, 0)
+ *   if (r >= 0 && dlsym && dlsym(r, "plugin_load", &fn) == 0) {
+ *     plugin_result = fn(0, NULL);
+ *     if (plugin_result && dlsym(r, "plugin_unload", &fn) == 0) fn(0, NULL);
+ *   }
+ *   result = r          // published last: the host frees the pages after it
+ * Assembled from intel syntax with clang -arch x86_64; GoldHEN's loader does
+ * the same calls in the same order.  No code stays behind in the target.
  */
-constexpr std::array<uint8_t, 59> kLoadThreadStub = {
-    0x55,                         // push rbp
-    0x48, 0x89, 0xE5,             // mov rbp, rsp
-    0x48, 0x83, 0xE4, 0xF0,       // and rsp, -16
-    0x48, 0x83, 0xEC, 0x30,       // sub rsp, 0x30
-    0x48, 0x89, 0x7C, 0x24, 0x20,// mov [rsp+0x20], rdi
-    0x48, 0x8B, 0x07,             // mov rax, [rdi]
-    0x48, 0x8B, 0x4F, 0x08,       // mov rcx, [rdi+8]
-    0x48, 0x89, 0xCF,             // mov rdi, rcx
-    0x31, 0xF6,                   // xor esi, esi
-    0x31, 0xD2,                   // xor edx, edx
-    0x31, 0xC9,                   // xor ecx, ecx
-    0x45, 0x31, 0xC0,             // xor r8d, r8d
-    0x45, 0x31, 0xC9,             // xor r9d, r9d
-    0xFF, 0xD0,                   // call rax
-    0x48, 0x8B, 0x54, 0x24, 0x20,// mov rdx, [rsp+0x20]
-    0x48, 0x89, 0x42, 0x10,       // mov [rdx+0x10], rax
-    0x48, 0x89, 0xEC,             // mov rsp, rbp
-    0x5D,                         // pop rbp
-    0xC3                          // ret
+constexpr std::array<uint8_t, 129> kLoadThreadStub = {
+    0x55,                               // push rbp
+    0x48, 0x89, 0xE5,                   // mov rbp, rsp
+    0x53,                               // push rbx
+    0x48, 0x83, 0xE4, 0xF0,             // and rsp, -16
+    0x48, 0x83, 0xEC, 0x10,             // sub rsp, 0x10
+    0x48, 0x89, 0xFB,                   // mov rbx, rdi
+    0x48, 0x8B, 0x7B, 0x08,             // mov rdi, [rbx+0x08]  path
+    0x31, 0xF6,                         // xor esi, esi
+    0x31, 0xD2,                         // xor edx, edx
+    0x31, 0xC9,                         // xor ecx, ecx
+    0x45, 0x31, 0xC0,                   // xor r8d, r8d
+    0x45, 0x31, 0xC9,                   // xor r9d, r9d
+    0xFF, 0x13,                         // call [rbx]           load_start_module
+    0x48, 0x63, 0xC0,                   // movsxd rax, eax
+    0x48, 0x89, 0x04, 0x24,             // mov [rsp], rax
+    0x85, 0xC0,                         // test eax, eax
+    0x78, 0x43,                         // js done
+    0x48, 0x83, 0x7B, 0x18, 0x00,       // cmp qword [rbx+0x18], 0
+    0x74, 0x3C,                         // je done
+    0x89, 0xC7,                         // mov edi, eax         handle
+    0x48, 0x8B, 0x73, 0x20,             // mov rsi, [rbx+0x20]  "plugin_load"
+    0x48, 0x8D, 0x53, 0x38,             // lea rdx, [rbx+0x38]
+    0xFF, 0x53, 0x18,                   // call [rbx+0x18]      dlsym
+    0x85, 0xC0,                         // test eax, eax
+    0x75, 0x2B,                         // jne done
+    0x31, 0xFF,                         // xor edi, edi
+    0x31, 0xF6,                         // xor esi, esi
+    0xFF, 0x53, 0x38,                   // call [rbx+0x38]      plugin_load(0, NULL)
+    0x48, 0x63, 0xC0,                   // movsxd rax, eax
+    0x48, 0x89, 0x43, 0x30,             // mov [rbx+0x30], rax
+    0x85, 0xC0,                         // test eax, eax
+    0x74, 0x19,                         // je done
+    0x8B, 0x3C, 0x24,                   // mov edi, [rsp]       handle
+    0x48, 0x8B, 0x73, 0x28,             // mov rsi, [rbx+0x28]  "plugin_unload"
+    0x48, 0x8D, 0x53, 0x38,             // lea rdx, [rbx+0x38]
+    0xFF, 0x53, 0x18,                   // call [rbx+0x18]      dlsym
+    0x85, 0xC0,                         // test eax, eax
+    0x75, 0x07,                         // jne done
+    0x31, 0xFF,                         // xor edi, edi
+    0x31, 0xF6,                         // xor esi, esi
+    0xFF, 0x53, 0x38,                   // call [rbx+0x38]      plugin_unload(0, NULL)
+    0x48, 0x8B, 0x04, 0x24,             // done: mov rax, [rsp]
+    0x48, 0x89, 0x43, 0x10,             // mov [rbx+0x10], rax  result
+    0x48, 0x8B, 0x5D, 0xF8,             // mov rbx, [rbp-8]
+    0x48, 0x89, 0xEC,                   // mov rsp, rbp
+    0x5D,                               // pop rbp
+    0xC3                                // ret
 };
 
 struct RemoteContext {
-  uint64_t load_start_module;
-  uint64_t path;
-  int64_t result;
+  uint64_t load_start_module; // 0x00
+  uint64_t path;              // 0x08
+  int64_t result;             // 0x10 module handle or error, written last
+  uint64_t dlsym;             // 0x18 0 = plain load (catalog.ini entries)
+  uint64_t plugin_load_name;  // 0x20
+  uint64_t plugin_unload_name;// 0x28
+  int64_t plugin_result;      // 0x30 stays kPendingResult if not called
+  uint64_t symbol;            // 0x38 dlsym output
 };
 
-static_assert(sizeof(RemoteContext) == 24, "unexpected remote context size");
+static_assert(sizeof(RemoteContext) == 64, "unexpected remote context size");
+static_assert(sizeof(RemoteContext) <= kContextOffsetPluginLoad,
+              "context overlaps the symbol names");
 
 class ScopedPtrace {
 public:
@@ -159,10 +204,14 @@ LoadResult PtraceSprxRuntime::load(pid_t pid, std::string_view path,
 
   const intptr_t load_fn = pt_resolve(pid, kLoadStartModuleNid);
   const intptr_t pthread_create_fn = pt_resolve(pid, kPthreadCreateNid);
-  if (load_fn == 0 || pthread_create_fn == 0) {
-    LOG_ERROR("sprx: required NID resolution failed pid=%d load=%p pthread=%p",
+  const intptr_t dlsym_fn =
+      options.call_plugin_load ? pt_resolve(pid, kDlsymNid) : 0;
+  if (load_fn == 0 || pthread_create_fn == 0 ||
+      (options.call_plugin_load && dlsym_fn == 0)) {
+    LOG_ERROR("sprx: required NID resolution failed pid=%d load=%p pthread=%p dlsym=%p",
               static_cast<int>(pid), reinterpret_cast<void *>(load_fn),
-              reinterpret_cast<void *>(pthread_create_fn));
+              reinterpret_cast<void *>(pthread_create_fn),
+              reinterpret_cast<void *>(dlsym_fn));
     return result_with(LoadStatus::ResolveFailed, pid);
   }
 
@@ -211,9 +260,21 @@ LoadResult PtraceSprxRuntime::load(pid_t pid, std::string_view path,
   context.load_start_module = static_cast<uint64_t>(load_fn);
   context.path = static_cast<uint64_t>(context_page + kContextOffsetPath);
   context.result = kPendingResult;
+  context.dlsym = static_cast<uint64_t>(dlsym_fn);
+  context.plugin_load_name =
+      static_cast<uint64_t>(context_page + kContextOffsetPluginLoad);
+  context.plugin_unload_name =
+      static_cast<uint64_t>(context_page + kContextOffsetPluginUnload);
+  context.plugin_result = kPendingResult;
+  static constexpr char kPluginLoad[] = "plugin_load";
+  static constexpr char kPluginUnload[] = "plugin_unload";
   const std::string path_copy = make_string(path);
   if (path_copy.size() + 1 > kPageSize - kContextOffsetPath ||
       pt_copyin(pid, &context, context_page, sizeof(context)) != 0 ||
+      pt_copyin(pid, kPluginLoad, context.plugin_load_name,
+                sizeof(kPluginLoad)) != 0 ||
+      pt_copyin(pid, kPluginUnload, context.plugin_unload_name,
+                sizeof(kPluginUnload)) != 0 ||
       pt_copyin(pid, path_copy.c_str(), context.path, path_copy.size() + 1) != 0 ||
       pt_copyin(pid, kLoadThreadStub.data(), code_page,
                 kLoadThreadStub.size()) != 0) {
@@ -257,7 +318,13 @@ LoadResult PtraceSprxRuntime::load(pid_t pid, std::string_view path,
       break;
     if (find_loaded(pid, module_name, &info)) {
       loaded = true;
-      break;
+      /* plugin_load runs after the module shows up: wait for the result. */
+      int64_t published = kPendingResult;
+      if (!options.call_plugin_load ||
+          (mdbg_copyout(pid, context_page + offsetof(RemoteContext, result),
+                        &published, sizeof(published)) == 0 &&
+           published != kPendingResult))
+        break;
     }
     const uint64_t poll_us =
         std::min<uint64_t>(static_cast<uint64_t>(options.poll_ms) * 1000ULL,
@@ -281,6 +348,10 @@ LoadResult PtraceSprxRuntime::load(pid_t pid, std::string_view path,
         pt_copyout(pid, context_page, &finished, sizeof(finished)) == 0;
     if (read_ok && finished.result != kPendingResult)
       result.remote_result = finished.result;
+    if (read_ok && finished.plugin_result != kPendingResult) {
+      result.plugin_load_called = true;
+      result.plugin_load_result = static_cast<int32_t>(finished.plugin_result);
+    }
     if (read_ok && finished.result != kPendingResult)
       result.cleanup_ok = cleanup();
     else

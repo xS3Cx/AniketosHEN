@@ -40,6 +40,9 @@ struct LoadOptions {
   uint32_t poll_ms = 10;
   uint32_t max_attempts = 3;
   uint32_t retry_delay_ms = 100;
+  /** GoldHEN plugin convention: after loading, call the module's exported
+   *  plugin_load(0, NULL), and plugin_unload(0, NULL) when that fails. */
+  bool call_plugin_load = false;
 };
 
 struct LoadRequest {
@@ -57,6 +60,10 @@ struct LoadResult {
   bool cleanup_ok = true;
   uint32_t attempts = 0;
   LoadStatus underlying_status = LoadStatus::InvalidArgument;
+  /** call_plugin_load only: the module exports plugin_load and it returned
+   *  plugin_load_result (non-zero = the plugin refused, plugin_unload ran). */
+  bool plugin_load_called = false;
+  int32_t plugin_load_result = 0;
 
   bool succeeded() const noexcept {
     return status == LoadStatus::Loaded || status == LoadStatus::AlreadyLoaded;

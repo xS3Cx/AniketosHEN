@@ -81,6 +81,9 @@ void log_report(const char *operation,
       ++loaded;
     else
       ++failed;
+    if (item.load.plugin_load_called && item.load.plugin_load_result != 0)
+      LOG_WARN("[sprx-manager] plugin %s plugin_load returned %d (plugin_unload ran)",
+               item.id.c_str(), item.load.plugin_load_result);
   }
   LOG_INFO("[sprx-manager] %s catalog=%d entries=%zu loaded=%zu failed=%zu skipped=%zu",
            operation, report.catalog_loaded ? 1 : 0, report.results.size(),
@@ -92,7 +95,9 @@ void run(const char *operation, bool reload) {
   std::lock_guard<std::mutex> lock(current.mutex);
   if (reload) {
     std::vector<onion::sprx::SprxCatalogIssue> issues;
-    if (!current.manager.load_catalog(kCatalogPath, &issues)) {
+    if (!current.manager.load_catalog(
+            kCatalogPath, &issues,
+            {kPluginsIniPath, kGoldHenPluginsIniPath})) {
       for (const auto &issue : issues)
         LOG_WARN("[sprx-manager] line=%zu: %s", issue.line, issue.message.c_str());
       return;

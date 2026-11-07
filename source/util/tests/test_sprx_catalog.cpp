@@ -151,6 +151,82 @@ int test_remove_persists_catalog_entry_only() {
   return 0;
 }
 
+int test_import_plugins_ini_goldhen() {
+  onion::sprx::SprxCatalog catalog;
+  std::vector<onion::sprx::SprxCatalogIssue> issues;
+  TEST_ASSERT_TRUE(catalog.parse(
+      "[plugin.keep]\npath=/data/AniketosHEN/sprx/keep.sprx\n"
+      "exact_title_ids=CUSA99999\n",
+      &issues));
+  const char ini[] =
+      "; GoldHEN plugins\n"
+      "[default]\n"
+      "/data/GoldHEN/plugins/game_patch.prx\n"
+      "[CUSA00419]\n"
+      "/data/GoldHEN/plugins/afr.prx\n"
+      "/data/GoldHEN/plugins/off.prx=false\n"
+      "[settings]\n"
+      "show_load_notification=on\n"
+      "[bogus section]\n"
+      "/data/GoldHEN/plugins/ignored.prx\n"
+      "relative/path.prx\n";
+  const size_t added =
+      catalog.import_plugins_ini(ini, "/data/GoldHEN/plugins.ini", &issues);
+  TEST_ASSERT_EQ_INT(2, static_cast<int>(added));          // game_patch + afr
+  TEST_ASSERT_EQ_INT(3, static_cast<int>(catalog.entries().size()));
+
+  const auto *patch = catalog.find("goldhen-game_patch");
+  TEST_ASSERT_TRUE(patch != nullptr);
+  TEST_ASSERT_TRUE(patch->auto_start);
+  TEST_ASSERT_STREQ("/data/GoldHEN/plugins.ini", patch->source.c_str());
+  // [default] matches every CUSA (PS4) title, not PPSA.
+  TEST_ASSERT_TRUE(catalog.matches(*patch, "CUSA12345"));
+  TEST_ASSERT_TRUE(!catalog.matches(*patch, "PPSA00001"));
+
+  const auto *afr = catalog.find("goldhen-afr");
+  TEST_ASSERT_TRUE(afr != nullptr);
+  TEST_ASSERT_TRUE(catalog.matches(*afr, "CUSA00419"));
+  TEST_ASSERT_TRUE(!catalog.matches(*afr, "CUSA00420"));
+
+  // off.prx (=false) and the bogus/relative lines are skipped; issues noted.
+  TEST_ASSERT_TRUE(catalog.find("goldhen-off") == nullptr);
+  TEST_ASSERT_TRUE(!issues.empty());
+
+  // Imported entries never serialize (they live in their own file).
+  TEST_ASSERT_TRUE(catalog.serialize().find("game_patch") ==
+                   std::string::npos);
+  TEST_ASSERT_TRUE(catalog.serialize().find("keep.sprx") != std::string::npos);
+  return 0;
+}
+
+int test_import_same_path_across_sections_merges() {
+  onion::sprx::SprxCatalog catalog;
+  const char ini[] =
+      "[CUSA00001]\n/data/GoldHEN/plugins/x.prx\n"
+      "[CUSA00002]\n/data/GoldHEN/plugins/x.prx\n";
+  TEST_ASSERT_EQ_INT(
+      1, static_cast<int>(
+             catalog.import_plugins_ini(ini, "/data/GoldHEN/plugins.ini")));
+  const auto *x = catalog.find("goldhen-x");
+  TEST_ASSERT_TRUE(x != nullptr);
+  TEST_ASSERT_TRUE(catalog.matches(*x, "CUSA00001"));
+  TEST_ASSERT_TRUE(catalog.matches(*x, "CUSA00002"));
+  return 0;
+}
+
+int test_import_skips_path_already_in_catalog() {
+  onion::sprx::SprxCatalog catalog;
+  TEST_ASSERT_TRUE(catalog.parse(
+      "[plugin.a]\npath=/data/GoldHEN/plugins/x.prx\n"
+      "exact_title_ids=CUSA00001\n"));
+  TEST_ASSERT_EQ_INT(
+      0, static_cast<int>(catalog.import_plugins_ini(
+             "[default]\n/data/GoldHEN/plugins/x.prx\n", "/p.ini")));
+  TEST_ASSERT_EQ_INT(1, static_cast<int>(catalog.entries().size()));
+  TEST_ASSERT_TRUE(catalog.find("a")->source.empty()); // stays catalog-owned
+  return 0;
+}
+
 } // namespace
 
 extern "C" int test_sprx_catalog_suite(void) {
@@ -161,5 +237,8 @@ extern "C" int test_sprx_catalog_suite(void) {
   failures += onion_test_run("sprx_catalog_dependency_cycle", test_dependency_cycle_rejected);
   failures += onion_test_run("sprx_catalog_enabled_persists", test_enabled_persists_and_excludes_startup);
   failures += onion_test_run("sprx_catalog_remove_persists", test_remove_persists_catalog_entry_only);
+  failures += onion_test_run("sprx_catalog_import_goldhen", test_import_plugins_ini_goldhen);
+  failures += onion_test_run("sprx_catalog_import_merge", test_import_same_path_across_sections_merges);
+  failures += onion_test_run("sprx_catalog_import_skip_dup", test_import_skips_path_already_in_catalog);
   return failures;
 }

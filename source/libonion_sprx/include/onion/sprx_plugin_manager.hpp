@@ -40,8 +40,10 @@ public:
                     ITargetAccessPolicy &access_policy,
                     ISprxTargetProvider &target_provider) noexcept;
 
+  /** imports: GoldHEN-style plugins.ini files merged read-only. */
   bool load_catalog(std::string_view path,
-                    std::vector<SprxCatalogIssue> *issues = nullptr);
+                    std::vector<SprxCatalogIssue> *issues = nullptr,
+                    std::vector<std::string> imports = {});
   SprxStartupReport start();
   SprxStartupReport reconcile();
   std::vector<SprxInventoryEntry> inventory() const;

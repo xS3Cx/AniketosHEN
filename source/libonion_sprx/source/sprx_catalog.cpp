@@ -44,6 +44,10 @@ bool valid_id(std::string_view id) noexcept {
   });
 }
 
+std::string_view basename_of(std::string_view path) noexcept {
+  return path.substr(path.find_last_of('/') + 1);
+}
+
 bool valid_title_id(std::string_view id) noexcept {
   if (id.size() != 9)
     return false;
@@ -174,6 +178,45 @@ bool write_all(int fd, std::string_view text) {
     offset += static_cast<size_t>(written);
   }
   return true;
+}
+
+/* Returns 0, or an errno (EFBIG over the size limit). */
+int read_text_file(const std::string &path, std::string *text) {
+  FILE *file = std::fopen(path.c_str(), "rb");
+  if (!file)
+    return errno ? errno : EIO;
+  long size = -1;
+  if (std::fseek(file, 0, SEEK_END) == 0)
+    size = std::ftell(file);
+  if (size < 0 || static_cast<unsigned long>(size) > kMaxManifestBytes) {
+    std::fclose(file);
+    return size < 0 ? EIO : EFBIG;
+  }
+  std::rewind(file);
+  text->assign(static_cast<size_t>(size), '\0');
+  const size_t read = std::fread(text->data(), 1, text->size(), file);
+  const bool close_ok = std::fclose(file) == 0;
+  return read == text->size() && close_ok ? 0 : EIO;
+}
+
+/* "/data/GoldHEN/plugins.ini" -> "goldhen": id prefix of imported entries. */
+std::string import_id_prefix(std::string_view source) {
+  const size_t slash = source.find_last_of('/');
+  std::string_view dir = slash == std::string_view::npos ? std::string_view{}
+                                                         : source.substr(0, slash);
+  dir = dir.substr(dir.find_last_of('/') + 1);
+  std::string prefix;
+  for (const char c : dir.substr(0, 12))
+    prefix.push_back(std::isalnum(static_cast<unsigned char>(c))
+                         ? static_cast<char>(std::tolower(static_cast<unsigned char>(c)))
+                         : '-');
+  return prefix.empty() ? "ini" : prefix;
+}
+
+/* GoldHEN's simple_get_bool: empty or on/true/1 prefix means load. */
+bool goldhen_bool(std::string_view value) noexcept {
+  return value.empty() || value.starts_with("on") || value.starts_with("true") ||
+         value.starts_with("1");
 }
 
 } // namespace
@@ -335,36 +378,110 @@ bool SprxCatalog::load_file(std::string_view path,
                             std::vector<SprxCatalogIssue> *issues) {
   if (issues)
     issues->clear();
-  const std::string file_path(path);
-  FILE *file = std::fopen(file_path.c_str(), "rb");
-  if (!file) {
-    add_issue(issues, 0, {}, std::string("cannot open manifest: ") + std::strerror(errno));
-    entries_.clear();
-    return false;
-  }
-  if (std::fseek(file, 0, SEEK_END) != 0) {
-    std::fclose(file);
-    add_issue(issues, 0, {}, "cannot seek manifest");
-    entries_.clear();
-    return false;
-  }
-  const long size = std::ftell(file);
-  if (size < 0 || static_cast<unsigned long>(size) > kMaxManifestBytes) {
-    std::fclose(file);
-    add_issue(issues, 0, {}, "manifest exceeds size limit");
-    entries_.clear();
-    return false;
-  }
-  std::rewind(file);
-  std::string text(static_cast<size_t>(size), '\0');
-  const size_t read = std::fread(text.data(), 1, text.size(), file);
-  const bool close_ok = std::fclose(file) == 0;
-  if (read != text.size() || !close_ok) {
-    add_issue(issues, 0, {}, "cannot read manifest");
+  std::string text;
+  const int error = read_text_file(std::string(path), &text);
+  if (error != 0) {
+    add_issue(issues, 0, {},
+              error == EFBIG ? std::string("manifest exceeds size limit")
+                             : std::string("cannot read manifest: ") +
+                                   std::strerror(error));
     entries_.clear();
     return false;
   }
   return parse(text, issues);
+}
+
+size_t SprxCatalog::import_plugins_ini(std::string_view text,
+                                       std::string_view source,
+                                       std::vector<SprxCatalogIssue> *issues) {
+  const std::string where(source);
+  const auto warn = [&](size_t line, std::string_view message) {
+    add_issue(issues, line, {}, where + ": " + std::string(message));
+  };
+  if (text.size() > kMaxManifestBytes) {
+    warn(0, "file exceeds size limit");
+    return 0;
+  }
+  const std::string prefix = import_id_prefix(source);
+  enum class Section { None, Default, Title, Ignored } section = Section::None;
+  std::string title_id;
+  size_t imported = 0;
+  size_t line_number = 0;
+  size_t cursor = 0;
+  while (cursor <= text.size()) {
+    const size_t newline = text.find('\n', cursor);
+    const size_t end = newline == std::string_view::npos ? text.size() : newline;
+    const std::string_view line = trim(text.substr(cursor, end - cursor));
+    cursor = end + 1;
+    ++line_number;
+    if (line.empty() || line.front() == ';' || line.front() == '#')
+      continue;
+    if (line.front() == '[' && line.back() == ']') {
+      const std::string_view name = trim(line.substr(1, line.size() - 2));
+      if (name == "default") {
+        section = Section::Default;
+      } else if (valid_title_id(name)) {
+        section = Section::Title;
+        title_id = std::string(name);
+      } else {
+        if (name != "settings")
+          warn(line_number, "unknown section (expected default, settings or a title ID)");
+        section = Section::Ignored;
+      }
+      continue;
+    }
+    if (section == Section::Ignored)
+      continue;
+    if (section == Section::None) {
+      warn(line_number, "plugin listed outside a section");
+      continue;
+    }
+    const size_t equal = line.find('=');
+    const std::string_view path = trim(line.substr(0, equal));
+    if (equal != std::string_view::npos &&
+        !goldhen_bool(trim(line.substr(equal + 1))))
+      continue;
+    if (!valid_path(path)) {
+      warn(line_number, "path must be absolute and end in .sprx or .prx");
+      continue;
+    }
+    auto entry = std::find_if(entries_.begin(), entries_.end(),
+                              [&](const SprxManifestEntry &item) {
+                                return item.path == path;
+                              });
+    if (entry != entries_.end() && entry->source != source)
+      continue; // catalog.ini (or an earlier plugins.ini) already lists it
+    if (entry == entries_.end()) {
+      if (entries_.size() >= kMaxEntries) {
+        warn(line_number, "too many plugins");
+        continue;
+      }
+      std::string stem(basename_of(path));
+      stem.resize(stem.find_last_of('.'));
+      for (char &c : stem)
+        if (!std::isalnum(static_cast<unsigned char>(c)) && c != '_' && c != '-')
+          c = '-';
+      const std::string base = prefix + "-" + stem.substr(0, 31 - prefix.size() - 1 - 3);
+      std::string id = base;
+      for (int n = 2; find(id); ++n)
+        id = base + "-" + std::to_string(n);
+      SprxManifestEntry added;
+      added.id = std::move(id);
+      added.path = std::string(path);
+      added.source = where;
+      added.auto_start = true;
+      added.priority = -static_cast<int32_t>(imported); // file order
+      entries_.push_back(std::move(added));
+      entry = entries_.end() - 1;
+      ++imported;
+    }
+    std::vector<std::string> &targets =
+        section == Section::Default ? entry->title_id_prefixes : entry->exact_title_ids;
+    const std::string target = section == Section::Default ? "CUSA" : title_id;
+    if (std::find(targets.begin(), targets.end(), target) == targets.end())
+      targets.push_back(target);
+  }
+  return imported;
 }
 
 const SprxManifestEntry *SprxCatalog::find(std::string_view id) const noexcept {
@@ -400,6 +517,8 @@ bool SprxCatalog::remove(std::string_view id) noexcept {
 std::string SprxCatalog::serialize() const {
   std::string result;
   for (const SprxManifestEntry &entry : entries_) {
+    if (!entry.source.empty())
+      continue; // lives in its plugins.ini
     if (!result.empty())
       result.push_back('\n');
     result += "[plugin." + entry.id + "]\n";
@@ -517,19 +636,12 @@ SprxCatalog::startup_order(std::string_view title_id,
 }
 
 bool SprxCatalogStore::load(std::string_view path,
-                            std::vector<SprxCatalogIssue> *issues) {
+                            std::vector<SprxCatalogIssue> *issues,
+                            std::vector<std::string> imports) {
   std::lock_guard<std::mutex> lock(mutex_);
-  SprxCatalog loaded;
-  if (!loaded.load_file(path, issues)) {
-    catalog_ = {};
-    path_ = std::string(path);
-    loaded_ = false;
-    return false;
-  }
-  catalog_ = std::move(loaded);
   path_ = std::string(path);
-  loaded_ = true;
-  return true;
+  imports_ = std::move(imports);
+  return load_locked(issues);
 }
 
 bool SprxCatalogStore::reload(std::vector<SprxCatalogIssue> *issues) {
@@ -540,11 +652,28 @@ bool SprxCatalogStore::reload(std::vector<SprxCatalogIssue> *issues) {
     loaded_ = false;
     return false;
   }
+  return load_locked(issues);
+}
+
+bool SprxCatalogStore::load_locked(std::vector<SprxCatalogIssue> *issues) {
   SprxCatalog loaded;
-  if (!loaded.load_file(path_, issues)) {
-    catalog_ = {};
-    loaded_ = false;
-    return false;
+  if (issues)
+    issues->clear();
+  /* No catalog.ini is an empty catalog, so plugins.ini alone works. */
+  if (access(path_.c_str(), F_OK) == 0 || errno != ENOENT) {
+    if (!loaded.load_file(path_, issues)) {
+      catalog_ = {};
+      loaded_ = false;
+      return false;
+    }
+  }
+  for (const std::string &import : imports_) {
+    std::string text;
+    const int error = read_text_file(import, &text);
+    if (error == 0)
+      (void)loaded.import_plugins_ini(text, import, issues);
+    else if (error != ENOENT)
+      add_issue(issues, 0, {}, import + ": " + std::strerror(error));
   }
   catalog_ = std::move(loaded);
   loaded_ = true;
@@ -557,7 +686,7 @@ std::vector<SprxInventoryEntry> SprxCatalogStore::inventory() const {
   result.reserve(catalog_.entries().size());
   for (const SprxManifestEntry &entry : catalog_.entries()) {
     result.push_back({entry.id, entry.path, entry.enabled, entry.auto_start,
-                      entry.priority, false, false});
+                      entry.priority, false, false, entry.source});
   }
   return result;
 }
@@ -617,6 +746,8 @@ SprxOperationResult SprxCatalogStore::set_enabled(std::string_view id,
   const SprxManifestEntry *entry = catalog_.find(id);
   if (!entry)
     return {false, "SPRX plugin is not declared"};
+  if (!entry->source.empty())
+    return {false, "listed in " + entry->source + "; edit that file"};
   if (entry->enabled == enabled)
     return {true, {}};
   if (!catalog_.set_enabled(id, enabled))
@@ -635,6 +766,8 @@ SprxOperationResult SprxCatalogStore::remove(std::string_view id) {
   const SprxManifestEntry *entry = catalog_.find(id);
   if (!entry)
     return {false, "SPRX plugin is not declared"};
+  if (!entry->source.empty())
+    return {false, "listed in " + entry->source + "; edit that file"};
   SprxCatalog previous = catalog_;
   if (!catalog_.remove(id))
     return {false, "SPRX plugin is not declared"};
