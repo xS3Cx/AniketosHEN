@@ -256,19 +256,6 @@ int parse_cheats_mirror(const char *s, int def) {
   return def;
 }
 
-int parse_update_channel(const char *s, int def) {
-  if (streq_ci(s, "stable")) {
-    return kUpdateChannelStable;
-  }
-  if (streq_ci(s, "beta")) {
-    return kUpdateChannelBeta;
-  }
-  return def;
-}
-
-const char *update_channel_name(int v) {
-  return v == kUpdateChannelBeta ? "beta" : "stable";
-}
 
 const char *cheats_mirror_name(int v) {
   switch (v) {
@@ -713,10 +700,14 @@ bool apply_parser(IniParser *parser, Settings *out) {
   out->payload_autostart_enabled =
       parse_bool(ini_get(parser, "payload_center.autostart_enabled"),
                  out->payload_autostart_enabled);
+  /* Builds that still wrote update.channel had the boot check off by
+     default; their auto_check=false was that default, not a choice, so the
+     check starts on once and the next save drops the channel key. */
   out->update_auto_check =
-      parse_bool(ini_get(parser, "update.auto_check"), out->update_auto_check);
-  out->update_channel = parse_update_channel(
-      ini_get(parser, "update.channel"), out->update_channel);
+      ini_get(parser, "update.channel")
+          ? true
+          : parse_bool(ini_get(parser, "update.auto_check"),
+                       out->update_auto_check);
   apply_shell_menu_section(parser, out);
   return true;
 }
@@ -912,9 +903,6 @@ std::string settings_serialize(const Settings &in) {
   b += "# Downloads are always started manually from the Toolbox.\n";
   b += "# Available values: true, false\n";
   b += "auto_check=" + bool_text(in.update_auto_check) + "\n";
-  b += "# channel selects the release channel used by the update check.\n";
-  b += "# Available values: stable, beta\n";
-  b += "channel=" + std::string(update_channel_name(in.update_channel)) + "\n";
   b += "\n";
   b += "[kstuff]\n";
   b += "# autoload loads kstuff when " ONION_DIST_NAME " starts.\n";

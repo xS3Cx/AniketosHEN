@@ -33,9 +33,7 @@ bool read_update_text(const std::string &path, std::string *out,
 }
 
 std::string selected_channel() {
-  return g_settings.update_channel == onion::kUpdateChannelBeta
-             ? std::string(onion::update::kBetaChannel)
-             : std::string(onion::update::kStableChannel);
+  return std::string(onion::update::kStableChannel);
 }
 
 bool load_cached_manifest(std::string_view channel,
@@ -113,12 +111,6 @@ std::string format_size(std::uint64_t size) {
   const double megabytes = static_cast<double>(size) / (1024.0 * 1024.0);
   std::snprintf(text, sizeof(text), "%.1f MB", megabytes);
   return text;
-}
-
-std::string channel_title(std::string_view channel) {
-  return channel == onion::update::kBetaChannel
-             ? toolbox_i18n::tr("hen_update.channel.beta")
-             : toolbox_i18n::tr("hen_update.channel.stable");
 }
 
 bool hen_update_model(ps5ui::Node &model) {
@@ -206,10 +198,7 @@ bool hen_update_options_model(ps5ui::Node &model) {
   page.toggle("id_update_auto_check",
               toolbox_i18n::tr("hen_update.auto_check"),
               g_settings.update_auto_check,
-              toolbox_i18n::tr("hen_update.auto_check.sub"))
-      .toggle("id_update_beta", toolbox_i18n::tr("hen_update.beta"),
-              g_settings.update_channel == onion::kUpdateChannelBeta,
-              toolbox_i18n::tr("hen_update.beta.sub"));
+              toolbox_i18n::tr("hen_update.auto_check.sub"));
   model = page.root();
   return true;
 }
@@ -220,10 +209,6 @@ bool hen_update_releases_model(ps5ui::Node &model) {
   const std::string channel = selected_channel();
   onion::update::Manifest manifest;
   const bool have_manifest = load_cached_manifest(channel, &manifest);
-  page.label("id_update_release_channel",
-             toolbox_i18n::format("hen_update.channel_fmt",
-                                  channel_title(channel).c_str()),
-             ps5ui::Style::Center);
   if (have_manifest) {
     page.label("id_update_release_version",
                toolbox_i18n::format("hen_update.releases.version_fmt",

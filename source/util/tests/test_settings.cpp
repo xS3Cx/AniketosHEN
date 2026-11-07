@@ -67,8 +67,8 @@ static int test_defaults_and_serialize_keys(void) {
   TEST_ASSERT_TRUE(text.find("[payload_center]\n") != std::string::npos);
   TEST_ASSERT_TRUE(text.find("autostart_enabled=true") != std::string::npos);
   TEST_ASSERT_TRUE(text.find("[update]\n") != std::string::npos);
-  TEST_ASSERT_TRUE(text.find("auto_check=false") != std::string::npos);
-  TEST_ASSERT_TRUE(text.find("channel=stable") != std::string::npos);
+  TEST_ASSERT_TRUE(text.find("auto_check=true") != std::string::npos);
+  TEST_ASSERT_TRUE(text.find("channel=") == std::string::npos);
   return 0;
 }
 
@@ -148,8 +148,7 @@ static int test_full_schema_roundtrip(void) {
   in.kstuff_autoload = true;
   in.shadowmount_autoload = true;
   in.payload_autostart_enabled = false;
-  in.update_auto_check = true;
-  in.update_channel = onion::kUpdateChannelBeta;
+  in.update_auto_check = false;
   in.app_jailbreak_allowlist.exact_title_ids = {};
   in.app_jailbreak_allowlist.exact_title_ids[0] = "ITEM00001";
   in.app_jailbreak_allowlist.exact_title_ids[1] = "CUSA12345";
@@ -196,7 +195,6 @@ static int test_full_schema_roundtrip(void) {
   TEST_ASSERT_TRUE(out.payload_autostart_enabled ==
                    in.payload_autostart_enabled);
   TEST_ASSERT_TRUE(out.update_auto_check == in.update_auto_check);
-  TEST_ASSERT_EQ_INT(in.update_channel, out.update_channel);
   TEST_ASSERT_EQ_U64(
       in.app_jailbreak_allowlist.exact_title_id_count,
       out.app_jailbreak_allowlist.exact_title_id_count);
@@ -569,6 +567,29 @@ static int test_v0_0_10_config_keeps_kstuff_autoload(void) {
   return 0;
 }
 
+/* A config written while the boot check was off by default (it still has
+   update.channel) starts the check on; one without the key keeps auto_check. */
+static int test_update_check_migrates_on(void) {
+  const char *const texts[] = {
+      "[meta]\nschema_version=1\n\n[update]\nauto_check=false\nchannel=beta\n",
+      "[meta]\nschema_version=1\n\n[update]\nauto_check=false\n",
+  };
+  const bool expected[] = {true, false};
+  for (int i = 0; i < 2; ++i) {
+    std::string path = temp_ini_path();
+    TEST_ASSERT_TRUE(!path.empty());
+    FILE *f = fopen(path.c_str(), "w");
+    TEST_ASSERT_TRUE(f != nullptr);
+    fputs(texts[i], f);
+    fclose(f);
+    onion::Settings out{};
+    TEST_ASSERT_TRUE(onion::settings_load_file(path.c_str(), &out));
+    TEST_ASSERT_TRUE(out.update_auto_check == expected[i]);
+    unlink(path.c_str());
+  }
+  return 0;
+}
+
 static int test_clamp_fan_threshold(void) {
   TEST_ASSERT_EQ_INT(onion::kFanAutomaticThresholdCelsius,
                      onion::Settings{}.fan_threshold);
@@ -795,6 +816,8 @@ extern "C" int test_settings_suite(void) {
                              test_language_new_locales_roundtrip);
   failures += onion_test_run("settings_v0_0_10_kstuff_autoload",
                              test_v0_0_10_config_keeps_kstuff_autoload);
+  failures += onion_test_run("settings_update_check_migrates_on",
+                             test_update_check_migrates_on);
   failures += onion_test_run("settings_clamp_fan_threshold",
                              test_clamp_fan_threshold);
   failures += onion_test_run("settings_shell_menu_section",

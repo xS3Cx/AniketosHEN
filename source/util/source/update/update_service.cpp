@@ -67,8 +67,8 @@ std::string hex_digest(const std::uint8_t *digest) {
   return out;
 }
 
-std::string channel_from_setting(int value) {
-  return value == 1 ? std::string(kBetaChannel) : std::string(kStableChannel);
+std::string channel_from_setting() {
+  return std::string(kStableChannel);
 }
 
 bool valid_update_elf(const std::uint8_t *header, std::size_t size) {
@@ -198,7 +198,7 @@ void *boot_thread(void *) {
     return nullptr;
   if (development_version(installed_version()))
     return nullptr;
-  (void)Service::instance().check(channel_from_setting(settings.update_channel),
+  (void)Service::instance().check(channel_from_setting(),
                                   true);
   return nullptr;
 }
@@ -360,8 +360,13 @@ void Service::worker_check(std::string channel, bool notify,
     status_.installed = installed;
     status_.newer = newer;
   }
-  if (notify && newer)
+  std::string announced;
+  if (notify && newer &&
+      (!read_text_limited(kUpdateNotifiedPath, &announced, 64) ||
+       announced != manifest.version)) {
     onion_notify(true, "notify.update.available", manifest.version.c_str());
+    (void)write_text_atomic(kUpdateNotifiedPath, manifest.version);
+  }
   finish(Status::State::Ok, {});
 }
 

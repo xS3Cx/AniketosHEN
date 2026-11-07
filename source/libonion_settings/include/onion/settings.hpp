@@ -96,9 +96,6 @@ inline constexpr int kCheatsMirrorAuto = 0;
 inline constexpr int kCheatsMirrorGithub = 1;
 inline constexpr int kCheatsMirrorCnb = 2;
 
-inline constexpr int kUpdateChannelStable = 0;
-inline constexpr int kUpdateChannelBeta = 1;
-
 inline constexpr int kLogLevelOff = 0;
 inline constexpr int kLogLevelError = 1;
 inline constexpr int kLogLevelWarn = 2;
@@ -312,9 +309,7 @@ struct Settings {
 
   // [update]
   // Check GitHub for a newer build at boot. Downloads are only ever manual.
-  bool update_auto_check = false;
-  // 0 = stable, 1 = beta.
-  int update_channel = kUpdateChannelStable;
+  bool update_auto_check = true;
 
   // [toolbox]
   // 0 = system (default), 1 = zh-Hans, 2 = en, 3 = ar, 4 = zh-Hant,

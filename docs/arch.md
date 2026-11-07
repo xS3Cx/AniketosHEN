@@ -635,8 +635,8 @@ validator and file store live in public headers
 (`onion/update_manifest.hpp`, `onion/update_store.hpp`) and are host-testable.
 `util.elf` owns networking, hashing, disk and worker state:
 
-- `update_service::check(channel, notify)` fetches one of the two GitHub
-  `update.json` URLs, validates it, writes `latest-<channel>.json` and
+- `update_service::check(channel, notify)` fetches the latest release's
+  `update.json` (the channel is always `stable`), validates it, writes `latest-<channel>.json` and
   `check.json`, and compares the version with `ONIONHEN_VERSION`.
 - `update_service::download(channel)` streams the release ELF into
   `/data/AniketosHEN/update/tmp`, verifies SHA-256 and the ELF64/x86-64 header,
@@ -645,7 +645,8 @@ validator and file store live in public headers
   (`check`, `download`, `verify`, `save`) are exposed over
   `BREW_UTIL_UPDATE_*` IPC.
 - A detached boot thread waits up to 60 seconds for IPv4 and only then checks,
-  and only when `[update] auto_check=true`. It never downloads.
+  and only when `[update] auto_check=true` (the default). It announces each
+  newer version once (`update/notified.txt`) and never downloads.
 
 ShellUI pages are `hen_update.xml`, `hen_update_releases.xml` and
 `hen_update_progress.xml`. The pages read only the cached manifest and

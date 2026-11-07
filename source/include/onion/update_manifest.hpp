@@ -14,12 +14,9 @@ inline constexpr std::size_t kMaxSummaryLength = 300;
 inline constexpr std::size_t kMaxPublishedAtLength = 40;
 
 inline constexpr std::string_view kStableChannel = "stable";
-inline constexpr std::string_view kBetaChannel = "beta";
 
 inline constexpr std::string_view kStableManifestUrl =
     "https://github.com/xS3Cx/AniketosHEN/releases/latest/download/update.json";
-inline constexpr std::string_view kBetaManifestUrl =
-    "https://github.com/xS3Cx/AniketosHEN/releases/download/beta/update.json";
 
 struct Manifest {
   std::string version;

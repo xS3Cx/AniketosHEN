@@ -231,9 +231,9 @@ entry.
 ### HEN updates
 
 **Toolbox > HEN Update Manager** checks GitHub Releases for a newer build,
-shows the installed and latest versions, and lets you select the stable or beta
-channel. Automatic checks run only at boot when `[update] auto_check=true`
-(off by default). Downloads are always started manually.
+shows the installed and latest versions. It checks once at boot when
+`[update] auto_check=true` (on by default) and tells you once about each new
+version. Downloads are always started manually.
 
 The downloaded ELF is written to `/data/AniketosHEN/update/AniketosHEN.elf`
 after its SHA-256 and ELF header are verified; `ready.json` records the version.
@@ -365,17 +365,17 @@ Nothing is written back into `source/`.
 
 ### Release
 
-`scripts/release_hen.sh` builds Release and publishes a stable or beta GitHub
-release with `AniketosHEN.elf`, `AniketosHEN.elf.sha256` and `update.json`:
+`scripts/release_hen.sh` builds Release and publishes a GitHub release with
+`AniketosHEN.elf`, `AniketosHEN.elf.sha256` and `update.json`:
 
 ```shell
-GITHUB_TOKEN=... ./scripts/release_hen.sh 0.05a stable "Short summary"
-GITHUB_TOKEN=... ./scripts/release_hen.sh 0.05b beta summary.txt
+GITHUB_TOKEN=... NOTES_FILE=notes.md ./scripts/release_hen.sh 0.05a "Short summary"
 ```
 
-It uses the GitHub REST API with `curl`; `gh` is not required. Stable releases
-use tag `v<version>` and beta releases replace the assets on the moving `beta`
-prerelease. See [docs/update.md](docs/update.md) for the manifest format.
+It uses the GitHub REST API with `curl`; `gh` is not required. Releases use tag
+`v<version>` and become the latest release, which the Update Manager and the
+Discord bot follow. See [docs/update.md](docs/update.md) for the manifest
+format and the notes file.
 
 ### Tests
 
@@ -418,8 +418,7 @@ the settings found in `/data/OnionHEN/config.ini` (see
 | `reports.send` | `true` | `true`, `false` |
 | `kstuff.autoload` | `false` | `true`, `false` |
 | `shadowmount.autoload` | `false` | `true`, `false` |
-| `update.auto_check` | `false` | `true`, `false` |
-| `update.channel` | `stable` | `stable`, `beta` |
+| `update.auto_check` | `true` | `true`, `false` |
 | `home_screen.show_title_ids` | `false` | `true`, `false` |
 | `game_menu.show_aniketoshen_options` | `true` | `true`, `false` (OnionHEN's `show_onionhen_options` is still read) |
 | `rest_mode.resume_reinject_delay_seconds` | `10` | `0` through `255` seconds |

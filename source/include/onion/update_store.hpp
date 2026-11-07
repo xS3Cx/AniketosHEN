@@ -27,6 +27,9 @@ inline constexpr const char *kUpdateReadyPath =
     ONION_DIST_DATA_ROOT "/update/ready.json";
 inline constexpr const char *kUpdateCheckPath =
     ONION_DIST_DATA_ROOT "/update/check.json";
+/* The version the boot check last announced: told once, not every boot. */
+inline constexpr const char *kUpdateNotifiedPath =
+    ONION_DIST_DATA_ROOT "/update/notified.txt";
 
 struct ReadyInfo {
   std::string version;

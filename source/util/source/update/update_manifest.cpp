@@ -56,11 +56,12 @@ std::string_view host_of(std::string_view url) {
 } // namespace
 
 bool valid_channel(std::string_view channel) {
-  return channel == kStableChannel || channel == kBetaChannel;
+  return channel == kStableChannel;
 }
 
 std::string_view manifest_url(std::string_view channel) {
-  return channel == kBetaChannel ? kBetaManifestUrl : kStableManifestUrl;
+  (void)channel;
+  return kStableManifestUrl;
 }
 
 std::string normalize_version(std::string_view version) {

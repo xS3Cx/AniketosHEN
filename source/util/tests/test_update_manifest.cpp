@@ -100,14 +100,10 @@ int test_version_helpers(void) {
 
 int test_channel_and_paths(void) {
   TEST_ASSERT_TRUE(onion::update::valid_channel("stable"));
-  TEST_ASSERT_TRUE(onion::update::valid_channel("beta"));
+  TEST_ASSERT_TRUE(!onion::update::valid_channel("beta"));
   TEST_ASSERT_TRUE(!onion::update::valid_channel("nightly"));
-  TEST_ASSERT_TRUE(onion::update::manifest_url("beta").ends_with("beta/update.json"));
   TEST_ASSERT_TRUE(onion::update::manifest_url("stable").ends_with(
       "latest/download/update.json"));
-  const std::string beta =
-      onion::update::manifest_cache_path(onion::update::kBetaChannel);
-  TEST_ASSERT_TRUE(beta.ends_with("/latest-beta.json"));
   const std::string invalid = onion::update::manifest_cache_path("../../x");
   TEST_ASSERT_TRUE(invalid.ends_with("/latest-stable.json"));
   return 0;

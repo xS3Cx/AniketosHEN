@@ -15,11 +15,8 @@ extern "C" int sceSystemServiceRequestReboot(void);
 
 namespace {
 
-std::string selected_channel() {
-  return g_settings.update_channel == onion::kUpdateChannelBeta
-             ? "beta"
-             : "stable";
-}
+/* One release channel: GitHub's latest release. */
+std::string selected_channel() { return "stable"; }
 
 bool enabled(const std::string &value) {
   return value == "1" || value == "true";
@@ -50,13 +47,6 @@ void start_update_job(bool download) {
 
 OnPressResult auto_check(OnPressContext &ctx) {
   g_settings.update_auto_check = enabled(ctx.value);
-  ctx.reload_util = true;
-  return OnPressResult::Handled;
-}
-
-OnPressResult beta_channel(OnPressContext &ctx) {
-  g_settings.update_channel = enabled(ctx.value) ? onion::kUpdateChannelBeta
-                                                 : onion::kUpdateChannelStable;
   ctx.reload_util = true;
   return OnPressResult::Handled;
 }
@@ -92,7 +82,6 @@ OnPressResult delete_update(OnPressContext &ctx) {
 
 const OnPressExactEntry kExact[] = {
     {"id_update_auto_check", auto_check},
-    {"id_update_beta", beta_channel},
     {"id_update_check", check_now},
     {"id_update_download", download_update},
     {"id_update_reboot", reboot_to_apply},

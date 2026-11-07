@@ -6,16 +6,10 @@ ELF can be loaded. It never restarts itself.
 
 ## Manifest
 
-Stable:
+There is one channel, GitHub's latest release:
 
 ```
 https://github.com/xS3Cx/AniketosHEN/releases/latest/download/update.json
-```
-
-Beta:
-
-```
-https://github.com/xS3Cx/AniketosHEN/releases/download/beta/update.json
 ```
 
 `update.json` is a single JSON object:
@@ -39,7 +33,7 @@ Validation rules:
 - `version` is 1-32 characters of letters, digits, `.`, `_`, `+`, `-` and must
   contain a digit; a leading `v` is accepted;
 - `tag` normalises to the same version;
-- `channel` is `stable` or `beta` and must match the channel being checked;
+- `channel` is `stable`;
 - `published_at` is non-empty, printable and at most 40 characters;
 - `url` is HTTPS, at most 2048 characters, on `github.com`,
   `objects.githubusercontent.com` or `release-assets.githubusercontent.com`,
@@ -56,10 +50,12 @@ development or dirty build (`dirty`, `unknown` or empty) is shown as
 
 ## Boot check
 
-Automatic checks are **off by default**. With `[update] auto_check=true`, the
-util daemon starts a detached thread after boot. The thread waits for a local
-IPv4 address for up to 60 seconds, fetches the selected channel manifest,
-caches it and sends a toast only when the release is newer. It never downloads
+Automatic checks are **on by default** (`[update] auto_check=true`; a config
+written by 0.04o/0.04p, which still has the old `channel` key, is switched on
+once). The util daemon starts a detached thread after boot. The thread waits
+for a local IPv4 address for up to 60 seconds, fetches the manifest, caches it
+and sends a notification when the release is newer, once per version
+(`update/notified.txt` holds the version last announced). It never downloads
 automatically.
 
 ## Manual flow
@@ -69,8 +65,7 @@ check time. When a newer build exists it adds **Update available: version** and
 the single action button changes from **Check for updates now** to
 **Download version** and then to **Reboot to apply**.
 
-**Update options** is a separate page with the `auto_check` and beta-channel
-switches. **Download from GitHub** opens the latest-release page, which renders
+**Update options** is a separate page with the `auto_check` switch. **Download from GitHub** opens the latest-release page, which renders
 the cached manifest and a **Download** button.
 
 The progress page polls the util service and shows the `check`, `download`,
@@ -118,7 +113,7 @@ the ELF and `ready.json`.
 | Path | Purpose |
 | --- | --- |
 | `/data/AniketosHEN/update/latest-stable.json` | Last stable manifest response |
-| `/data/AniketosHEN/update/latest-beta.json` | Last beta manifest response |
+| `/data/AniketosHEN/update/notified.txt` | Version the boot check last announced |
 | `/data/AniketosHEN/update/check.json` | Last check time (`fetched_at`) and error |
 | `/data/AniketosHEN/update/AniketosHEN.elf` | Downloaded update |
 | `/data/AniketosHEN/update/ready.json` | Ready marker shown by the Toolbox |
@@ -141,10 +136,7 @@ the ELF and `ready.json`.
 [update]
 # auto_check checks GitHub for a newer AniketosHEN build at boot.
 # Available values: true, false
-auto_check=false
-# channel selects the release channel used by the update check.
-# Available values: stable, beta
-channel=stable
+auto_check=true
 ```
 
 ## Releasing
@@ -152,22 +144,23 @@ channel=stable
 `scripts/release_hen.sh` builds and publishes a release:
 
 ```shell
-GITHUB_TOKEN=... ./scripts/release_hen.sh 0.05a stable "Short summary"
-GITHUB_TOKEN=... ./scripts/release_hen.sh 0.05b beta summary.txt
+GITHUB_TOKEN=... ./scripts/release_hen.sh 0.05a "Short summary"
+GITHUB_TOKEN=... NOTES_FILE=notes.md ./scripts/release_hen.sh 0.05a summary.txt
 ```
 
-The third argument is a summary string, or an existing file whose contents are
-used. The script builds Release with `ANIKETOSHEN_VERSION=<version>`, copies
-`build/bin/AniketosHEN.elf`, writes `AniketosHEN.elf.sha256`, generates
-`update.json` and publishes through the GitHub REST API with `curl`. It does not
-use `gh`.
+The second argument is a summary string (at most 300 characters, shown in the
+Update Manager), or an existing file whose contents are used. `NOTES_FILE` is
+the Markdown release notes; its `## Added` and `## Fixed` sections with `- `
+items are what the Discord bot posts to #releases. Without it the notes are the
+summary. The script builds Release with `ANIKETOSHEN_VERSION=<version>` and,
+unless the caller sets `ANIKETOSHEN_REPORT_URL`, the project's crash-report
+relay; copies `build/bin/AniketosHEN.elf`, writes `AniketosHEN.elf.sha256`,
+generates `update.json` and publishes through the GitHub REST API with `curl`.
+It does not use `gh`, and on macOS it runs inside the Linux build image (it
+uses GNU `stat`/`date`/`sha256sum`).
 
-Stable releases use tag `v<version>` and the asset URL
-`https://github.com/xS3Cx/AniketosHEN/releases/download/v<version>/AniketosHEN.elf`.
-Beta releases use the moving `beta` tag as a prerelease, delete same-named
-assets from the existing beta release and upload replacements; the asset URL is
-`https://github.com/xS3Cx/AniketosHEN/releases/download/beta/AniketosHEN.elf`.
-The manifest `tag` field is always `v<version>`.
+Releases use tag `v<version>` and become GitHub's latest release; the asset URL
+is `https://github.com/xS3Cx/AniketosHEN/releases/download/v<version>/AniketosHEN.elf`.
 
 `published_at` uses `SOURCE_DATE_EPOCH` when set (useful for reproducible test
 builds); otherwise it is the current UTC time. The JSON object is written with a
