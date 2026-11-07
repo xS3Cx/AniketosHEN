@@ -2,10 +2,10 @@
 
 #include <string>
 
-/* "Plugins" in a game's options menu on Home: the .sprx/.prx plugins of the
-   plugins folder, each with a switch that makes it load into that game (the
-   SPRX catalog's title IDs, changed through the daemon). A plugin set to
-   every game shows its switch greyed out: that is changed in the Toolbox. */
+/* "Plugins" in a game's options menu on Home: the game's Load on startup
+   switch and one switch per plugin of its folders (<title>/ and all/), the
+   same config.ini the Toolbox's game page writes. catalog.ini / plugins.ini
+   entries for the game are listed greyed out. */
 namespace SprxGameMenu {
 
 /* The boot URI of the row in a game's options menu. */

@@ -20,6 +20,10 @@ inline constexpr const char *kPluginsIniPath =
 inline constexpr const char *kGoldHenPluginsIniPath =
     "/data/GoldHEN/plugins.ini";
 
+/* Plugin folders: <root>/<TITLEID>/ and <root>/all/ (onion/plugin_folder.hpp). */
+inline constexpr const char *kPluginLoaderRoot =
+    ONION_DIST_DATA_ROOT "/pluginloader";
+
 void start();
 void reconcile();
 /** Catalog entries, then files of kFolder that no entry names yet (those
@@ -27,13 +31,10 @@ void reconcile();
 std::vector<onion::sprx::SprxInventoryEntry> inventory();
 onion::sprx::SprxOperationResult set_enabled(std::string_view id,
                                               bool enabled);
-/** The games a plugin loads into: these title IDs, or every game. No game at
- *  all drops its catalog entry (the file stays). */
-onion::sprx::SprxOperationResult
-set_targets(std::string_view id, const std::vector<std::string> &title_ids,
-            bool all_games);
 /** Removes the manifest entry, and the module file when it is in kFolder. */
 onion::sprx::SprxOperationResult remove(std::string_view id);
+/** Loads the catalog's plugins, then the title's folder plugins (.sprx/.prx
+ *  into the game, .elf started through the private elfldr). */
 void on_big_app_started(pid_t pid, uint32_t app_id,
                         std::string_view title_id);
 void on_big_app_exited(pid_t pid, uint32_t app_id,

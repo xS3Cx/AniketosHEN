@@ -58,6 +58,40 @@ loader is a general infrastructure component for future user-requested SPRX
 plugins; adding it to the FPS path would reintroduce the old FPS injection
 coupling.
 
+## Plugin folders (the main way)
+
+The daemon reads one folder per game or app, plus one for every game:
+
+```
+/data/AniketosHEN/pluginloader/
+  all/                 plugins for every game
+    fps.elf
+  PPSA01234/           plugins for this game (title ID, 9 letters/digits)
+    menu.sprx
+    trainer.elf
+    config.ini         written by the Toolbox
+    status.ini         written by the daemon at each start of the game
+```
+
+When a game starts (the Big App start event), after the catalog plugins:
+
+1. `<TITLEID>/config.ini` is read: `load_on_startup=false` skips the game's
+   plugins; `disabled=` lists plugin names that stay off (a name of `all/` is
+   written `all/<file>`). No file means everything on.
+2. The `.sprx` / `.prx` files of `<TITLEID>/`, then of `all/`, each by name, go
+   through this loader (`SprxPluginManager::load`, `plugin_load` called as for
+   `plugins.ini` entries). One already in the game is not loaded again.
+3. Each `.elf` is started as its own process through the private elfldr on
+   port 9020, the same path and PID record as payload autostart: a file whose
+   recorded process is still running is not started again.
+4. `status.ini` gets one line per plugin: `loaded`, `started`, `running`
+   (already running), or the reason it failed.
+
+File names with `=`, `,` or control characters are ignored. ShellUI reads the
+same files under `/user/data/AniketosHEN/pluginloader` for the Toolbox page and
+the ★ Plugins menu and writes only `config.ini`. Folder plugins are loaded only
+at a game's start, not when the HEN is reloaded while a game runs.
+
 ## GoldHEN-style plugins.ini (read-only import)
 
 Besides the strict `sprx/catalog.ini`, the loader reads GoldHEN-style plugin

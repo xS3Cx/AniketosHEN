@@ -137,12 +137,36 @@ int test_inventory_enable_and_remove_lifecycle() {
   return 0;
 }
 
+int test_load_folder_entries_into_current_title() {
+  char path[256] = {};
+  TEST_ASSERT_EQ_INT(0, onion_test_write_temp_text_file(".sprx", "x", path,
+                                                        sizeof(path)));
+  FakeRuntime runtime;
+  FakeAccess access;
+  FakeTarget target;
+  onion::sprx::SprxPluginManager manager(runtime, access, target);
+  onion::sprx::SprxManifestEntry entry;
+  entry.id = "all/x.sprx";
+  entry.path = path;
+  /* Another title than the running one: nothing loads. */
+  TEST_ASSERT_TRUE(manager.load("PPSA00001", {entry}).results.empty());
+  const auto report = manager.load("CUSA12345", {entry});
+  TEST_ASSERT_EQ_INT(1, static_cast<int>(report.results.size()));
+  TEST_ASSERT_TRUE(report.results[0].id == "all/x.sprx" &&
+                   report.results[0].load.succeeded());
+  TEST_ASSERT_EQ_INT(1, runtime.calls);
+  unlink(path);
+  return 0;
+}
+
 } // namespace
 
 extern "C" int test_sprx_plugin_manager_suite(void) {
   int failures = 0;
   failures += onion_test_run("sprx_manager_dependency_failure_isolated",
                              test_dependency_failure_isolated);
+  failures += onion_test_run("sprx_manager_load_folder_entries",
+                             test_load_folder_entries_into_current_title);
   failures += onion_test_run("sprx_manager_inventory_enable_remove",
                              test_inventory_enable_and_remove_lifecycle);
   return failures;

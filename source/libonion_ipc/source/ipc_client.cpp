@@ -637,7 +637,8 @@ bool IPC_Client::ListSprx(std::vector<SprxInventoryItem> &sprx) {
       cJSON *title = nullptr;
       cJSON_ArrayForEach(title, onion_cjson::item(item, "titles"))
         if (cJSON_IsString(title)) entry.titles.emplace_back(title->valuestring);
-      entry.all_games = onion_cjson::bool_item(item, "all");
+      cJSON_ArrayForEach(title, onion_cjson::item(item, "prefixes"))
+        if (cJSON_IsString(title)) entry.prefixes.emplace_back(title->valuestring);
       entry.error = onion_cjson::string_item(item, "error", "");
       entry.source = onion_cjson::string_item(item, "source", "");
       sprx.push_back(std::move(entry));
@@ -662,21 +663,6 @@ bool IPC_Client::SprxOperation(DaemonCommands command, const std::string &id,
 
 bool IPC_Client::SetSprxEnabled(const std::string &id, bool enabled) {
   return SprxOperation(BREW_SPRX_SET_ENABLED, id, enabled);
-}
-
-bool IPC_Client::SetSprxTargets(const std::string &id,
-                                const std::vector<std::string> &titles,
-                                bool all_games) {
-  if (!require_crit("SetSprxTargets")) return false;
-  cJSON *request = cJSON_CreateObject();
-  cJSON_AddStringToObject(request, "id", id.c_str());
-  cJSON *list = cJSON_AddArrayToObject(request, "titles");
-  for (const std::string &title : titles)
-    cJSON_AddItemToArray(list, cJSON_CreateString(title.c_str()));
-  cJSON_AddBoolToObject(request, "all", all_games);
-  std::string response;
-  return IPCSendCommand(BREW_SPRX_SET_TARGETS, response,
-                        json_object_str(request));
 }
 
 bool IPC_Client::DeleteSprx(const std::string &id) {

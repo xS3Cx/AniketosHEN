@@ -61,6 +61,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 	"${PROJECT_ROOT}/libonion_fps/include"
 	"${PROJECT_ROOT}/libonion_lifecycle/include"
 	"${PROJECT_ROOT}/libonion_sprx/include"
+	"${PROJECT_ROOT}/libonion_payload/include"
 	"${PROJECT_ROOT}/libonion_platform/include"
 	"${PROJECT_ROOT}/libonion_plugin_session/include"
 	"${PROJECT_ROOT}/libonion_plugin_ui/include"
@@ -70,8 +71,8 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 	"${PROJECT_ROOT}/include"
 )
 target_link_directories	(${PROJECT_NAME} PUBLIC "${ONIONHEN_PS5_STUB_DIR}")
-add_dependencies(${PROJECT_NAME} onion_version util onion_elfldr_server NineS shellui kbm_agent onion_kbm_profile hijacker onion_settings onion_ipc onion_proc onion_fps onion_platform onion_ready onion_lifecycle onion_plugin_session onion_plugin_bridge onion_plugin_manager onion_elfldr onion_sprx)
+add_dependencies(${PROJECT_NAME} onion_version util onion_elfldr_server NineS shellui kbm_agent onion_kbm_profile hijacker onion_settings onion_ipc onion_proc onion_fps onion_platform onion_ready onion_lifecycle onion_plugin_session onion_plugin_bridge onion_plugin_manager onion_elfldr onion_sprx onion_payload)
 # Supervises private :9020 via external :9021, then restarts embedded util via :9020.
-target_link_libraries	(${PROJECT_NAME} PUBLIC onion_ipc onion_settings onion_proc onion_fps onion_platform onion_ready onion_lifecycle onion_plugin_session onion_plugin_bridge onion_plugin_manager onion_elfldr onion_sprx onion_kbm_profile hijacker SceSystemService SceNotification SceUserService SceNetCtl SceSysCore kernel_sys NineS)
+target_link_libraries	(${PROJECT_NAME} PUBLIC onion_ipc onion_settings onion_proc onion_fps onion_platform onion_ready onion_lifecycle onion_plugin_session onion_plugin_bridge onion_plugin_manager onion_elfldr onion_sprx onion_payload onion_kbm_profile hijacker SceSystemService SceNotification SceUserService SceNetCtl SceSysCore kernel_sys NineS)
 
 onion_strip_debug(${PROJECT_NAME})
