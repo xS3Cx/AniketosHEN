@@ -589,7 +589,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 AniketosHEN is a fork of
 [OnionHEN](https://github.com/aydencharles/onionHEN). The code it started from
-is the work of 麒麟/0xp0co, kvnhrt and the OnionHEN contributors, built in turn
+is the work of 麒麟/0xp0co and the OnionHEN contributors, built in turn
 on etaHEN by LightningMods; the copyright notices in the upstream source files
 are theirs and are unchanged. What the fork changed is listed in
 [NOTICE.md](NOTICE.md).
@@ -620,7 +620,7 @@ Everything that OnionHEN does not have is credited to its original authors:
 
 ### Based on
 
-- [OnionHEN](https://github.com/aydencharles/onionHEN) — 麒麟/0xp0co, kvnhrt and contributors; the project this one is forked from
+- [OnionHEN](https://github.com/aydencharles/onionHEN) — 麒麟/0xp0co and contributors; the project this one is forked from
 - [etaHEN](https://github.com/LightningMods/etaHEN) — LightningMods and contributors; source base of OnionHEN
 - [GoldHEN](https://github.com/GoldHEN/GoldHEN) — SiSTR0 and contributors; the PS4 all-in-one HEN this project takes after
 

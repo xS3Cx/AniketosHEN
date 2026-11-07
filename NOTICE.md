@@ -7,7 +7,7 @@ AniketosHEN is a fork of **OnionHEN**
 ## Authorship
 
 The software in this repository was written by the OnionHEN authors and
-contributors — 麒麟/0xp0co, kvnhrt and others — and by LightningMods and the
+contributors — 麒麟/0xp0co and others — and by LightningMods and the
 etaHEN contributors before them. Their copyright notices
 (`Copyright (C) … OnionHEN / LightningMods`, and those of John Törnblom, Ben
 Hoyt and the other third-party authors) remain in every source file exactly as
