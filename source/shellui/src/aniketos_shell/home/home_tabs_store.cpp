@@ -451,6 +451,7 @@ bool s_delete_open = false;
 int s_delete_slot = -1;
 
 bool s_menu_up = false;
+uint32_t s_menu_serial = 0; /* PopupMenuSerial() of our menu */
 std::string s_menu_title;
 
 void open_prompt(Step step, int slot, const std::string &text) {
@@ -775,6 +776,7 @@ void open_menu(const std::string &title) {
     LOG_WARN("[HOMETABS] menu: %s", failure.c_str());
     return;
   }
+  s_menu_serial = SystemDialogs::PopupMenuSerial();
   s_menu_title = title;
   LOG_INFO("[HOMETABS] menu for %s", title.c_str());
 }
@@ -810,6 +812,11 @@ void run_menu_choice(const std::string &id) {
 }
 
 void menu_tick() {
+  /* Another menu took the screen: its choices are not ours. */
+  if (SystemDialogs::PopupMenuSerial() != s_menu_serial) {
+    s_menu_up = false;
+    return;
+  }
   std::string id;
   if (SystemDialogs::PollPopupSubmenu(&id)) {
     SystemDialogs::ClosePopupMenu();

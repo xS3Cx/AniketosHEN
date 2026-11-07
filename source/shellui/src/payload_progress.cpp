@@ -146,6 +146,8 @@ std::string error_text(const std::string &error) {
     key = "payload_center.error.rejected";
   else if (error == "cancelled")
     key = "payload_center.error.cancelled";
+  else if (error == "not_found")
+    key = "payload_center.error.not_found";
   return toolbox_i18n::tr(key);
 }
 

@@ -152,6 +152,7 @@ static void prepare_service_markers(void) {
   onion_ready_clear(ONION_READY_KSTUFF);
   onion_ready_clear(ONION_FLAG_UTIL_BOOTED);
   onion_ready_clear(ONION_FLAG_FPS_OVERLAY);
+  onion_ready_clear(ONION_FLAG_BOOTSTRAP_DONE);
 }
 
 static bool launch_util(LaunchContext *context) {

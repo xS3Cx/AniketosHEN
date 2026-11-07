@@ -53,6 +53,8 @@ std::string status_error(onion::cheats::sync::SyncStatus status) {
     return "clock";
   case SyncStatus::Cancelled:
     return "cancelled";
+  case SyncStatus::NotFound:
+    return "not_found";
   }
   return "network";
 }

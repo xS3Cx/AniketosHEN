@@ -30,11 +30,14 @@ enum class SyncStatus : int {
   Tls = -8,
   Clock = -9,
   Cancelled = -10,
+  /* The server answered 404/410: nothing at that address. */
+  NotFound = -11,
 };
 
 inline bool is_source_failure(SyncStatus s) {
   return s == SyncStatus::Network || s == SyncStatus::Protocol ||
-         s == SyncStatus::Tls || s == SyncStatus::Clock;
+         s == SyncStatus::Tls || s == SyncStatus::Clock ||
+         s == SyncStatus::NotFound;
 }
 
 inline const char *sync_status_name(SyncStatus s) {
@@ -61,6 +64,8 @@ inline const char *sync_status_name(SyncStatus s) {
     return "clock";
   case SyncStatus::Cancelled:
     return "cancelled";
+  case SyncStatus::NotFound:
+    return "not_found";
   }
   return "unknown";
 }

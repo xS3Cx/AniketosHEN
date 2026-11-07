@@ -57,6 +57,7 @@ bool s_switch_shown = false; /* the menu on screen has the Internet switch */
 bool s_switch_value = true;
 int s_unload_countdown = 0;
 bool s_menu_up = false; /* our menu is the one on screen */
+uint32_t s_menu_serial = 0; /* PopupMenuSerial() of our menu */
 /* "Install packages" is a submenu row: PUI opens the places packages can be
    in beside the menu, and each place opens its packages beside that. The
    whole tree is read when the menu opens; a package row's id is its number
@@ -168,6 +169,7 @@ void open_menu(MonoObject *scene) {
   std::string failure;
   s_menu_up = SystemDialogs::ShowPopupMenu(build_rows(), ONION_DIST_NAME,
                                            &failure, scene, /*stay_open=*/true);
+  s_menu_serial = SystemDialogs::PopupMenuSerial();
   if (!s_menu_up) {
     LOG_WARN("[HOMEMENU] %s", failure.c_str());
     /* Never leave the icon dead: fall back to what it always did. */
@@ -299,7 +301,11 @@ void Tick() {
 
   follow_internet_switch();
 
-  /* Backed out of (the submenus are PUI's own and go back by themselves). */
+  /* Another menu (a payload's OPTIONS menu) took the screen: its choices
+     are not ours. Then backed out of (the submenus are PUI's own and go
+     back by themselves). */
+  if (s_menu_up && SystemDialogs::PopupMenuSerial() != s_menu_serial)
+    s_menu_up = false;
   if (s_menu_up && SystemDialogs::PopupMenuDismissed())
     s_menu_up = false;
 

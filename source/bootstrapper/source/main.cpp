@@ -23,6 +23,7 @@ along with this program; see the file COPYING. If not, see
 #include "bootstrap_runtime.h"
 #include "bootstrap_safety.h"
 #include "launch_pipeline.h"
+#include <onion/ready.h>
 #include "payload_autostart.h"
 
 #include <onion/conflict.h>
@@ -102,6 +103,9 @@ int main(void) {
   } else
     LOG_WARN("%s start: payload autostart skipped",
              onion_boot_level_name(level));
+  /* util counts the start as finished only this long after the last
+     payload went out (a delayed autostart payload included). */
+  onion_ready_signal(ONION_FLAG_BOOTSTRAP_DONE);
   LOG_DEBUG("============== Spawner (Bootstrapper) Finished =================");
   return 0;
 }

@@ -16,6 +16,7 @@ extern "C" {
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <dirent.h>
 #include <fcntl.h>
 #include <string>
 #include <sys/stat.h>
@@ -53,6 +54,8 @@ std::string status_error(onion::cheats::sync::SyncStatus status) {
     return "clock";
   case SyncStatus::Cancelled:
     return "cancelled";
+  case SyncStatus::NotFound:
+    return "not_found";
   }
   return "network";
 }
@@ -95,7 +98,36 @@ void fsync_directory(const std::string &directory) {
   }
 }
 
+/* The file an earlier install of the same catalog item went to, under
+   whatever name the catalog gave it then; empty when there is none. */
+std::string installed_path_for(const std::string &match_key) {
+  if (match_key.empty())
+    return {};
+  DIR *dir = opendir(kPayloadDir);
+  if (!dir)
+    return {};
+  std::string found;
+  while (const struct dirent *entry = readdir(dir)) {
+    const std::string name = entry->d_name;
+    if (name.size() < 5 || name.compare(name.size() - 4, 4, ".elf") != 0)
+      continue;
+    const std::string path = std::string(kPayloadDir) + "/" + name;
+    ItemMeta meta;
+    if (read_meta(path, &meta) && meta.match_key == match_key) {
+      found = path;
+      break;
+    }
+  }
+  closedir(dir);
+  return found;
+}
+
 std::string choose_target(const InstallRequest &request, std::string *error) {
+  /* An update after the catalog renamed the item replaces the installed
+     file: a new name would leave the old copy behind, still autostarting. */
+  const std::string installed = installed_path_for(request.match_key);
+  if (!installed.empty())
+    return installed;
   const std::string base =
       std::string(kPayloadDir) + "/" + onion::payload_catalog::slug(request.name) +
       ".elf";

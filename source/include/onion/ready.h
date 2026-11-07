@@ -34,9 +34,12 @@ extern "C" {
  * /system_tmp flag files).
  *   fps_overlay  — legacy only; cleared on boot (FPS inject removed)
  *   util_booted  — util finished at least one full start (mid-session restart detect)
+ *   bootstrap_done — the bootstrapper launched everything, the user's
+ *                    autostart payloads included (the boot guard's clock)
  */
 #define ONION_FLAG_FPS_OVERLAY "fps_overlay"
 #define ONION_FLAG_UTIL_BOOTED "util_booted"
+#define ONION_FLAG_BOOTSTRAP_DONE "bootstrap_done"
 
 /* Publish / clear / query. name is a short token (no path separators). */
 bool onion_ready_signal(const char *name);

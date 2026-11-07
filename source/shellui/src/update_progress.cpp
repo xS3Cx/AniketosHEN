@@ -137,6 +137,8 @@ std::string error_text(const std::string &error) {
     key = "hen_update.error.rejected";
   else if (error == "cancelled")
     key = "hen_update.error.cancelled";
+  else if (error == "not_found")
+    key = "hen_update.error.not_found";
   return toolbox_i18n::tr(key);
 }
 

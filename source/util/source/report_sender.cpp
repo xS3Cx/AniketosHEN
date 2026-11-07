@@ -8,6 +8,7 @@
 #include <onion/distribution.h>
 #include <onion/fs.h>
 #include <onion/log.h>
+#include <onion/ready.h>
 #include <onion/report.h>
 #include <onion/settings.hpp>
 #include <onion/version.h>
@@ -222,7 +223,16 @@ bool send_pending() {
   return true;
 }
 
+/* Autostart delays run up to 15 s a payload; this is far past any list. */
+constexpr int kBootstrapDoneWaitMs = 30 * 60 * 1000;
+
 void *sender_thread(void *) {
+  /* The clock starts when the last autostart payload went out, so a payload
+     that brings the console down still counts as an unfinished start. A
+     bootstrapper that never says so (an older one) costs the wait, then the
+     start counts as running all the same: util is still alive. */
+  if (!onion_ready_wait(ONION_FLAG_BOOTSTRAP_DONE, kBootstrapDoneWaitMs, 1000))
+    LOG_WARN("bootstrapper never reported done; marking the start anyway");
   sleep(ONION_BOOT_RUNNING_AFTER_SECONDS);
   /* The stack has been up this long: the start finished. */
   if (!onion_boot_guard_mark_running(ONION_BOOT_STATE_PATH))

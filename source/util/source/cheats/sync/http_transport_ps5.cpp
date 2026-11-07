@@ -360,6 +360,9 @@ SyncStatus Ps5HttpTransport::perform(
   if (http_code < min_code || http_code > max_code) {
     LOG_ERROR("http status out of range code=%ld want=%d-%d url=%s", http_code,
               min_code, max_code, url);
+    /* The server is reachable; there is just nothing at that address. */
+    if (http_code == 404 || http_code == 410)
+      return SyncStatus::NotFound;
     return SyncStatus::Network;
   }
   return SyncStatus::Ok;
