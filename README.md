@@ -93,7 +93,7 @@ existing OnionHEN installation, and adds a large set of features of its own.
 - **Payload Manager** - installed payloads, a curated online catalog with icons, categories, search, installs and updates over HTTPS, included payloads (kstuff, ShadowMountPlus) and an Autostart list you rearrange in place; see [docs/payload-center.md](docs/payload-center.md)
 - **HEN Update Manager** - checks GitHub Releases for a newer AniketosHEN build at boot (on by default, once per version), downloads it with a mandatory SHA-256 check and reboots to apply it; see [docs/update.md](docs/update.md)
 - **HEN button menu** — the top-bar button now opens a menu: HEN Toolbox, package install from `/data` and USB, payloads, cheats, Internet connection switch, unload; the button also appears on firmware the byte patch has no profile for
-- **Home tabs** - Games, Media and up to two custom tabs, all renameable and each with a system glyph icon; show, hide, reorder and delete custom tabs, and copy or move titles between tabs from a game's Options menu
+- **Home tabs** - Games, Media and up to two custom tabs, all renameable and each with a system glyph icon; show, hide, reorder and delete custom tabs, L1/R1 step through every visible tab in the bar's order, and copy or move titles between tabs from a game's Options menu
 - **Game Options menu** — Cheats, trophy unlock, **Copy / Move** and **Hide App** on a game's or app's Options menu, with a Hidden apps page that brings hidden tiles back
 - **Game Information** — more rows on a game's Information screen (Title ID, Content ID, SDK version, mount path…)
 - **Keyboard & mouse for games** (experimental) — play any PS5 game with a USB keyboard and mouse mapped to DualSense input ([docs/kbm.md](docs/kbm.md))

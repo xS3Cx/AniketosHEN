@@ -123,6 +123,18 @@ changed.
 A caption is the icon, a space and the name when *Tab icons* is on and the icon
 is not empty; otherwise it is the name alone.
 
+## L1 and R1
+
+Home's own L1/R1 handlers (`useSpaceFocus`) know only Games and Media. The
+script wraps that hook: R1 from Games and L1 from Media stay Home's own; every
+other press goes to the next or previous space in the bar's `spaceIds`, which
+holds only the visible tabs in their order, with Home's sound and its
+`focusSpaceDefaultPosition`. The space in front is read at the press from the
+module exporting `getLocationScene`, which Home's space atom sets on every
+change (its own keys, the tab bar, deeplinks, ours), so fast presses never see a
+stale space. If that module is not found, the last space heard of (a focused
+tile's space, our own moves) is used instead.
+
 ## Reloads and revisions
 
 Changing the tab set, a name, an icon, visibility or the order asks

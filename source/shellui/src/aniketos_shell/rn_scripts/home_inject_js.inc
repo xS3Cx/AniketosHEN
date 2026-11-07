@@ -375,7 +375,8 @@ R"JS((function () {
       once('cardSize', id);
   }
   /* The hub viewer of the row hears of every tile that gets the focus:
-     its space is the one in front, for L1/R1 (patchSpaceFocus). */
+     its space is the one in front for L1/R1 when the scene is not known
+     (currentSpace). */
   function patchHubViewer(o, id) {
     var use = o && o.useHubViewer;
     if (A.patched.hubViewer || typeof use !== 'function') return;
@@ -402,16 +403,41 @@ R"JS((function () {
     if (o.useHubViewer === wrapped) once('hubViewer', id);
   }
 
-  /* L1 and R1 move between the spaces of the tab bar. Home's own handlers
-     know two (R1 from Games to Media, L1 back); with ours they go on through
-     our spaces (Media, the custom tabs) and back, with the same sound
-     and the same move. */
+  /* Home's space atom tells the module exporting getLocationScene (its
+     telemetry scene) of every space it moves to, at once and whoever moved
+     it: its own L1/R1, the tab bar, a deeplink, ours. Data properties only
+     (re-exporting modules have getters). */
+  function findScene(o, id) {
+    if (A.scene || !EXTRA.length || !o || typeof o !== 'object') return;
+    var get = Object.getOwnPropertyDescriptor(o, 'getLocationScene');
+    var set = Object.getOwnPropertyDescriptor(o, 'setLocationScene');
+    if (get && set && typeof get.value === 'function' &&
+        typeof set.value === 'function') {
+      A.scene = get.value;
+      once('scene', id);
+    }
+  }
+  /* The space in front: the scene when it is one of the tab bar's (not the
+     profile's or the boot's), else the last one we heard of. */
+  function currentSpace(ids) {
+    try {
+      var scene = A.scene ? A.scene() : null;
+      if (ids.indexOf(scene) >= 0) return scene;
+    } catch (e) {}
+    return A.space;
+  }
+  /* L1 and R1 move between the spaces of the tab bar, in its order (only
+     the visible tabs are in it). Home's own handlers know two (R1 from Games
+     to Media, L1 back); with ours they go on through the custom tabs and
+     back, with the same sound and the same move. */
   function neighbour(step) {
     var ids = A.spaceIds;
-    var at = Array.isArray(ids) ? ids.indexOf(A.space) : -1;
-    /* Games <-> Media stays Home's own */
-    if (at < 0 || (step > 0 ? at < 1 : at < 2)) return null;
-    var next = ids[at + step];
+    if (!Array.isArray(ids)) return null;
+    var space = currentSpace(ids);
+    /* Games -> Media and Media -> Games stay Home's own */
+    if (space === (step > 0 ? 'game' : 'media')) return null;
+    var at = ids.indexOf(space);
+    var next = at < 0 ? null : ids[at + step];
     return typeof next === 'string' ? next : null;
   }
   function patchSpaceFocus(o, id) {
@@ -835,6 +861,7 @@ R"JS((function () {
       patchTitles(exports, id);
       patchCardSize(exports, id);
       patchHubViewer(exports, id);
+      findScene(exports, id);
       patchSpaceFocus(exports, id);
       patchIcons(exports, id);
       patchLamps(exports, id);

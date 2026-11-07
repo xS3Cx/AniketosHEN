@@ -3,6 +3,7 @@
 - About > Credits and the welcome notification name both makers of AniketosHEN, AlexZero and Andriushka.exe.
 
 ## Fixed
+- Home: L1/R1 now move through every visible tab in the order shown, custom tabs included, and back again, with the highlight following.
 - Updating from an older version no longer switches kstuff and ShadowMountPlus off; a config.ini from before they became optional keeps them on.
 - Start-up: kstuff and ShadowMountPlus never start twice (the included one plus a kstuff-lite or ShadowMountPlus payload in Autostart, or after reloading the HEN).
 - ShadowMountPlus starts when kstuff comes from somewhere else (the exploit chain or a kstuff-lite payload in Autostart); if there is no kstuff at all, you get a notification.
